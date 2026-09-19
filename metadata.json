@@ -1,0 +1,8 @@
+{
+  "name": "PlazaDO.com - Marketplace Multi-Vendedor RD",
+  "description": "Plataforma marketplace multi-tienda de la República Dominicana. Todo en un solo lugar.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

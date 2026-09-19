@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 180" width="100%" height="100%">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;800;900&amp;family=Outfit:wght@400;500;700;800;900&amp;display=swap');
+      .logo-plaza {
+        font-family: 'Outfit', 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-weight: 900;
+        font-size: 82px;
+        fill: #E31B44;
+        letter-spacing: -1.5px;
+      }
+      .logo-do {
+        font-family: 'Outfit', 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-weight: 500;
+        font-size: 82px;
+        fill: none;
+        stroke: #6C7A89;
+        stroke-width: 5;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+        letter-spacing: -1px;
+      }
+      .logo-slogan {
+        font-family: 'Montserrat', 'Outfit', sans-serif;
+        font-weight: 500;
+        font-size: 19px;
+        fill: #6C7A89;
+        letter-spacing: 7px;
+      }
+    </style>
+  </defs>
+
+  <g transform="translate(20, 10)">
+    <!-- Plaza text -->
+    <text x="10" y="82" class="logo-plaza">Plaza</text>
+    
+    <!-- do text in outline -->
+    <text x="248" y="82" class="logo-do">do</text>
+
+    <!-- Shopping Bag Icon with Smile -->
+    <g transform="translate(348, 12)">
+      <!-- Bag Handle -->
+      <path d="M 28 20 C 28 8, 48 8, 48 20" fill="none" stroke="#6C7A89" stroke-width="6.5" stroke-linecap="round" />
+      
+      <!-- Bag Body -->
+      <path d="M 12 24 L 64 24 C 67 24, 69 26, 70 29 L 77 69 C 78 74, 74 78, 69 78 L 7 78 C 2 78, -2 74, -1 69 L 6 29 C 7 26, 9 24, 12 24 Z" 
+            fill="none" stroke="#6C7A89" stroke-width="6.5" stroke-linejoin="round" stroke-linecap="round" />
+      
+      <!-- Smile Inside Bag -->
+      <path d="M 24 50 Q 38 65, 52 50" fill="none" stroke="#E31B44" stroke-width="6" stroke-linecap="round" />
+    </g>
+
+    <!-- Slogan: Todo en un solo lugar -->
+    <text x="46" y="128" class="logo-slogan">Todo en un solo lugar</text>
+
+    <!-- Red underline accent below slogan -->
+    <rect x="175" y="148" width="105" height="5.5" rx="2.75" fill="#E31B44" />
+  </g>
+</svg>
