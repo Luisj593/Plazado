@@ -1,19 +1,66 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useApp } from '../../context/AppContext';
 
 interface PlazaDoLogoProps {
   className?: string;
   variant?: 'full' | 'compact' | 'icon';
   inverted?: boolean;
+  customLogoUrl?: string;
+  customLogoDarkUrl?: string;
+  forceDefault?: boolean;
 }
 
 export const PlazaDoLogo: React.FC<PlazaDoLogoProps> = ({
   className = '',
   variant = 'compact',
-  inverted = false
+  inverted = false,
+  customLogoUrl,
+  customLogoDarkUrl,
+  forceDefault = false
 }) => {
+  const { systemSettings } = useApp();
+  const [imageError, setImageError] = useState(false);
+
   const redColor = '#E31B44';
   const greyColor = inverted ? '#E2E8F0' : '#64748B';
   const sloganColor = inverted ? '#CBD5E1' : '#64748B';
+
+  // Custom Logo or Favicon rendering when configured
+  if (!forceDefault && !imageError) {
+    if (variant === 'icon') {
+      const customFavicon = systemSettings?.faviconType === 'custom' ? systemSettings?.faviconUrl : null;
+      if (customFavicon) {
+        return (
+          <img
+            src={customFavicon}
+            alt={systemSettings?.platformName || 'PlazaDO'}
+            className={`object-contain rounded-md ${className || 'w-8 h-8'}`}
+            onError={() => setImageError(true)}
+            referrerPolicy="no-referrer"
+          />
+        );
+      }
+    } else {
+      const shouldUseCustom = customLogoUrl || systemSettings?.logoType === 'custom';
+      if (shouldUseCustom) {
+        const logoDark = customLogoDarkUrl || systemSettings?.logoDarkUrl;
+        const logoLight = customLogoUrl || systemSettings?.logoUrl;
+        const effectiveLogo = inverted ? (logoDark || logoLight) : (logoLight || logoDark);
+
+        if (effectiveLogo) {
+          return (
+            <img
+              src={effectiveLogo}
+              alt={systemSettings?.platformName || 'PlazaDO'}
+              className={`object-contain ${className || (variant === 'full' ? 'max-h-12 w-auto max-w-[260px]' : 'max-h-9 sm:max-h-10 w-auto')}`}
+              onError={() => setImageError(true)}
+              referrerPolicy="no-referrer"
+            />
+          );
+        }
+      }
+    }
+  }
 
   if (variant === 'icon') {
     return (

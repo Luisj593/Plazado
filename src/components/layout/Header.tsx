@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { isStorePubliclyVisible } from '../../types';
 import { DominicanFlag } from '../common/DominicanFlag';
 import { PlazaDoLogo } from '../common/PlazaDoLogo';
 import { UserProfileModal } from '../common/UserProfileModal';
+import { CategoryIcon, getCategoryEmoji } from '../../utils/categoryIcons';
+import { INITIAL_CATEGORIES } from '../../data/initialData';
 import { 
   Search, 
   ShoppingCart, 
@@ -18,7 +21,9 @@ import {
   Layers,
   Sparkles,
   LogIn,
-  UserPlus
+  UserPlus,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -41,8 +46,24 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
     stores,
     showNotification,
     setAdminActiveTab,
-    logout
+    logout,
+    orders,
+    orderMessages,
+    theme,
+    toggleTheme
   } = useApp();
+
+  const userOrderIds = useMemo(() => {
+    if (!currentUser) return new Set<string>();
+    return new Set(orders.filter(o => o.customerId === currentUser.id).map(o => o.id));
+  }, [orders, currentUser]);
+
+  const customerUnreadChatCount = useMemo(() => {
+    if (!currentUser || userOrderIds.size === 0) return 0;
+    return orderMessages.filter(m => userOrderIds.has(m.orderId) && !m.readByCustomer && m.senderRole !== 'CUSTOMER').length;
+  }, [orderMessages, userOrderIds, currentUser]);
+
+  const publicStoresCount = stores.filter(isStorePubliclyVisible).length;
 
   const pendingStoresCount = stores.filter(s => s.status === 'PENDING' || s.status === 'IN_REVIEW').length;
 
@@ -64,8 +85,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
     setMobileMenuOpen(false);
   };
 
-  // Main categories (excluding subcategories)
-  const mainCategories = categories.filter(c => !c.parentId);
+  // Main categories (guaranteed non-empty fallback)
+  const activeCategories = (categories && categories.length > 0) ? categories : INITIAL_CATEGORIES;
+  const mainCategories = activeCategories.filter(c => !c.parentId);
   const currentStore = currentUser?.role === 'STORE_OWNER' 
     ? stores.find(s => s.id === currentUser.storeId) 
     : null;
@@ -86,15 +108,17 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
             </span>
           </div>
 
-          <div className="flex items-center gap-4 text-stone-600">
+          <div className="flex items-center gap-2 sm:gap-4 text-stone-600">
             <a 
               href={`https://wa.me/1${systemSettings.whatsappCommercial.replace(/[^0-9]/g, '')}`} 
               target="_blank" 
               rel="noreferrer"
-              className="flex items-center gap-1.5 hover:text-red-600 transition-colors font-medium text-stone-700"
+              className="flex items-center gap-1.5 hover:text-red-600 transition-colors font-medium text-stone-700 text-[11px] sm:text-xs"
             >
-              <Phone className="w-3 h-3 text-emerald-600" />
-              <span>WhatsApp Comercial: {systemSettings.whatsappCommercial}</span>
+              <Phone className="w-3 h-3 text-emerald-600 shrink-0" />
+              <span className="hidden sm:inline">WhatsApp Comercial: </span>
+              <span className="sm:hidden">WA: </span>
+              <span>{systemSettings.whatsappCommercial}</span>
             </a>
             
             {currentUser?.role === 'SUPER_ADMIN' && (
@@ -140,7 +164,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
           {/* Search Bar */}
           <form 
             onSubmit={handleSearchSubmit} 
-            className="flex-1 max-w-2xl hidden md:flex items-center relative"
+            className="flex-1 max-w-2xl hidden md:flex items-center relative group"
           >
             <div className="relative w-full">
               <input 
@@ -149,16 +173,29 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Buscar productos, marcas, tiendas en República Dominicana..."
-                className="w-full pl-11 pr-24 py-2.5 bg-stone-100/90 border border-stone-300 rounded-lg text-sm text-stone-900 placeholder:text-stone-400 focus:bg-white focus:border-red-500 focus:ring-2 focus:ring-red-100 transition-all outline-none"
+                className="w-full pl-11 pr-28 py-2.5 bg-stone-50 hover:bg-white focus:bg-white border-2 border-stone-200 hover:border-stone-300 focus:border-red-600 focus:ring-4 focus:ring-red-500/10 rounded-xl text-sm font-semibold text-stone-950 placeholder:text-stone-500 placeholder:font-normal caret-red-600 shadow-2xs transition-all outline-none"
               />
-              <Search className="w-5 h-5 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <button 
-                type="submit"
-                id="header-search-submit-btn"
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold shadow-xs transition-colors"
-              >
-                Buscar
-              </button>
+              <Search className="w-5 h-5 text-stone-500 group-focus-within:text-red-600 absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors pointer-events-none" />
+              
+              <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="p-1 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-200 transition-colors"
+                    title="Limpiar búsqueda"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+                <button 
+                  type="submit"
+                  id="header-search-submit-btn"
+                  className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors"
+                >
+                  Buscar
+                </button>
+              </div>
             </div>
           </form>
 
@@ -223,7 +260,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                   setCurrentView('customer_portal');
                 }
               }}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors relative ${
                 currentView === 'customer_portal' 
                   ? 'bg-red-50 text-red-700' 
                   : 'hover:bg-stone-100 text-stone-700'
@@ -232,6 +269,11 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
             >
               <Package className="w-4 h-4 text-stone-600" />
               <span className="hidden md:inline">Mis Pedidos</span>
+              {customerUnreadChatCount > 0 && (
+                <span className="bg-red-600 text-white font-black text-[10px] px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
+                  {customerUnreadChatCount}
+                </span>
+              )}
             </button>
 
             {/* Favoritos */}
@@ -253,6 +295,22 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                 <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
                   {favorites.productIds.length + favorites.storeIds.length}
                 </span>
+              )}
+            </button>
+
+            {/* Alternador de Modo Claro / Oscuro */}
+            <button
+              id="header-theme-toggle-btn"
+              type="button"
+              onClick={toggleTheme}
+              className="p-2 rounded-lg hover:bg-stone-100 text-stone-700 transition-colors"
+              title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+              aria-label="Alternar vista clara u oscura"
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-5 h-5 text-amber-400 fill-amber-400" />
+              ) : (
+                <Moon className="w-5 h-5 text-stone-600" />
               )}
             </button>
 
@@ -395,21 +453,33 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
 
         {/* Mobile Search Bar */}
         <div className="mt-2.5 md:hidden">
-          <form onSubmit={handleSearchSubmit} className="relative">
+          <form onSubmit={handleSearchSubmit} className="relative group">
             <input 
               type="text" 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar productos y tiendas..."
-              className="w-full pl-10 pr-20 py-2 bg-stone-100 border border-stone-200 rounded-lg text-xs outline-none"
+              placeholder="Buscar productos, marcas y tiendas..."
+              className="w-full pl-10 pr-24 py-2.5 bg-stone-50 hover:bg-white focus:bg-white border-2 border-stone-200 hover:border-stone-300 focus:border-red-600 focus:ring-4 focus:ring-red-500/10 rounded-xl text-sm font-semibold text-stone-950 placeholder:text-stone-500 placeholder:font-normal caret-red-600 outline-none transition-all shadow-2xs"
             />
-            <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <button 
-              type="submit"
-              className="absolute right-1 top-1/2 -translate-y-1/2 px-3 py-1 bg-red-600 text-white rounded text-xs font-semibold"
-            >
-              Buscar
-            </button>
+            <Search className="w-4 h-4 text-stone-500 group-focus-within:text-red-600 absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors pointer-events-none" />
+            <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="p-1 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-200 transition-colors"
+                  title="Limpiar búsqueda"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <button 
+                type="submit"
+                className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors"
+              >
+                Buscar
+              </button>
+            </div>
           </form>
         </div>
       </div>
@@ -423,34 +493,54 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                 setSelectedCategorySlug(null);
                 setCurrentView('catalog');
               }}
-              className="px-3 py-1.5 rounded-md hover:bg-white hover:text-red-600 hover:shadow-xs transition-all flex items-center gap-1 text-stone-900 font-semibold"
+              className={`px-3 py-1.5 rounded-md hover:bg-white hover:text-red-600 hover:shadow-xs transition-all flex items-center gap-1 font-semibold ${
+                currentView === 'catalog' ? 'bg-white text-red-600 shadow-xs' : 'text-stone-900'
+              }`}
             >
               <Layers className="w-3.5 h-3.5 text-red-600" />
-              Todos los Productos
+              <span>Todos los Productos</span>
+            </button>
+
+            <button 
+              id="header-nav-stores-btn"
+              onClick={() => setCurrentView('stores')}
+              className={`px-3 py-1.5 rounded-md hover:bg-white hover:text-red-600 hover:shadow-xs transition-all flex items-center gap-1.5 font-bold ${
+                currentView === 'stores' ? 'bg-white text-red-600 shadow-xs' : 'text-stone-900'
+              }`}
+            >
+              <Store className="w-3.5 h-3.5 text-red-600" />
+              <span>Tiendas RD</span>
+              <span className="bg-red-100 text-red-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                {publicStoresCount}
+              </span>
             </button>
 
             {mainCategories.map(cat => (
               <button
                 key={cat.id}
                 onClick={() => handleCategoryClick(cat.slug)}
-                className={`px-3 py-1.5 rounded-md transition-all whitespace-nowrap ${
+                className={`px-3 py-1.5 rounded-md transition-all whitespace-nowrap flex items-center gap-1.5 ${
                   cat.slug === 'mascotas' 
                     ? 'font-bold text-amber-900 bg-amber-100/80 hover:bg-amber-200' 
-                    : 'hover:bg-white hover:text-red-600 hover:shadow-xs'
+                    : 'hover:bg-white hover:text-red-600 hover:shadow-xs font-semibold'
                 }`}
               >
-                {cat.name}
-                {cat.slug === 'mascotas' && <span className="ml-1 text-[10px] text-amber-700">🐶🐱</span>}
+                <CategoryIcon category={cat} className="w-3.5 h-3.5 text-stone-600 shrink-0" />
+                <span>{cat.name}</span>
               </button>
             ))}
           </div>
 
           <div className="flex items-center gap-3 text-xs text-stone-500">
             <button 
-              onClick={() => setCurrentView('catalog')}
-              className="text-stone-700 hover:text-red-600 font-medium py-1"
+              id="header-nav-stores-directory-link"
+              onClick={() => setCurrentView('stores')}
+              className={`font-semibold py-1 flex items-center gap-1 transition-colors ${
+                currentView === 'stores' ? 'text-red-600' : 'text-stone-700 hover:text-red-600'
+              }`}
             >
-              Explorar Tiendas
+              <Store className="w-3.5 h-3.5 text-red-600" />
+              <span>Directorio de Tiendas</span>
             </button>
           </div>
         </div>
@@ -459,15 +549,39 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-white border-b border-stone-200 px-4 py-4 space-y-3">
+          <div className="grid grid-cols-2 gap-2 pb-2 border-b border-stone-100">
+            <button
+              onClick={() => {
+                setCurrentView('catalog');
+                setMobileMenuOpen(false);
+              }}
+              className="p-2.5 text-xs font-bold rounded-xl bg-stone-100 text-stone-800 flex items-center gap-1.5"
+            >
+              <Layers className="w-4 h-4 text-red-600" />
+              <span>Productos</span>
+            </button>
+            <button
+              onClick={() => {
+                setCurrentView('stores');
+                setMobileMenuOpen(false);
+              }}
+              className="p-2.5 text-xs font-bold rounded-xl bg-red-50 text-red-700 border border-red-200 flex items-center gap-1.5"
+            >
+              <Store className="w-4 h-4 text-red-600" />
+              <span>Tiendas ({publicStoresCount})</span>
+            </button>
+          </div>
+
           <div className="font-bold text-xs uppercase tracking-wider text-stone-400">Categorías</div>
           <div className="grid grid-cols-2 gap-2">
             {mainCategories.map(cat => (
               <button
                 key={cat.id}
                 onClick={() => handleCategoryClick(cat.slug)}
-                className="text-left px-3 py-2 text-xs font-medium rounded-lg bg-stone-50 hover:bg-stone-100 text-stone-800"
+                className="text-left px-3 py-2 text-xs font-medium rounded-lg bg-stone-50 hover:bg-stone-100 text-stone-800 flex items-center gap-2"
               >
-                {cat.name}
+                <span className="text-sm shrink-0">{getCategoryEmoji(cat)}</span>
+                <span className="truncate">{cat.name}</span>
               </button>
             ))}
           </div>
@@ -603,6 +717,21 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                 </button>
               </>
             )}
+
+            {/* Mobile Theme Toggle */}
+            <div className="pt-3 border-t border-stone-200 flex items-center justify-between">
+              <span className="text-xs font-medium text-stone-600 flex items-center gap-2">
+                {theme === 'dark' ? <Moon className="w-4 h-4 text-amber-400" /> : <Sun className="w-4 h-4 text-amber-500" />}
+                <span>Vista: <strong>{theme === 'dark' ? 'Oscura' : 'Clara'}</strong></span>
+              </span>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="px-3 py-1 rounded-lg border border-stone-300 text-xs font-bold text-stone-700 bg-stone-100 hover:bg-stone-200"
+              >
+                Cambiar a {theme === 'dark' ? 'Clara' : 'Oscura'}
+              </button>
+            </div>
           </div>
         </div>
       )}

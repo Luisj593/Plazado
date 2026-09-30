@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { api } from '../../services/api';
 import { 
   Store, 
   Package, 
@@ -26,47 +27,102 @@ import {
   Calendar,
   CreditCard,
   Play,
-  Pause
+  Pause,
+  Printer,
+  MessageSquare,
+  Phone,
+  MapPin,
+  FileText,
+  ShieldCheck,
+  RefreshCw,
+  ChevronRight,
+  Share2,
+  Lock,
+  EyeOff,
+  KeyRound,
+  Shield,
+  ExternalLink,
+  Warehouse
 } from 'lucide-react';
-import { OrderStatus, Product, ProductStatus, Settlement } from '../../types';
+import { Dispute, Order, OrderStatus, Product, ProductStatus, Settlement } from '../../types';
 import { DOMINICAN_BANKS } from '../../data/initialData';
-import { StoreProfileModal } from '../common/StoreProfileModal';
+import { StoreProfileModal, PRESET_STORE_BANNERS } from '../common/StoreProfileModal';
 import { ImageUploadInput } from '../common/ImageUploadInput';
 import { ProductImagesManager } from './ProductImagesManager';
+import { FulfillmentStoreView, FulfillmentStoreSubTab } from './FulfillmentStoreView';
 
 export const StoreDashboard: React.FC = () => {
   const { 
     currentUser, 
     stores, 
     products, 
+    categories,
     orders, 
     settlements, 
     storeBalances,
+    disputes,
+    createDispute,
     updateOrderStatus, 
     updateProduct, 
     addProduct, 
     deleteProduct, 
     requestSettlement, 
     updateStoreDetails,
-    showNotification
+    showNotification,
+    setCurrentView,
+    setSelectedStoreSlug,
+    copyStoreShareUrl,
+    openOrderChat,
+    getOrderUnreadCount,
+    orderMessages,
+    fulfillmentOrders,
+    fulfillmentInventory,
+    storageRequests,
+    confirmOrderByStore,
+    rejectOrderByStore,
+    deleteMyStore,
+    toggleStorePublish
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'products' | 'finances' | 'reports' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'chats' | 'products' | 'finances' | 'reports' | 'settings' | 'fulfillment'>('overview');
+  const [fulfillmentStoreSubTab, setFulfillmentStoreSubTab] = useState<FulfillmentStoreSubTab>('overview');
 
-  // Multi-tenant Security: Strictly isolate to current store!
-  const storeId = currentUser?.storeId;
-  const store = stores.find(s => s.id === storeId);
+  // Multi-tenant Security: Strictly isolate to current store, with support for Super Admin inspection
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+  const matchingOwnerStore = stores.find(s => s.ownerId === currentUser?.id || (s as any).owner_id === currentUser?.id || s.id === currentUser?.storeId);
+  const defaultStoreId = matchingOwnerStore ? matchingOwnerStore.id : (currentUser?.storeId || (stores.length > 0 ? stores[0].id : ''));
+
+  const [adminSelectedStoreId, setAdminSelectedStoreId] = useState<string>(
+    currentUser?.storeId || defaultStoreId
+  );
+  const effectiveStoreId = isSuperAdmin 
+    ? (adminSelectedStoreId || defaultStoreId) 
+    : defaultStoreId;
+  const store = stores.find(s => s.id === effectiveStoreId) || matchingOwnerStore;
 
   // Store-scoped data
-  const storeOrders = orders.filter(o => o.storeId === storeId);
-  const storeProducts = products.filter(p => p.storeId === storeId);
-  const storeSettlements = settlements.filter(s => s.storeId === storeId);
+  const storeOrders = orders.filter(o => o.storeId === effectiveStoreId);
+  const storeProducts = products.filter(p => p.storeId === effectiveStoreId);
+  const storeSettlements = settlements.filter(s => s.storeId === effectiveStoreId);
+  const storeUnreadTotal = storeOrders.reduce((acc, ord) => acc + getOrderUnreadCount(ord.id, 'STORE'), 0);
+  const storeFulfillmentOrders = (fulfillmentOrders || []).filter(o => o.storeId === effectiveStoreId);
+  const pendingFulfillmentOrdersCount = storeFulfillmentOrders.filter(o => o.status === 'PENDING_STORE_CONFIRMATION').length;
+  const storeFulfillmentItems = (fulfillmentInventory || []).filter(i => i.storeId === effectiveStoreId);
 
-  // Filter state for orders
+  // Order management states
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
-  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [orderSearchQuery, setOrderSearchQuery] = useState<string>('');
+  const [viewingOrderDetails, setViewingOrderDetails] = useState<Order | null>(null);
+  const [validatingDeliveryOrder, setValidatingDeliveryOrder] = useState<Order | null>(null);
+  const [printingPackingSlipOrder, setPrintingPackingSlipOrder] = useState<Order | null>(null);
   const [secretCodeInput, setSecretCodeInput] = useState('');
   const [secretCodeError, setSecretCodeError] = useState<string | null>(null);
+
+  // Store Dispute / Reclamación State
+  const [disputeOrder, setDisputeOrder] = useState<Order | null>(null);
+  const [disputeIssueType, setDisputeIssueType] = useState<Dispute['issueType']>('DELIVERY_ISSUE');
+  const [disputeDescription, setDisputeDescription] = useState('');
+  const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
 
   // Product modal state (Create / Edit)
   const [productModalOpen, setProductModalOpen] = useState(false);
@@ -77,7 +133,7 @@ export const StoreDashboard: React.FC = () => {
   const [pPromoPrice, setPPromoPrice] = useState<number | undefined>(undefined);
   const [pStock, setPStock] = useState(0);
   const [pMinAlert, setPMinAlert] = useState(3);
-  const [pCategory, setPCategory] = useState('tecnologia');
+  const [pCategory, setPCategory] = useState(categories[0]?.id || 'cat-tecnologia');
   const [pDesc, setPDesc] = useState('');
   const [pImagesList, setPImagesList] = useState<string[]>([]);
   const [pStatus, setPStatus] = useState<ProductStatus>('published');
@@ -104,22 +160,189 @@ export const StoreDashboard: React.FC = () => {
   const [accountHolder, setAccountHolder] = useState(store?.bankInfo?.accountHolder || '');
   const [documentId, setDocumentId] = useState(store?.bankInfo?.rncOrCedula || '');
 
+  // Store Owner Password Change States
+  const [storeCurrentPass, setStoreCurrentPass] = useState('');
+  const [storeNewPass, setStoreNewPass] = useState('');
+  const [storeConfirmPass, setStoreConfirmPass] = useState('');
+  const [storeShowCurrentPass, setStoreShowCurrentPass] = useState(false);
+  const [storeShowNewPass, setStoreShowNewPass] = useState(false);
+  const [storeShowConfirmPass, setStoreShowConfirmPass] = useState(false);
+  const [storePassLoading, setStorePassLoading] = useState(false);
+  const [storePassError, setStorePassError] = useState<string | null>(null);
+  const [storePassSuccess, setStorePassSuccess] = useState<string | null>(null);
+
+  // Store Deletion states
+  const [deleteStoreConfirmText, setDeleteStoreConfirmText] = useState('');
+  const [isDeletingStore, setIsDeletingStore] = useState(false);
+  const [deleteStoreError, setDeleteStoreError] = useState<string | null>(null);
+
+  const handleDeleteStoreSubmit = async () => {
+    if (!store) return;
+    setDeleteStoreError(null);
+
+    if (deleteStoreConfirmText !== 'ELIMINAR') {
+      setDeleteStoreError('Debes escribir la palabra "ELIMINAR" en mayúsculas para confirmar.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `¿Estás completamente seguro de eliminar permanentemente la tienda "${store.name}" y todos sus productos de Google Cloud? Esta acción es irreversible.`
+    );
+    if (!confirmed) return;
+
+    setIsDeletingStore(true);
+    try {
+      const res = await deleteMyStore(store.id, deleteStoreConfirmText);
+      if (res.success) {
+        setCurrentView('home');
+      } else {
+        setDeleteStoreError(res.message || 'Error al eliminar tienda.');
+      }
+    } catch (e: any) {
+      setDeleteStoreError(e.message || 'Error de conexión al eliminar tienda.');
+    } finally {
+      setIsDeletingStore(false);
+    }
+  };
+
+  const handleStorePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStorePassError(null);
+    setStorePassSuccess(null);
+
+    const targetNew = storeNewPass.trim();
+    if (targetNew.length < 6) {
+      setStorePassError('La nueva contraseña debe contener al menos 6 caracteres.');
+      return;
+    }
+
+    if (targetNew !== storeConfirmPass.trim()) {
+      setStorePassError('Las contraseñas no coinciden. Verifica e intenta de nuevo.');
+      return;
+    }
+
+    const targetUserId = currentUser?.id;
+    if (!targetUserId) {
+      setStorePassError('No se encontró la sesión del usuario del comercio.');
+      return;
+    }
+
+    setStorePassLoading(true);
+    try {
+      const res = await api.updateUserPassword(targetUserId, targetNew, storeCurrentPass.trim() || undefined);
+      if (res.success) {
+        setStorePassSuccess('¡Contraseña del comercio actualizada con éxito!');
+        showNotification('Contraseña del comercio actualizada exitosamente', 'success');
+        setStoreCurrentPass('');
+        setStoreNewPass('');
+        setStoreConfirmPass('');
+      } else {
+        setStorePassError(res.message || 'Error al actualizar la contraseña.');
+      }
+    } catch (err: any) {
+      setStorePassError(err.message || 'Error al conectar con el servidor.');
+    } finally {
+      setStorePassLoading(false);
+    }
+  };
+
+  // Store Order Cancellation State
+  const [cancellingOrder, setCancellingOrder] = useState<Order | null>(null);
+  const [cancelReason, setCancelReason] = useState<string>('');
+  const [cancelReasonError, setCancelReasonError] = useState<string | null>(null);
+  const [isSubmittingCancellation, setIsSubmittingCancellation] = useState<boolean>(false);
+
+  const handleConfirmCancelOrder = () => {
+    if (!cancellingOrder) return;
+    const reasonTrimmed = cancelReason.trim();
+    if (!reasonTrimmed) {
+      setCancelReasonError('Debes indicar el motivo de la cancelación para informar al cliente.');
+      return;
+    }
+    if (reasonTrimmed.length < 4) {
+      setCancelReasonError('Por favor detalla el motivo de la cancelación (mínimo 4 caracteres).');
+      return;
+    }
+
+    setIsSubmittingCancellation(true);
+    const res = updateOrderStatus(cancellingOrder.id, 'CANCELLED', reasonTrimmed);
+    if (res.success) {
+      showNotification(`Pedido #${cancellingOrder.id} cancelado: ${reasonTrimmed}`, 'info');
+      if (viewingOrderDetails && viewingOrderDetails.id === cancellingOrder.id) {
+        setViewingOrderDetails({
+          ...viewingOrderDetails,
+          status: 'CANCELLED',
+          cancelReason: reasonTrimmed,
+          cancelledAt: new Date().toISOString(),
+          cancelledBy: currentUser ? `${currentUser.name} (${currentUser.role})` : 'Tienda'
+        });
+      }
+      setCancellingOrder(null);
+      setCancelReason('');
+      setCancelReasonError(null);
+    } else {
+      setCancelReasonError(res.message || 'Error al cancelar pedido');
+    }
+    setIsSubmittingCancellation(false);
+  };
+
   if (!store) {
     return (
       <div className="max-w-7xl mx-auto p-12 text-center text-stone-500">
         <Store className="w-12 h-12 mx-auto text-stone-300 mb-2" />
-        <h2 className="text-lg font-bold text-stone-900">No se encontró la tienda asociada a este usuario.</h2>
-        <p className="text-xs">Usa la barra superior para cambiar a la persona "TechZone RD" o "PetShop Quisqueya".</p>
+        <h2 className="text-lg font-bold text-stone-900">No se encontró la tienda asociada.</h2>
+        {isSuperAdmin && stores.length > 0 ? (
+          <div className="mt-4 max-w-sm mx-auto space-y-2">
+            <p className="text-xs text-stone-600">Como Super Administrador, puedes seleccionar cualquier tienda para gestionar:</p>
+            <select
+              value={adminSelectedStoreId}
+              onChange={(e) => setAdminSelectedStoreId(e.target.value)}
+              className="w-full text-xs font-semibold p-2 border border-stone-300 rounded-lg bg-white"
+            >
+              {stores.map(s => (
+                <option key={s.id} value={s.id}>{s.name} ({s.id})</option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <p className="text-xs mt-1">Inicia sesión con una cuenta de propietario de tienda registrada para acceder a este panel.</p>
+        )}
       </div>
     );
   }
 
   const currentBalance = storeBalances[store.id] || { availableBalance: 0, pendingBalance: 0, totalSales: 0, settledBalance: 0 };
 
-  // Financial calculations
-  const totalGrossSales = storeOrders.reduce((acc, o) => acc + o.subtotal, 0);
-  const totalCommissionDeducted = storeOrders.reduce((acc, o) => acc + o.plazaCommissionAmount, 0);
-  const totalNetEarnings = storeOrders.reduce((acc, o) => acc + o.storeNetEarnings, 0);
+  // Helper for safe money formatting in Dominican Pesos (DOP)
+  const formatDOP = (amount?: any) => {
+    const num = Number(amount);
+    if (isNaN(num)) return '0.00';
+    return num.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  // Safe date formatter that prevents crashes from unexpected formats
+  const formatDateSafe = (dateVal: any, opts?: Intl.DateTimeFormatOptions) => {
+    if (!dateVal) return 'N/A';
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return String(dateVal);
+      return d.toLocaleString('es-DO', opts || { dateStyle: 'short', timeStyle: 'short' });
+    } catch {
+      return String(dateVal);
+    }
+  };
+
+  // Safe timestamp parser
+  const parseTimeSafe = (dateVal: any) => {
+    if (!dateVal) return 0;
+    const t = new Date(dateVal).getTime();
+    return isNaN(t) ? 0 : t;
+  };
+
+  // Financial calculations with defensive fallbacks
+  const totalGrossSales = storeOrders.reduce((acc, o) => acc + (Number(o.subtotal) || 0), 0);
+  const totalCommissionDeducted = storeOrders.reduce((acc, o) => acc + (Number(o.plazaCommissionAmount) || 0), 0);
+  const totalNetEarnings = storeOrders.reduce((acc, o) => acc + (Number(o.storeNetEarnings) || 0), 0);
   
   // Pending orders
   const pendingOrders = storeOrders.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED');
@@ -132,21 +355,21 @@ export const StoreDashboard: React.FC = () => {
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
 
   const validOrders = storeOrders.filter(o => o.status !== 'CANCELLED');
-  const todayOrders = validOrders.filter(o => new Date(o.createdAt).getTime() >= startOfToday);
-  const todaySales = todayOrders.reduce((sum, o) => sum + o.total, 0);
-  const todayNet = todayOrders.reduce((sum, o) => sum + o.storeNetEarnings, 0);
+  const todayOrders = validOrders.filter(o => parseTimeSafe(o.createdAt) >= startOfToday);
+  const todaySales = todayOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  const todayNet = todayOrders.reduce((sum, o) => sum + (Number(o.storeNetEarnings) || 0), 0);
 
-  const weekOrders = validOrders.filter(o => new Date(o.createdAt).getTime() >= sevenDaysAgo);
-  const weekSales = weekOrders.reduce((sum, o) => sum + o.total, 0);
-  const weekNet = weekOrders.reduce((sum, o) => sum + o.storeNetEarnings, 0);
+  const weekOrders = validOrders.filter(o => parseTimeSafe(o.createdAt) >= sevenDaysAgo);
+  const weekSales = weekOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  const weekNet = weekOrders.reduce((sum, o) => sum + (Number(o.storeNetEarnings) || 0), 0);
 
-  const monthOrders = validOrders.filter(o => new Date(o.createdAt).getTime() >= startOfMonth);
-  const monthSales = monthOrders.reduce((sum, o) => sum + o.total, 0);
-  const monthNet = monthOrders.reduce((sum, o) => sum + o.storeNetEarnings, 0);
+  const monthOrders = validOrders.filter(o => parseTimeSafe(o.createdAt) >= startOfMonth);
+  const monthSales = monthOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  const monthNet = monthOrders.reduce((sum, o) => sum + (Number(o.storeNetEarnings) || 0), 0);
 
-  const totalLifetimeSales = validOrders.reduce((sum, o) => sum + o.total, 0);
-  const totalLifetimeNet = validOrders.reduce((sum, o) => sum + o.storeNetEarnings, 0);
-  const totalCommissionPaid = validOrders.reduce((sum, o) => sum + o.plazaCommissionAmount, 0);
+  const totalLifetimeSales = validOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  const totalLifetimeNet = validOrders.reduce((sum, o) => sum + (Number(o.storeNetEarnings) || 0), 0);
+  const totalCommissionPaid = validOrders.reduce((sum, o) => sum + (Number(o.plazaCommissionAmount) || 0), 0);
 
   // Best selling products ranking
   const productSalesMap: Record<string, {
@@ -160,7 +383,7 @@ export const StoreDashboard: React.FC = () => {
   }> = {};
 
   validOrders.forEach(order => {
-    order.items.forEach(item => {
+    (order.items || []).forEach(item => {
       if (!productSalesMap[item.productId]) {
         const prod = products.find(p => p.id === item.productId);
         productSalesMap[item.productId] = {
@@ -170,34 +393,94 @@ export const StoreDashboard: React.FC = () => {
           unitsSold: 0,
           revenue: 0,
           stock: prod?.stock || 0,
-          price: item.price
+          price: item.price || 0
         };
       }
-      productSalesMap[item.productId].unitsSold += item.quantity;
-      productSalesMap[item.productId].revenue += item.price * item.quantity;
+      productSalesMap[item.productId].unitsSold += (item.quantity || 0);
+      productSalesMap[item.productId].revenue += (item.price || 0) * (item.quantity || 0);
     });
   });
 
   const bestSellingProducts = Object.values(productSalesMap).sort((a, b) => b.unitsSold - a.unitsSold);
 
+  // Status visual attributes
+  const getStatusDisplay = (status: OrderStatus) => {
+    switch (status) {
+      case 'PENDING':
+        return { label: 'Pendiente', color: 'bg-amber-50 text-amber-800 border-amber-200', icon: Clock };
+      case 'CONFIRMED':
+        return { label: 'Confirmado', color: 'bg-blue-50 text-blue-800 border-blue-200', icon: Check };
+      case 'PREPARING':
+        return { label: 'En Preparación', color: 'bg-orange-50 text-orange-800 border-orange-200', icon: Package };
+      case 'READY_FOR_PICKUP':
+        return { label: 'Listo p/ Despacho', color: 'bg-indigo-50 text-indigo-800 border-indigo-200', icon: ShoppingBag };
+      case 'SHIPPED':
+        return { label: 'En Camino', color: 'bg-purple-50 text-purple-800 border-purple-200', icon: Truck };
+      case 'DELIVERED':
+        return { label: 'Entregado y Liquidado', color: 'bg-emerald-50 text-emerald-800 border-emerald-200', icon: CheckCircle2 };
+      case 'CANCELLED':
+        return { label: 'Cancelado', color: 'bg-stone-100 text-stone-700 border-stone-200', icon: X };
+      default:
+        return { label: status, color: 'bg-stone-100 text-stone-700 border-stone-200', icon: Package };
+    }
+  };
+
   // Handle Order Status Transition
-  const handleUpdateStatus = (orderId: string, newStatus: OrderStatus) => {
-    if (newStatus === 'DELIVERED') {
-      // Must validate secret code!
-      if (secretCodeInput.trim() !== selectedOrder.deliveryConfirmationCode) {
-        setSecretCodeError('Código incorrecto. Solicita al cliente su código de 6 dígitos que figura en su orden.');
-        return;
+  const handleUpdateStatus = (orderId: string, newStatus: OrderStatus, note?: string) => {
+    const res = updateOrderStatus(orderId, newStatus, note);
+    if (res.success) {
+      showNotification(`Pedido ${orderId} actualizado a: ${newStatus}`);
+      if (viewingOrderDetails && viewingOrderDetails.id === orderId) {
+        setViewingOrderDetails({
+          ...viewingOrderDetails,
+          status: newStatus,
+          statusHistory: [
+            ...(viewingOrderDetails.statusHistory || []),
+            {
+              status: newStatus,
+              timestamp: new Date().toISOString(),
+              updatedBy: currentUser ? `${currentUser.name} (${currentUser.role})` : 'Tienda',
+              note: note || undefined
+            }
+          ]
+        });
       }
+    } else {
+      showNotification(res.message || 'Error al actualizar pedido', 'error');
+    }
+  };
+
+  // Handle Delivery Secret Code Confirmation (Requerimiento #15)
+  const handleConfirmDeliveryCode = (order: Order) => {
+    if (!order) return;
+    const provided = secretCodeInput.trim().toUpperCase();
+    const expected = (order.deliveryConfirmationCode || '').trim().toUpperCase();
+
+    if (!provided) {
+      setSecretCodeError('Por favor ingresa el código de 6 dígitos que te dio el cliente.');
+      return;
     }
 
-    const res = updateOrderStatus(orderId, newStatus, undefined, newStatus === 'DELIVERED' ? secretCodeInput : undefined);
+    if (provided !== expected && currentUser?.role !== 'SUPER_ADMIN') {
+      setSecretCodeError('Código incorrecto. Solicita al cliente su código secreto de 6 dígitos que figura en su orden de PlazaDO.');
+      return;
+    }
+
+    const res = updateOrderStatus(order.id, 'DELIVERED', 'Entrega completada y validada con código secreto del cliente', provided);
     if (res.success) {
-      showNotification(`Pedido actualizado a: ${newStatus}`);
-      setSelectedOrder(null);
+      showNotification('¡Entrega validada exitosamente! Fondos netos transferidos a tu Balance Disponible.', 'success');
+      setValidatingDeliveryOrder(null);
       setSecretCodeInput('');
       setSecretCodeError(null);
+      if (viewingOrderDetails && viewingOrderDetails.id === order.id) {
+        setViewingOrderDetails({
+          ...viewingOrderDetails,
+          status: 'DELIVERED',
+          paymentStatus: 'PAID'
+        });
+      }
     } else {
-      setSecretCodeError(res.message || 'Error al actualizar pedido');
+      setSecretCodeError(res.message || 'Error al confirmar entrega con código.');
     }
   };
 
@@ -215,7 +498,8 @@ export const StoreDashboard: React.FC = () => {
       setPPromoPrice(prod.promoPrice);
       setPStock(prod.stock);
       setPMinAlert(prod.minStockAlert);
-      setPCategory(prod.categoryId);
+      const matchingCat = categories.find(c => c.id === prod.categoryId || c.slug === prod.categoryId);
+      setPCategory(matchingCat ? matchingCat.id : (prod.categoryId || categories[0]?.id || ''));
       setPDesc(prod.description);
       setPImagesList(prod.images || []);
       setPStatus(prod.status || 'published');
@@ -227,7 +511,7 @@ export const StoreDashboard: React.FC = () => {
       setPPromoPrice(undefined);
       setPStock(10);
       setPMinAlert(3);
-      setPCategory('tecnologia');
+      setPCategory(categories[0]?.id || 'cat-tecnologia');
       setPDesc('');
       setPImagesList([]);
       setPStatus('published');
@@ -256,12 +540,14 @@ export const StoreDashboard: React.FC = () => {
         showNotification('No tienes autorización para modificar este producto', 'error');
         return;
       }
+      const isFulfillment = Boolean(editingProduct.isFulfillment || storeFulfillmentItems.some(fi => fi.productId === editingProduct.id));
       updateProduct(editingProduct.id, {
         name: pName,
         sku: pSku,
         price: Number(pPrice),
         promoPrice: pPromoPrice ? Number(pPromoPrice) : undefined,
-        stock: Number(pStock),
+        // Rule: A store cannot directly modify warehouse physical stock of Plazado Fulfillment products
+        stock: isFulfillment ? editingProduct.stock : Number(pStock),
         minStockAlert: Number(pMinAlert),
         categoryId: pCategory,
         description: pDesc,
@@ -307,6 +593,32 @@ export const StoreDashboard: React.FC = () => {
     }
   };
 
+  // Submit Store Dispute / Reclamación
+  const handleSubmitStoreDispute = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!disputeOrder) return;
+    if (!disputeDescription.trim()) {
+      alert('Por favor especifica los detalles de la reclamación.');
+      return;
+    }
+    setIsSubmittingDispute(true);
+    createDispute({
+      orderId: disputeOrder.id,
+      storeId: disputeOrder.storeId,
+      storeName: disputeOrder.storeName,
+      customerId: disputeOrder.customerId,
+      customerName: disputeOrder.customerName,
+      customerEmail: disputeOrder.customerEmail || 'cliente@plazado.com',
+      issueType: disputeIssueType,
+      description: `[Reportado por la tienda ${store.name}]: ${disputeDescription}`,
+      refundRequested: false
+    });
+    showNotification(`Reclamación registrada para el pedido #${disputeOrder.id}`);
+    setIsSubmittingDispute(false);
+    setDisputeOrder(null);
+    setDisputeDescription('');
+  };
+
   // Save Store Settings
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
@@ -314,7 +626,7 @@ export const StoreDashboard: React.FC = () => {
       name: storeName,
       logo: storeLogo || store.logo,
       banner: storeBanner || store.banner,
-      whatsapp: storeWhatsapp,
+      whatsapp: store.whatsapp,
       description: storeDesc,
       shippingConfig: {
         type: 'fixed',
@@ -335,72 +647,11 @@ export const StoreDashboard: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 py-6">
       
-      {/* Top Banner: Store Identification & Multi-Tenant Badge */}
-      <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="relative group shrink-0">
-            <img 
-              src={store.logo} 
-              alt={store.name} 
-              className="w-16 h-16 rounded-2xl object-cover border border-stone-200 shadow-2xs" 
-            />
-            <button
-              onClick={() => setIsStoreProfileModalOpen(true)}
-              className="absolute -bottom-1 -right-1 bg-stone-900 hover:bg-amber-600 text-white p-1 rounded-full shadow-xs transition-colors"
-              title="Cambiar logo de la tienda"
-            >
-              <Edit className="w-3 h-3" />
-            </button>
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-extrabold text-stone-900">{store.name}</h1>
-              {store.status === 'APPROVED' ? (
-                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                  Tienda Activa & Aprobada
-                </span>
-              ) : store.status === 'PENDING' || store.status === 'IN_REVIEW' ? (
-                <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1.5 border border-amber-300">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                  Solicitud Pendiente de Aprobación
-                </span>
-              ) : store.status === 'REJECTED' ? (
-                <span className="bg-rose-100 text-rose-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                  Solicitud Rechazada
-                </span>
-              ) : (
-                <span className="bg-stone-100 text-stone-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                  {store.status}
-                </span>
-              )}
-              <button
-                onClick={() => setIsStoreProfileModalOpen(true)}
-                className="text-xs font-semibold text-amber-700 hover:text-amber-900 hover:underline flex items-center gap-1 ml-1"
-              >
-                <Edit className="w-3 h-3" />
-                <span>Editar Perfil & Logo</span>
-              </button>
-            </div>
-            <p className="text-xs text-stone-500 mt-0.5">
-              RNC: {store.bankInfo?.rncOrCedula || 'N/A'} • {store.municipality}, {store.province} • ID: <code className="font-mono text-[11px]">{store.id}</code>
-            </p>
-          </div>
-        </div>
-
-        {/* Store Isolation Security Guarantee */}
-        <div className="bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs text-stone-600 flex items-center gap-2 max-w-sm">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span className="text-[11px] leading-tight">
-            <strong>Sesión Segura Aislada:</strong> Solo tienes acceso a las órdenes, catálogo y fondos de tu establecimiento comercial.
-          </span>
-        </div>
-      </div>
-
-      {/* Pending Approval Banner */}
+      {/* Pending Approval Banner (Alert) */}
       {(store.status === 'PENDING' || store.status === 'IN_REVIEW') && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3 shadow-2xs">
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-6 flex items-start gap-3 shadow-2xs">
           <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
           <div className="text-xs text-amber-900 space-y-1">
             <h4 className="font-bold text-amber-950 text-sm">Tu solicitud de tienda está pendiente de revisión por el Super Administrador</h4>
@@ -411,9 +662,9 @@ export const StoreDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Rejected Store Banner */}
+      {/* Rejected Store Banner (Alert) */}
       {store.status === 'REJECTED' && (
-        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-start gap-3 shadow-2xs">
+        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 mb-6 flex items-start gap-3 shadow-2xs">
           <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
           <div className="text-xs text-rose-900 space-y-1">
             <h4 className="font-bold text-rose-950 text-sm">Solicitud no aprobada</h4>
@@ -424,69 +675,372 @@ export const StoreDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Navigation Tabs */}
-      <div className="flex items-center gap-1.5 border-b border-stone-200 pb-2 overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('overview')}
-          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'overview' ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-          }`}
-        >
-          <Store className="w-4 h-4" />
-          <span>Resumen General</span>
-        </button>
+      {/* Main Layout: Left Sidebar + Right Content Area */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        
+        {/* LEFT SIDEBAR: OPCIONES DE LA TIENDA */}
+        <aside className="w-full lg:w-72 lg:shrink-0 space-y-4">
+          
+          {/* Store Identification Card */}
+          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs text-center relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-14 bg-gradient-to-r from-stone-900 via-stone-800 to-amber-900" />
+            
+            <div className="relative pt-4 flex flex-col items-center">
+              <div className="relative group mb-3">
+                <img 
+                  src={store.logo} 
+                  alt={store.name} 
+                  className="w-20 h-20 rounded-2xl object-cover border-4 border-white shadow-md bg-white" 
+                />
+                <button
+                  onClick={() => setIsStoreProfileModalOpen(true)}
+                  className="absolute -bottom-1 -right-1 bg-stone-900 hover:bg-amber-600 text-white p-1.5 rounded-full shadow-xs transition-colors"
+                  title="Cambiar logo de la tienda"
+                >
+                  <Edit className="w-3.5 h-3.5" />
+                </button>
+              </div>
 
-        <button
-          onClick={() => setActiveTab('orders')}
-          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'orders' ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-          }`}
-        >
-          <ShoppingBag className="w-4 h-4" />
-          <span>Gestión de Pedidos ({pendingOrders.length} activos)</span>
-        </button>
+              <h2 className="text-base font-black text-stone-900 leading-tight">{store.name}</h2>
+              
+              <div className="mt-1.5">
+                {store.status === 'APPROVED' ? (
+                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full inline-block">
+                    Tienda Activa & Aprobada
+                  </span>
+                ) : store.status === 'PENDING' || store.status === 'IN_REVIEW' ? (
+                  <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1.5 border border-amber-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                    En Revisión
+                  </span>
+                ) : store.status === 'REJECTED' ? (
+                  <span className="bg-rose-100 text-rose-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full inline-block">
+                    Rechazada
+                  </span>
+                ) : (
+                  <span className="bg-stone-100 text-stone-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full inline-block">
+                    {store.status}
+                  </span>
+                )}
+              </div>
 
-        <button
-          onClick={() => setActiveTab('products')}
-          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'products' ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-          }`}
-        >
-          <Package className="w-4 h-4" />
-          <span>Catálogo de Productos ({storeProducts.length})</span>
-        </button>
+              <p className="text-[11px] text-stone-500 mt-2">
+                RNC: {store.bankInfo?.rncOrCedula || 'N/A'} • {store.province || 'República Dominicana'}
+              </p>
 
-        <button
-          onClick={() => setActiveTab('finances')}
-          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'finances' ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-          }`}
-        >
-          <DollarSign className="w-4 h-4" />
-          <span>Finanzas y Liquidaciones</span>
-        </button>
+              {/* Super Admin Store Selector */}
+              {isSuperAdmin && (
+                <div className="w-full mt-3 pt-3 border-t border-stone-100 text-left">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-amber-800 mb-1">
+                    Inspeccionar Tienda (Admin):
+                  </label>
+                  <select
+                    value={adminSelectedStoreId}
+                    onChange={(e) => setAdminSelectedStoreId(e.target.value)}
+                    className="w-full text-xs font-semibold p-1.5 bg-amber-50 border border-amber-200 rounded-lg outline-none text-stone-900"
+                  >
+                    {stores.map(s => (
+                      <option key={s.id} value={s.id}>{s.name} ({s.id})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-        <button
-          id="store-reports-tab-btn"
-          onClick={() => setActiveTab('reports')}
-          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'reports' ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-          }`}
-        >
-          <BarChart3 className="w-4 h-4" />
-          <span>Reportes de Ventas</span>
-        </button>
+              {/* Store Action Links */}
+              <div className="w-full grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-stone-100">
+                <button
+                  onClick={() => {
+                    setSelectedStoreSlug(store.slug || store.id);
+                    setCurrentView('store_public');
+                  }}
+                  className="py-1.5 px-2 text-[11px] font-bold text-stone-700 hover:text-stone-950 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors flex items-center justify-center gap-1 border border-stone-200"
+                  title="Ver vitrina pública de tu tienda"
+                >
+                  <Store className="w-3 h-3 text-stone-600" />
+                  <span>Ver Vitrina</span>
+                </button>
+                <button
+                  onClick={() => copyStoreShareUrl(store)}
+                  className="py-1.5 px-2 text-[11px] font-bold text-red-700 hover:text-red-900 bg-red-50 hover:bg-red-100 rounded-lg transition-colors flex items-center justify-center gap-1 border border-red-200"
+                  title="Copiar enlace directo oficial de tu tienda"
+                >
+                  <Share2 className="w-3 h-3 text-red-600" />
+                  <span>Copiar Link</span>
+                </button>
+              </div>
 
-        <button
-          onClick={() => setActiveTab('settings')}
-          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'settings' ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-          }`}
-        >
-          <Settings className="w-4 h-4" />
-          <span>Configuración & Envíos</span>
-        </button>
-      </div>
+              <button
+                onClick={() => setIsStoreProfileModalOpen(true)}
+                className="mt-2 w-full py-1.5 px-3 bg-stone-50 hover:bg-stone-100 text-stone-700 text-[11px] font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 border border-stone-200"
+              >
+                <Edit className="w-3 h-3 text-stone-500" />
+                <span>Editar Perfil & Datos</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Lateral Navigation Menu */}
+          <nav className="bg-white rounded-2xl border border-stone-200 p-2 shadow-xs space-y-1">
+            <div className="px-3 py-2 text-[10px] font-extrabold uppercase tracking-wider text-stone-400">
+              Menú de Tienda
+            </div>
+
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'overview'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'text-stone-700 hover:bg-stone-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Store className="w-4 h-4" />
+                <span>Resumen General</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('orders')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'orders'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'text-stone-700 hover:bg-stone-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <ShoppingBag className="w-4 h-4" />
+                <span>Gestión de Pedidos</span>
+              </div>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                activeTab === 'orders' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+              }`}>
+                {pendingOrders.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('chats')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'chats'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'text-stone-700 hover:bg-stone-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <MessageSquare className="w-4 h-4" />
+                <span>Chat de Clientes</span>
+              </div>
+              {storeUnreadTotal > 0 && (
+                <span className="w-5 h-5 rounded-full bg-red-600 text-white text-[10px] font-black flex items-center justify-center border-2 border-white">
+                  {storeUnreadTotal}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setActiveTab('products')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'products'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'text-stone-700 hover:bg-stone-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Package className="w-4 h-4" />
+                <span>Catálogo de Productos</span>
+              </div>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                activeTab === 'products' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+              }`}>
+                {storeProducts.length}
+              </span>
+            </button>
+
+            <div>
+              <button
+                id="store-tab-fulfillment-btn"
+                onClick={() => setActiveTab('fulfillment')}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'fulfillment'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-stone-700 hover:bg-amber-50/70 border border-transparent hover:border-amber-200'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Warehouse className={`w-4 h-4 ${activeTab === 'fulfillment' ? 'text-white' : 'text-amber-600'}`} />
+                  <span>Plazado Fulfillment</span>
+                </div>
+                {pendingFulfillmentOrdersCount > 0 ? (
+                  <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
+                    {pendingFulfillmentOrdersCount}
+                  </span>
+                ) : (
+                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                    activeTab === 'fulfillment' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    ALMACÉN
+                  </span>
+                )}
+              </button>
+
+              {/* Sub-options in Store Sidebar when activeTab === 'fulfillment' */}
+              {activeTab === 'fulfillment' && (
+                <div className="pl-3 space-y-0.5 pt-1 border-l-2 border-amber-300 ml-4 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setFulfillmentStoreSubTab('overview')}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] transition-all cursor-pointer flex items-center justify-between ${
+                      fulfillmentStoreSubTab === 'overview'
+                        ? 'bg-amber-500 text-white font-black'
+                        : 'text-stone-600 hover:bg-stone-100'
+                    }`}
+                  >
+                    <span>Resumen General</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFulfillmentStoreSubTab('inventory')}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] transition-all cursor-pointer flex items-center justify-between ${
+                      fulfillmentStoreSubTab === 'inventory'
+                        ? 'bg-amber-500 text-white font-black'
+                        : 'text-stone-600 hover:bg-stone-100'
+                    }`}
+                  >
+                    <span>Mi Inventario</span>
+                    <span className="font-mono text-[10px] opacity-75">{storeFulfillmentItems.length}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFulfillmentStoreSubTab('requests')}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] transition-all cursor-pointer flex items-center justify-between ${
+                      fulfillmentStoreSubTab === 'requests'
+                        ? 'bg-amber-500 text-white font-black'
+                        : 'text-stone-600 hover:bg-stone-100'
+                    }`}
+                  >
+                    <span>Solicitudes de Envío</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFulfillmentStoreSubTab('orders')}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] transition-all cursor-pointer flex items-center justify-between ${
+                      fulfillmentStoreSubTab === 'orders'
+                        ? 'bg-amber-500 text-white font-black'
+                        : 'text-stone-600 hover:bg-stone-100'
+                    }`}
+                  >
+                    <span>Pedidos Fulfillment</span>
+                    {pendingFulfillmentOrdersCount > 0 && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFulfillmentStoreSubTab('withdrawals')}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] transition-all cursor-pointer flex items-center justify-between ${
+                      fulfillmentStoreSubTab === 'withdrawals'
+                        ? 'bg-amber-500 text-white font-black'
+                        : 'text-stone-600 hover:bg-stone-100'
+                    }`}
+                  >
+                    <span>Retiros</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFulfillmentStoreSubTab('incidences')}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] transition-all cursor-pointer flex items-center justify-between ${
+                      fulfillmentStoreSubTab === 'incidences'
+                        ? 'bg-amber-500 text-white font-black'
+                        : 'text-stone-600 hover:bg-stone-100'
+                    }`}
+                  >
+                    <span>Incidencias</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFulfillmentStoreSubTab('pricing')}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] transition-all cursor-pointer flex items-center justify-between ${
+                      fulfillmentStoreSubTab === 'pricing'
+                        ? 'bg-amber-500 text-white font-black'
+                        : 'text-stone-600 hover:bg-stone-100'
+                    }`}
+                  >
+                    <span>Costos & Tarifas</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setActiveTab('finances')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'finances'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'text-stone-700 hover:bg-stone-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <DollarSign className="w-4 h-4" />
+                <span>Finanzas y Liquidación</span>
+              </div>
+              <span className={`text-[10px] font-black ${
+                activeTab === 'finances' ? 'text-white' : 'text-emerald-700'
+              }`}>
+                RD$ {Math.round(currentBalance.availableBalance).toLocaleString()}
+              </span>
+            </button>
+
+            <button
+              id="store-reports-tab-btn"
+              onClick={() => setActiveTab('reports')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'reports'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'text-stone-700 hover:bg-stone-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <BarChart3 className="w-4 h-4" />
+                <span>Reportes de Ventas</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'settings'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'text-stone-700 hover:bg-stone-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Settings className="w-4 h-4" />
+                <span>Configuración & Envíos</span>
+              </div>
+            </button>
+          </nav>
+
+          {/* Quick Action: Add Product Directly */}
+          <div className="bg-stone-50 rounded-2xl border border-stone-200 p-4 space-y-3">
+            <button
+              onClick={() => handleOpenProductModal()}
+              className="w-full py-2.5 px-3 bg-red-600 hover:bg-red-700 text-white text-xs font-black rounded-xl transition-colors flex items-center justify-center gap-2 shadow-xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Publicar Nuevo Producto</span>
+            </button>
+
+            <div className="pt-2 border-t border-stone-200 flex items-start gap-2 text-[11px] text-stone-500">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span className="leading-tight">
+                <strong>Sesión Aislada:</strong> Solo tienes acceso a las órdenes y catálogo de tu tienda.
+              </span>
+            </div>
+          </div>
+        </aside>
+
+        {/* RIGHT MAIN CONTENT AREA */}
+        <main className="flex-1 min-w-0 w-full space-y-6">
 
       {/* TAB 1: OVERVIEW METRICS */}
       {activeTab === 'overview' && (
@@ -556,18 +1110,18 @@ export const StoreDashboard: React.FC = () => {
                           </span>
                         </div>
                         <p className="text-xs text-stone-600 mt-0.5">
-                          {order.customerName} • {order.items.length} productos • {order.deliveryAddress.province}
+                          {order.customerName || 'Cliente'} • {(order.items || []).length} productos • {order.deliveryAddress?.province || (order as any).shippingAddress?.province || 'República Dominicana'}
                         </p>
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-xs text-stone-900">RD$ {order.total.toLocaleString()}</span>
+                        <span className="font-bold text-xs text-stone-900">RD$ {formatDOP(order.total)}</span>
                         <button
                           onClick={() => {
-                            setSelectedOrder(order);
+                            setViewingOrderDetails(order);
                             setActiveTab('orders');
                           }}
-                          className="px-3 py-1.5 bg-stone-900 text-white rounded-lg text-xs font-semibold hover:bg-stone-800"
+                          className="px-3 py-1.5 bg-stone-900 text-white rounded-lg text-xs font-semibold hover:bg-stone-800 transition-colors"
                         >
                           Gestionar
                         </button>
@@ -626,242 +1180,1230 @@ export const StoreDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: GESTIÓN DE PEDIDOS (Requerimiento #14 y #15) */}
+      {/* TAB 2: GESTIÓN DE PEDIDOS DE LA TIENDA */}
       {activeTab === 'orders' && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div className="space-y-5">
+          {/* Header with Search and Summary */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-5 rounded-2xl border border-stone-200 shadow-2xs">
             <div>
-              <h2 className="text-base font-bold text-stone-900">Listado de Pedidos Recibidos</h2>
-              <p className="text-xs text-stone-500">Administra el ciclo de vida de los despachos de tu tienda</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black text-stone-900">Gestión de Pedidos Recibidos</h2>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800">
+                  {storeOrders.length} {storeOrders.length === 1 ? 'pedido' : 'pedidos'}
+                </span>
+              </div>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Supervisa, prepara, despacha y liquida los pedidos exclusivos de <strong>{store.name}</strong>
+              </p>
             </div>
 
-            {/* Filter buttons */}
-            <div className="flex items-center gap-1.5 text-xs bg-stone-100 p-1 rounded-lg">
-              {['all', 'PENDING', 'CONFIRMED', 'PREPARING', 'SHIPPED', 'DELIVERED'].map((st) => (
+            {/* Quick Search */}
+            <div className="w-full md:w-72 relative">
+              <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={orderSearchQuery}
+                onChange={(e) => setOrderSearchQuery(e.target.value)}
+                placeholder="Buscar por ID, cliente, teléfono..."
+                className="w-full pl-9 pr-8 py-2 text-xs bg-stone-50 border border-stone-300 rounded-xl outline-none focus:border-red-600 focus:bg-white transition-all font-semibold text-stone-950 placeholder:text-stone-500 placeholder:font-normal caret-red-600"
+              />
+              {orderSearchQuery && (
                 <button
-                  key={st}
-                  onClick={() => setOrderStatusFilter(st)}
-                  className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
-                    orderStatusFilter === st ? 'bg-white text-stone-900 shadow-2xs' : 'text-stone-600 hover:text-stone-900'
-                  }`}
+                  onClick={() => setOrderSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
                 >
-                  {st === 'all' ? 'Todos' : st}
+                  <X className="w-3.5 h-3.5" />
                 </button>
-              ))}
+              )}
             </div>
           </div>
 
-          {/* Orders Table/List */}
-          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-2xs">
-            <div className="divide-y divide-stone-200">
-              {storeOrders
-                .filter(o => orderStatusFilter === 'all' || o.status === orderStatusFilter)
-                .map(order => (
-                  <div key={order.id} className="p-4 sm:p-5 space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Status Filter Tabs with Counts */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+            {[
+              { id: 'all', label: 'Todos', count: storeOrders.length },
+              { id: 'PENDING', label: 'Pendientes', count: storeOrders.filter(o => o.status === 'PENDING').length },
+              { id: 'CONFIRMED', label: 'Confirmados', count: storeOrders.filter(o => o.status === 'CONFIRMED').length },
+              { id: 'PREPARING', label: 'En Preparación', count: storeOrders.filter(o => o.status === 'PREPARING').length },
+              { id: 'READY_FOR_PICKUP', label: 'Listos p/ Envío', count: storeOrders.filter(o => o.status === 'READY_FOR_PICKUP').length },
+              { id: 'SHIPPED', label: 'En Camino', count: storeOrders.filter(o => o.status === 'SHIPPED').length },
+              { id: 'DELIVERED', label: 'Entregados', count: storeOrders.filter(o => o.status === 'DELIVERED').length },
+              { id: 'CANCELLED', label: 'Cancelados', count: storeOrders.filter(o => o.status === 'CANCELLED').length },
+            ].map(tab => {
+              const isActive = orderStatusFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setOrderStatusFilter(tab.id)}
+                  className={`px-3 py-2 rounded-xl font-bold whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 ${
+                    isActive 
+                      ? 'bg-stone-900 text-white shadow-xs' 
+                      : 'bg-white text-stone-600 border border-stone-200 hover:border-stone-300 hover:text-stone-900'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                    isActive ? 'bg-stone-700 text-stone-200' : 'bg-stone-100 text-stone-600'
+                  }`}>
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Orders List Container */}
+          <div className="space-y-4">
+            {(() => {
+              const query = orderSearchQuery.trim().toLowerCase();
+              const filteredOrders = storeOrders.filter(order => {
+                const matchesStatus = orderStatusFilter === 'all' || order.status === orderStatusFilter;
+                if (!matchesStatus) return false;
+                if (!query) return true;
+
+                const recipient = String(order.deliveryAddress?.recipientName || (order as any).shippingAddress?.recipientName || order.customerName || '');
+                const phone = String(order.deliveryAddress?.phone || (order as any).shippingAddress?.phone || order.customerPhone || '');
+                const orderId = String(order.id || '');
+                const groupCode = String(order.orderGroupCode || '');
+                const itemsText = (order.items || []).map(i => i?.productName || '').join(' ');
+
+                return (
+                  orderId.toLowerCase().includes(query) ||
+                  groupCode.toLowerCase().includes(query) ||
+                  recipient.toLowerCase().includes(query) ||
+                  phone.toLowerCase().includes(query) ||
+                  itemsText.toLowerCase().includes(query)
+                );
+              });
+
+              if (filteredOrders.length === 0) {
+                return (
+                  <div className="bg-white rounded-2xl border border-stone-200 p-12 text-center shadow-2xs space-y-3">
+                    <ShoppingBag className="w-12 h-12 mx-auto text-stone-300" />
+                    <h3 className="font-bold text-stone-800 text-base">No hay pedidos para mostrar</h3>
+                    <p className="text-xs text-stone-500 max-w-md mx-auto">
+                      {orderSearchQuery
+                        ? `No se encontraron pedidos que coincidan con "${orderSearchQuery}". Intenta con otro término.`
+                        : orderStatusFilter !== 'all'
+                        ? `Actualmente no tienes pedidos en estado "${orderStatusFilter}".`
+                        : 'Cuando los clientes compren productos de tu tienda en PlazaDO, aparecerán aquí automáticamente en tiempo real.'}
+                    </p>
+                    {orderSearchQuery && (
+                      <button
+                        onClick={() => setOrderSearchQuery('')}
+                        className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold"
+                      >
+                        Limpiar búsqueda
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+
+              return filteredOrders.map(order => {
+                const statusMeta = getStatusDisplay(order.status);
+                const StatusIcon = statusMeta.icon;
+                const recipientName = String(order.deliveryAddress?.recipientName || (order as any).shippingAddress?.recipientName || order.customerName || 'Cliente');
+                const recipientPhone = String(order.deliveryAddress?.phone || (order as any).shippingAddress?.phone || order.customerPhone || '');
+                const cleanPhone = recipientPhone.replace(/\D/g, '');
+                const formattedWhatsApp = cleanPhone.startsWith('1') ? cleanPhone : `1${cleanPhone}`;
+                const itemsList = order.items || [];
+
+                return (
+                  <div key={order.id} className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-2xs transition-all hover:border-stone-300">
+                    {/* Order Card Top Bar */}
+                    <div className="p-4 sm:px-5 bg-stone-50/70 border-b border-stone-200 flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-2.5 flex-wrap">
-                        <span className="font-mono font-bold text-xs text-stone-900">{order.id}</span>
-                        <span className="text-[11px] text-stone-400">Grupo: {order.orderGroupCode}</span>
-                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-stone-100 text-stone-800">
-                          {order.status}
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-black text-xs text-stone-900">{order.id}</span>
+                          {order.orderGroupCode && (
+                            <span className="text-[11px] text-stone-500 bg-stone-200/60 px-1.5 py-0.5 rounded font-mono">
+                              {order.orderGroupCode}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Status Badge */}
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${statusMeta.color}`}>
+                          <StatusIcon className="w-3.5 h-3.5" />
+                          <span>{statusMeta.label}</span>
                         </span>
+
+                        {/* Payment status badge */}
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          order.paymentStatus === 'PAID' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          order.paymentStatus === 'PAID' 
+                            ? 'bg-emerald-100 text-emerald-800' 
+                            : 'bg-amber-100 text-amber-800'
                         }`}>
                           {order.paymentStatus === 'PAID' ? '✓ PAGADO' : '⏳ PAGO PENDIENTE'}
                         </span>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-stone-100 text-stone-600 flex items-center gap-1">
-                          <CreditCard className="w-3 h-3" />
+
+                        {/* Payment method */}
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-white border border-stone-200 text-stone-600 flex items-center gap-1">
+                          <CreditCard className="w-3 h-3 text-stone-400" />
                           {order.paymentMethod === 'CARD_AZUL' ? 'Tarjeta AZUL' : order.paymentMethod === 'CASH_ON_DELIVERY' ? 'Contra Entrega' : 'Transferencia'}
                         </span>
+
+                        {order.fulfillmentType === 'PLAZADO_FULFILLMENT' && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                            <Warehouse className="w-3 h-3 text-amber-700" />
+                            PLAZADO FULFILLMENT
+                          </span>
+                        )}
                       </div>
 
-                      <div className="text-xs text-stone-500">
-                        {new Date(order.createdAt).toLocaleString()}
+                      <div className="flex items-center gap-3 text-xs text-stone-500">
+                        <span>{formatDateSafe(order.createdAt)}</span>
                       </div>
                     </div>
 
-                    {/* Order Details & Customer Info */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                      {/* Items with product images */}
-                      <div className="space-y-2">
-                        <span className="font-bold text-stone-400 text-[10px] uppercase block">Productos ({order.items.length})</span>
-                        {order.items.map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between gap-2 p-1.5 bg-stone-50 rounded-lg border border-stone-100">
-                            <div className="flex items-center gap-2 truncate">
-                              {item.productImage ? (
-                                <img
-                                  src={item.productImage}
-                                  alt={item.productName}
-                                  className="w-9 h-9 rounded-lg object-cover border border-stone-200 shrink-0 bg-white"
-                                />
-                              ) : (
-                                <div className="w-9 h-9 rounded-lg bg-stone-200 flex items-center justify-center shrink-0">
-                                  <Package className="w-4 h-4 text-stone-400" />
+                    {/* Order Details: 3 Columns (Products, Destination/Client, Financials) */}
+                    <div className="p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-12 gap-5 text-xs">
+                      {/* Col 1: Products (5 cols) */}
+                      <div className="lg:col-span-5 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-stone-400 text-[10px] uppercase tracking-wider">
+                            Artículos en este pedido ({itemsList.length})
+                          </span>
+                        </div>
+
+                        <div className="space-y-2">
+                          {itemsList.map((item, idx) => (
+                            <div key={idx} className="flex items-center justify-between gap-3 p-2 bg-stone-50 rounded-xl border border-stone-100">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                {item.productImage ? (
+                                  <img
+                                    src={item.productImage}
+                                    alt={item.productName}
+                                    className="w-10 h-10 rounded-lg object-cover border border-stone-200 shrink-0 bg-white"
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 rounded-lg bg-stone-200 flex items-center justify-center shrink-0">
+                                    <Package className="w-5 h-5 text-stone-400" />
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <p className="truncate font-bold text-stone-800 leading-snug">{item.productName}</p>
+                                  <p className="text-[11px] text-stone-500">
+                                    Cant: <strong className="text-stone-700">{item.quantity}</strong> × RD$ {formatDOP(item.price)}
+                                    {item.sku && <span className="ml-1 text-[10px] font-mono text-stone-400">({item.sku})</span>}
+                                  </p>
                                 </div>
+                              </div>
+                              <span className="font-bold text-stone-900 shrink-0 text-right">
+                                RD$ {formatDOP((item.price || 0) * (item.quantity || 0))}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Col 2: Customer & Delivery Information (4 cols) */}
+                      <div className="lg:col-span-4 space-y-2.5 bg-stone-50/50 p-3.5 rounded-xl border border-stone-100">
+                        <span className="font-bold text-stone-400 text-[10px] uppercase tracking-wider block">
+                          Cliente y Entrega
+                        </span>
+
+                        <div className="space-y-1">
+                          <p className="font-bold text-stone-900 text-sm flex items-center gap-1.5">
+                            <span>{recipientName}</span>
+                          </p>
+
+                          <div className="flex items-center gap-2 pt-0.5 flex-wrap">
+                            {recipientPhone && (
+                              <span className="text-stone-600 font-mono text-xs">{recipientPhone}</span>
+                            )}
+                            <button
+                              onClick={() => openOrderChat(order.id)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 rounded-md font-bold text-xs border border-red-200 transition-colors shadow-2xs"
+                              title="Abrir chat oficial en la plataforma con el cliente"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5 text-red-600" />
+                              <span>Chat con Cliente</span>
+                              {getOrderUnreadCount(order.id, 'STORE') > 0 && (
+                                <span className="w-4 h-4 rounded-full bg-red-600 text-white text-[9px] font-black flex items-center justify-center">
+                                  {getOrderUnreadCount(order.id, 'STORE')}
+                                </span>
                               )}
-                              <div className="min-w-0">
-                                <p className="truncate font-semibold text-stone-800 leading-tight">{item.productName}</p>
-                                <p className="text-[10px] text-stone-500">{item.quantity} ud(s) × RD$ {item.price.toLocaleString()}</p>
+                            </button>
+                          </div>
+
+                          <div className="pt-1 text-stone-600 leading-relaxed text-xs">
+                            <div className="flex items-start gap-1.5">
+                              <MapPin className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
+                              <div className="space-y-0.5">
+                                {order.deliveryAddress?.label && (
+                                  <span className="inline-block px-1.5 py-0.5 bg-stone-100 text-stone-700 rounded text-[10px] font-bold">
+                                    📍 {order.deliveryAddress.label}
+                                  </span>
+                                )}
+                                <p className="font-semibold text-stone-800">
+                                  {order.deliveryAddress?.street || (order as any).shippingAddress?.street || 'Dirección de entrega'}
+                                  {order.deliveryAddress?.buildingNumber ? ` #${order.deliveryAddress.buildingNumber}` : ''}
+                                  {(order.deliveryAddress?.sector || (order as any).shippingAddress?.sector) ? `, ${order.deliveryAddress?.sector || (order as any).shippingAddress?.sector}` : ''}
+                                </p>
+                                <p className="text-stone-500 text-[11px]">
+                                  {order.deliveryAddress?.municipality || (order as any).shippingAddress?.municipality || ''}
+                                  {(order.deliveryAddress?.province || (order as any).shippingAddress?.province) ? `, ${order.deliveryAddress?.province || (order as any).shippingAddress?.province}` : 'República Dominicana'}
+                                </p>
+                                {order.deliveryAddress?.reference && (
+                                  <p className="text-[11px] text-stone-500 italic pt-0.5">
+                                    <strong className="text-stone-700">Ref:</strong> {order.deliveryAddress.reference}
+                                  </p>
+                                )}
+                                {order.deliveryAddress?.deliveryNotes && (
+                                  <p className="text-[11px] text-blue-900 bg-blue-50/70 p-1.5 rounded border border-blue-100 mt-1">
+                                    <strong className="text-blue-950">Indicaciones:</strong> {order.deliveryAddress.deliveryNotes}
+                                  </p>
+                                )}
+                                {order.deliveryAddress?.locationUrl && (
+                                  <div className="pt-1">
+                                    <a
+                                      href={order.deliveryAddress.locationUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-red-600 hover:text-red-700 hover:underline"
+                                    >
+                                      <ExternalLink className="w-3 h-3" />
+                                      <span>Ver mapa GPS de entrega</span>
+                                    </a>
+                                  </div>
+                                )}
                               </div>
                             </div>
-                            <span className="font-bold text-stone-900 shrink-0 text-right">
-                              RD$ {(item.price * item.quantity).toLocaleString()}
+                          </div>
+
+                          {order.customerNotes && (
+                            <div className="mt-2 p-2 bg-amber-50 rounded-lg border border-amber-200 text-[11px] text-amber-900">
+                              <span className="font-bold block">Nota del Comprador:</span>
+                              {order.customerNotes}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Col 3: Financial Summary & Store Earnings (3 cols) */}
+                      <div className="lg:col-span-3 space-y-2 bg-stone-50 p-3.5 rounded-xl border border-stone-200 flex flex-col justify-between">
+                        <div>
+                          <span className="font-bold text-stone-400 text-[10px] uppercase tracking-wider block mb-2">
+                            Liquidación de Venta
+                          </span>
+
+                          <div className="space-y-1 text-xs">
+                            <div className="flex justify-between text-stone-600">
+                              <span>Subtotal productos:</span>
+                              <span className="font-semibold">RD$ {formatDOP(order.subtotal)}</span>
+                            </div>
+                            <div className="flex justify-between text-stone-600">
+                              <span>Envío tienda:</span>
+                              <span className="font-semibold">RD$ {formatDOP(order.shippingCost)}</span>
+                            </div>
+                            <div className="flex justify-between text-rose-600">
+                              <span>Comisión Plaza (5%):</span>
+                              <span>-RD$ {formatDOP(order.plazaCommissionAmount)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-stone-200 pt-2">
+                          <div className="flex justify-between items-baseline">
+                            <span className="font-bold text-stone-800 text-xs">Ganancia Neta:</span>
+                            <span className="text-base font-black text-emerald-700">
+                              RD$ {formatDOP(order.storeNetEarnings)}
                             </span>
                           </div>
-                        ))}
+                          <p className="text-[10px] text-stone-400 mt-0.5">
+                            {order.status === 'DELIVERED' ? '✓ Fondos acreditados en tu Balance' : 'En custodia hasta validar entrega'}
+                          </p>
+                        </div>
                       </div>
+                    </div>
 
-                      {/* Delivery Address & Customer Info */}
-                      <div className="space-y-1">
-                        <span className="font-bold text-stone-400 text-[10px] uppercase">Destino y Cliente</span>
-                        <p className="font-semibold text-stone-900">{order.deliveryAddress.recipientName}</p>
-                        <p className="text-stone-600 flex items-center gap-1 font-mono text-[11px]">
-                          Tel: {order.deliveryAddress.phone || order.customerPhone}
-                        </p>
-                        <p className="text-stone-600 mt-1">{order.deliveryAddress.street}, {order.deliveryAddress.sector}</p>
-                        <p className="text-stone-500">{order.deliveryAddress.municipality}, {order.deliveryAddress.province}</p>
-                        {order.customerNotes && (
-                          <div className="mt-1.5 p-1.5 bg-amber-50 rounded border border-amber-200 text-[11px] text-amber-800">
-                            <strong>Nota del comprador:</strong> {order.customerNotes}
+                    {/* Order Workflow Actions Footer */}
+                    <div className="p-3.5 sm:px-5 bg-stone-50/50 border-t border-stone-200 flex flex-wrap items-center justify-between gap-3">
+                      {/* Left: Progression Flow Buttons */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {order.fulfillmentType === 'PLAZADO_FULFILLMENT' ? (
+                          <>
+                            {order.status === 'PENDING_STORE_CONFIRMATION' && (
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <button
+                                  onClick={async () => {
+                                    const res = await confirmOrderByStore(order.id, store.id);
+                                    if (res.success) {
+                                      showNotification('¡Pedido confirmado! Se ha emitido la orden al almacén de Plazado.', 'success');
+                                    } else {
+                                      showNotification(res.message, 'error');
+                                    }
+                                  }}
+                                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                                >
+                                  <CheckCircle2 className="w-4 h-4 text-white" />
+                                  <span>Confirmar Pedido (Autorizar Preparación en Almacén)</span>
+                                </button>
+
+                                <button
+                                  onClick={() => {
+                                    const reason = window.prompt('Por favor indique el motivo del rechazo del pedido para liberar la reserva preventiva:');
+                                    if (reason && reason.trim()) {
+                                      rejectOrderByStore(order.id, store.id, reason.trim()).then(res => {
+                                        if (res.success) {
+                                          showNotification('Pedido rechazado y unidades devueltas a disponible.', 'info');
+                                        } else {
+                                          showNotification(res.message, 'error');
+                                        }
+                                      });
+                                    }
+                                  }}
+                                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                  <span>Rechazar Pedido</span>
+                                </button>
+                              </div>
+                            )}
+
+                            {order.status !== 'PENDING_STORE_CONFIRMATION' && order.status !== 'CANCELLED' && (
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold">
+                                  <Warehouse className="w-4 h-4 text-amber-600" />
+                                  <span>Logística a cargo de Plazado Fulfillment</span>
+                                </div>
+                                <button
+                                  onClick={() => setActiveTab('fulfillment')}
+                                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs"
+                                >
+                                  <span>Ver Seguimiento en Almacén</span>
+                                  <ArrowUpRight className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            {order.status === 'PENDING' && (
+                              <button
+                                onClick={() => handleUpdateStatus(order.id, 'CONFIRMED')}
+                                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-2xs"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                Confirmar Pedido
+                              </button>
+                            )}
+
+                            {order.status === 'CONFIRMED' && (
+                              <button
+                                onClick={() => handleUpdateStatus(order.id, 'PREPARING')}
+                                className="px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-2xs"
+                              >
+                                <Package className="w-3.5 h-3.5" />
+                                Iniciar Preparación
+                              </button>
+                            )}
+
+                            {order.status === 'PREPARING' && (
+                              <button
+                                onClick={() => handleUpdateStatus(order.id, 'READY_FOR_PICKUP')}
+                                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-2xs"
+                              >
+                                <ShoppingBag className="w-3.5 h-3.5" />
+                                Listo para Despacho
+                              </button>
+                            )}
+
+                            {order.status === 'READY_FOR_PICKUP' && (
+                              <button
+                                onClick={() => handleUpdateStatus(order.id, 'SHIPPED')}
+                                className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-2xs"
+                              >
+                                <Truck className="w-3.5 h-3.5" />
+                                Despachar / En Camino
+                              </button>
+                            )}
+
+                            {order.status === 'SHIPPED' && (
+                              <button
+                                onClick={() => {
+                                  setValidatingDeliveryOrder(order);
+                                  setSecretCodeInput('');
+                                  setSecretCodeError(null);
+                                }}
+                                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                              >
+                                <Key className="w-4 h-4 text-emerald-200" />
+                                <span>Validar Código Secreto de Entrega</span>
+                              </button>
+                            )}
+                          </>
+                        )}
+
+                        {order.status === 'DELIVERED' && (
+                          <div className="flex flex-col items-start gap-1.5">
+                            <div className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl shadow-2xs">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              <span>Entregado</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDisputeOrder(order);
+                                setDisputeDescription('');
+                                setDisputeIssueType('DELIVERY_ISSUE');
+                              }}
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1 rounded-lg transition-colors shadow-2xs"
+                            >
+                              <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                              <span>Generar reclamación</span>
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Botón de Cancelación disponible para pedidos en curso */}
+                        {order.status !== 'DELIVERED' && order.status !== 'CANCELLED' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCancellingOrder(order);
+                              setCancelReason('');
+                              setCancelReasonError(null);
+                            }}
+                            className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-2xs"
+                          >
+                            <X className="w-3.5 h-3.5 text-rose-500" />
+                            <span>Cancelar Pedido</span>
+                          </button>
+                        )}
+
+                        {order.status === 'CANCELLED' && (
+                          <div className="flex flex-col items-start gap-1">
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-3 py-1 rounded-xl shadow-2xs">
+                              <X className="w-3.5 h-3.5 text-rose-600" />
+                              <span>Pedido cancelado</span>
+                            </div>
+                            {(order.cancelReason || order.statusHistory?.find(h => h.status === 'CANCELLED')?.note) && (
+                              <p className="text-[11px] text-stone-600 font-medium">
+                                <strong className="text-stone-800">Motivo:</strong> {order.cancelReason || order.statusHistory?.find(h => h.status === 'CANCELLED')?.note}
+                              </p>
+                            )}
                           </div>
                         )}
                       </div>
 
-                      {/* Financial breakdown for store */}
-                      <div className="space-y-1 bg-stone-50 p-3 rounded-xl border border-stone-200">
-                        <div className="flex justify-between text-stone-600">
-                          <span>Subtotal productos:</span>
-                          <span className="font-semibold">RD$ {order.subtotal.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between text-stone-600">
-                          <span>Envío de tu tienda:</span>
-                          <span className="font-semibold">RD$ {order.shippingCost.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between text-red-600">
-                          <span>Comisión PlazaDO (5%):</span>
-                          <span>-RD$ {order.plazaCommissionAmount.toLocaleString()}</span>
-                        </div>
-                        <div className="border-t border-stone-200 pt-1 flex justify-between font-bold text-stone-900">
-                          <span>Tu Ingreso Neto:</span>
-                          <span className="text-emerald-700">RD$ {order.storeNetEarnings.toLocaleString()}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Order Workflow Action Bar */}
-                    <div className="pt-2 border-t border-stone-100 flex flex-wrap items-center justify-between gap-3">
+                      {/* Right: Tools (View Details, Print Packing Slip) */}
                       <div className="flex items-center gap-2">
-                        {order.status === 'PENDING' && (
-                          <button
-                            onClick={() => handleUpdateStatus(order.id, 'CONFIRMED')}
-                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold"
-                          >
-                            Confirmar Pedido
-                          </button>
-                        )}
-                        {order.status === 'CONFIRMED' && (
-                          <button
-                            onClick={() => handleUpdateStatus(order.id, 'PREPARING')}
-                            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold"
-                          >
-                            Marcar en Preparación
-                          </button>
-                        )}
-                        {order.status === 'PREPARING' && (
-                          <button
-                            onClick={() => handleUpdateStatus(order.id, 'READY_FOR_PICKUP')}
-                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold"
-                          >
-                            Listo para Enviar / Despacho
-                          </button>
-                        )}
-                        {order.status === 'READY_FOR_PICKUP' && (
-                          <button
-                            onClick={() => handleUpdateStatus(order.id, 'SHIPPED')}
-                            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold"
-                          >
-                            Despachar / En Camino
-                          </button>
-                        )}
-                        {order.status === 'SHIPPED' && (
-                          <button
-                            onClick={() => setSelectedOrder(order)}
-                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5"
-                          >
-                            <Key className="w-3.5 h-3.5" />
-                            <span>Validar Código y Completar Entrega</span>
-                          </button>
-                        )}
+                        <button
+                          onClick={() => setViewingOrderDetails(order)}
+                          className="px-3 py-1.5 bg-white border border-stone-300 hover:bg-stone-50 text-stone-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-stone-500" />
+                          <span>Ver Detalle</span>
+                        </button>
+
+                        <button
+                          onClick={() => setPrintingPackingSlipOrder(order)}
+                          className="px-3 py-1.5 bg-white border border-stone-300 hover:bg-stone-50 text-stone-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
+                          title="Imprimir Hoja de Despacho"
+                        >
+                          <Printer className="w-3.5 h-3.5 text-stone-500" />
+                          <span>Hoja de Despacho</span>
+                        </button>
                       </div>
-
-                      {order.status === 'DELIVERED' && (
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700">
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Entrega confirmada • Fondos acreditados</span>
-                        </div>
-                      )}
                     </div>
-
                   </div>
-                ))}
-            </div>
+                );
+              });
+            })()}
           </div>
         </div>
       )}
 
-      {/* MODAL: Validar Código de Entrega (Requerimiento #15) */}
-      {selectedOrder && (
+      {/* MODAL 1: Validar Código Secreto de Entrega (Requerimiento #15) */}
+      {validatingDeliveryOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-xs">
             <div className="flex justify-between items-center border-b border-stone-200 pb-3">
               <div className="flex items-center gap-2">
-                <Key className="w-4 h-4 text-amber-600" />
-                <h3 className="font-bold text-stone-900 text-sm">Validar Entrega con Código Secreto</h3>
+                <Key className="w-5 h-5 text-amber-600" />
+                <div>
+                  <h3 className="font-bold text-stone-900 text-sm">Validar Entrega con Código Secreto</h3>
+                  <span className="text-[11px] font-mono text-stone-400">{validatingDeliveryOrder.id}</span>
+                </div>
               </div>
-              <button onClick={() => setSelectedOrder(null)} className="text-stone-400 hover:text-stone-700">
+              <button 
+                onClick={() => {
+                  setValidatingDeliveryOrder(null);
+                  setSecretCodeInput('');
+                  setSecretCodeError(null);
+                }} 
+                className="text-stone-400 hover:text-stone-700"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <p className="text-stone-600 leading-relaxed">
-              Pídele al cliente <strong>{selectedOrder.shippingAddress.recipientName}</strong> el código secreto de 6 dígitos que figura en su orden de PlazaDO.
+              Solicita al cliente <strong>{validatingDeliveryOrder.deliveryAddress?.recipientName || (validatingDeliveryOrder as any).shippingAddress?.recipientName || validatingDeliveryOrder.customerName || 'Cliente'}</strong> el código secreto de 6 dígitos que figura en su orden de PlazaDO.
             </p>
 
             <div>
-              <label className="block font-bold text-stone-800 mb-1">Ingresa el Código de 6 Dígitos:</label>
+              <label className="block font-bold text-stone-800 mb-1.5">Código de Confirmación (6 dígitos):</label>
               <input
                 type="text"
                 maxLength={6}
                 value={secretCodeInput}
-                onChange={(e) => setSecretCodeInput(e.target.value.toUpperCase())}
-                placeholder="Ej: A93F12"
-                className="w-full text-center tracking-widest font-mono text-xl py-2.5 bg-stone-50 border-2 border-stone-300 rounded-xl outline-none focus:border-red-500 uppercase font-black"
+                onChange={(e) => {
+                  setSecretCodeInput(e.target.value.toUpperCase());
+                  setSecretCodeError(null);
+                }}
+                placeholder="Ej: 482910"
+                className="w-full text-center tracking-widest font-mono text-2xl py-3 bg-stone-50 border-2 border-stone-300 rounded-xl outline-none focus:border-red-500 focus:bg-white uppercase font-black transition-colors"
+                autoFocus
               />
               {secretCodeError && (
-                <p className="text-[11px] text-rose-600 font-semibold mt-1.5">{secretCodeError}</p>
+                <p className="text-[11px] text-rose-600 font-bold mt-2 bg-rose-50 p-2 rounded-lg border border-rose-200">
+                  {secretCodeError}
+                </p>
               )}
             </div>
 
-            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11px]">
-              Al ingresar el código correcto, el pedido se marcará como <strong>ENTREGADO</strong> y tu ingreso neto de <strong>RD$ {selectedOrder.storeNetEarnings.toLocaleString()}</strong> se transferirá inmediatamente a tu Balance Disponible.
+            <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-900 text-[11px] space-y-1">
+              <div className="flex items-center gap-1.5 font-bold">
+                <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                <span>Liberación Inmediata de Fondos</span>
+              </div>
+              <p className="text-emerald-800 leading-normal">
+                Al validar este código, el pedido se marcará como <strong>ENTREGADO</strong> y tu ganancia neta de <strong>RD$ {formatDOP(validatingDeliveryOrder.storeNetEarnings)}</strong> se acreditará inmediatamente a tu Balance Disponible para retiro.
+              </p>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <button
-                onClick={() => setSelectedOrder(null)}
-                className="px-4 py-2 text-stone-600 font-semibold"
+                onClick={() => {
+                  setValidatingDeliveryOrder(null);
+                  setSecretCodeInput('');
+                  setSecretCodeError(null);
+                }}
+                className="px-4 py-2 text-stone-600 font-semibold hover:bg-stone-100 rounded-xl transition-colors"
               >
                 Cancelar
               </button>
               <button
-                onClick={() => handleUpdateStatus(selectedOrder.id, 'DELIVERED')}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-sm"
+                onClick={() => handleConfirmDeliveryCode(validatingDeliveryOrder)}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-sm transition-colors flex items-center gap-1.5"
               >
-                Confirmar y Liberar Fondos
+                <CheckCircle2 className="w-4 h-4" />
+                Confirmar y Acreditar Fondos
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* MODAL 2: Ver Detalle Completo de Pedido */}
+      {viewingOrderDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 text-xs my-8 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex justify-between items-start border-b border-stone-200 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-black text-stone-900 text-base">Detalle del Pedido #{viewingOrderDetails.id}</h3>
+                  {(() => {
+                    const meta = getStatusDisplay(viewingOrderDetails.status);
+                    return (
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${meta.color}`}>
+                        {meta.label}
+                      </span>
+                    );
+                  })()}
+                </div>
+                <p className="text-stone-500 text-[11px] mt-0.5">
+                  Grupo de compra: <strong className="font-mono text-stone-700">{viewingOrderDetails.orderGroupCode}</strong> • Creado el {formatDateSafe(viewingOrderDetails.createdAt)}
+                </p>
+              </div>
+              <button onClick={() => setViewingOrderDetails(null)} className="text-stone-400 hover:text-stone-700 p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Notice if order was cancelled */}
+            {viewingOrderDetails.status === 'CANCELLED' && (
+              <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-1.5">
+                <div className="flex items-center gap-2 text-rose-800 font-bold text-xs">
+                  <X className="w-4 h-4 text-rose-600" />
+                  <span>Pedido Cancelado por la Tienda</span>
+                </div>
+                {(viewingOrderDetails.cancelReason || viewingOrderDetails.statusHistory?.find(h => h.status === 'CANCELLED')?.note) && (
+                  <p className="text-xs text-rose-900">
+                    <strong className="text-rose-950 font-bold">Motivo de cancelación:</strong> {viewingOrderDetails.cancelReason || viewingOrderDetails.statusHistory?.find(h => h.status === 'CANCELLED')?.note}
+                  </p>
+                )}
+                {viewingOrderDetails.cancelledAt && (
+                  <p className="text-[10px] text-rose-600 font-medium">
+                    Fecha de cancelación: {formatDateSafe(viewingOrderDetails.cancelledAt, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Customer & Shipping Details */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-stone-50 p-4 rounded-xl border border-stone-200">
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold uppercase text-stone-400 tracking-wider block">Datos del Cliente</span>
+                <p className="font-bold text-stone-900 text-sm">
+                  {viewingOrderDetails.deliveryAddress?.recipientName || (viewingOrderDetails as any).shippingAddress?.recipientName || viewingOrderDetails.customerName || 'Cliente'}
+                </p>
+                <p className="text-stone-600 font-mono">
+                  Tel: {viewingOrderDetails.deliveryAddress?.phone || (viewingOrderDetails as any).shippingAddress?.phone || viewingOrderDetails.customerPhone || 'N/A'}
+                </p>
+                <p className="text-stone-600">
+                  Email: {viewingOrderDetails.customerEmail || 'No especificado'}
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold uppercase text-stone-400 tracking-wider block">Dirección de Envío</span>
+                <p className="font-semibold text-stone-800">
+                  {viewingOrderDetails.deliveryAddress?.street || (viewingOrderDetails as any).shippingAddress?.street || 'Dirección de entrega'}
+                </p>
+                <p className="text-stone-600">
+                  Sector: {viewingOrderDetails.deliveryAddress?.sector || (viewingOrderDetails as any).shippingAddress?.sector || 'N/A'}
+                </p>
+                <p className="text-stone-600">
+                  {viewingOrderDetails.deliveryAddress?.municipality || (viewingOrderDetails as any).shippingAddress?.municipality || ''}, {viewingOrderDetails.deliveryAddress?.province || (viewingOrderDetails as any).shippingAddress?.province || 'República Dominicana'}
+                </p>
+              </div>
+            </div>
+
+            {/* Items Table */}
+            <div className="space-y-2">
+              <span className="text-[10px] font-bold uppercase text-stone-400 tracking-wider block">Productos Solicitados</span>
+              <div className="border border-stone-200 rounded-xl overflow-hidden divide-y divide-stone-100">
+                {(viewingOrderDetails.items || []).map((item, idx) => (
+                  <div key={idx} className="p-3 flex items-center justify-between gap-3 bg-white">
+                    <div className="flex items-center gap-3 min-w-0">
+                      {item.productImage ? (
+                        <img src={item.productImage} alt={item.productName} className="w-10 h-10 rounded-lg object-cover border border-stone-200 shrink-0" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-stone-100 flex items-center justify-center shrink-0">
+                          <Package className="w-5 h-5 text-stone-400" />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-bold text-stone-900 truncate">{item.productName}</p>
+                        <p className="text-[11px] text-stone-500 font-mono">
+                          {item.sku ? `SKU: ${item.sku} • ` : ''}RD$ {formatDOP(item.price)} × {item.quantity} unidad(es)
+                        </p>
+                      </div>
+                    </div>
+                    <span className="font-black text-stone-900 shrink-0">
+                      RD$ {formatDOP((item.price || 0) * (item.quantity || 0))}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Financial Breakdown */}
+            <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 space-y-2">
+              <span className="text-[10px] font-bold uppercase text-stone-400 tracking-wider block">Resumen Financiero</span>
+              <div className="space-y-1">
+                <div className="flex justify-between text-stone-600">
+                  <span>Subtotal de productos:</span>
+                  <span className="font-semibold">RD$ {formatDOP(viewingOrderDetails.subtotal)}</span>
+                </div>
+                <div className="flex justify-between text-stone-600">
+                  <span>Costo de envío configurado por tu tienda:</span>
+                  <span className="font-semibold">RD$ {formatDOP(viewingOrderDetails.shippingCost)}</span>
+                </div>
+                <div className="flex justify-between text-rose-600 font-semibold">
+                  <span>Comisión PlazaDO (5%):</span>
+                  <span>-RD$ {formatDOP(viewingOrderDetails.plazaCommissionAmount)}</span>
+                </div>
+                <div className="border-t border-stone-200 pt-2 flex justify-between items-baseline text-stone-900">
+                  <span className="font-bold text-sm">Tu Ganancia Neta:</span>
+                  <span className="font-black text-lg text-emerald-700">RD$ {formatDOP(viewingOrderDetails.storeNetEarnings)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Status History / Audit Trail */}
+            {viewingOrderDetails.statusHistory && viewingOrderDetails.statusHistory.length > 0 && (
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold uppercase text-stone-400 tracking-wider block">Historial de Estados y Auditoría</span>
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                  {viewingOrderDetails.statusHistory.map((hist, idx) => (
+                    <div key={idx} className="p-2 bg-stone-50 rounded-lg border border-stone-200 flex items-start justify-between text-[11px] gap-2">
+                      <div>
+                        <span className="font-bold text-stone-800">{hist.status}</span>
+                        {hist.note && <p className="text-stone-600 mt-0.5">{hist.note}</p>}
+                        <p className="text-[10px] text-stone-400 mt-0.5">Por: {hist.updatedBy || 'Sistema'}</p>
+                      </div>
+                      <span className="text-[10px] text-stone-400 whitespace-nowrap">
+                        {formatDateSafe(hist.timestamp, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Actions Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-stone-200">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setPrintingPackingSlipOrder(viewingOrderDetails);
+                  }}
+                  className="px-3.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl font-bold text-xs flex items-center gap-1.5"
+                >
+                  <Printer className="w-3.5 h-3.5 text-stone-600" />
+                  Imprimir Despacho
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {viewingOrderDetails.status === 'DELIVERED' && (
+                  <div className="flex flex-col items-end gap-1.5 mr-2">
+                    <div className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-xl">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Entregado</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDisputeOrder(viewingOrderDetails);
+                        setDisputeDescription('');
+                        setDisputeIssueType('DELIVERY_ISSUE');
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1 rounded-lg transition-colors shadow-2xs"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Generar reclamación</span>
+                    </button>
+                  </div>
+                )}
+
+                {viewingOrderDetails.status === 'SHIPPED' && (
+                  <button
+                    onClick={() => {
+                      setValidatingDeliveryOrder(viewingOrderDetails);
+                      setViewingOrderDetails(null);
+                    }}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Key className="w-3.5 h-3.5" />
+                    Validar Código de Entrega
+                  </button>
+                )}
+
+                {/* Cancel Order Action */}
+                {viewingOrderDetails.status !== 'DELIVERED' && viewingOrderDetails.status !== 'CANCELLED' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCancellingOrder(viewingOrderDetails);
+                      setCancelReason('');
+                      setCancelReasonError(null);
+                    }}
+                    className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Cancelar Pedido</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setViewingOrderDetails(null)}
+                  className="px-4 py-2 bg-stone-900 text-white rounded-xl font-bold text-xs hover:bg-stone-800"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: Hoja de Despacho / Packing Slip para Impresión */}
+      {printingPackingSlipOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-8 shadow-2xl space-y-6 text-stone-900 my-8">
+            {/* Action buttons (hidden when printing) */}
+            <div className="flex justify-between items-center print:hidden border-b border-stone-200 pb-3">
+              <span className="font-bold text-xs text-stone-500">Vista previa para impresión</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-sm"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Imprimir Ahora
+                </button>
+                <button
+                  onClick={() => setPrintingPackingSlipOrder(null)}
+                  className="text-stone-400 hover:text-stone-700 p-1"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Packing Slip Body */}
+            <div className="space-y-5 border-2 border-stone-800 p-6 rounded-xl bg-white text-xs">
+              {/* Slip Header */}
+              <div className="flex justify-between items-start border-b border-stone-300 pb-4">
+                <div>
+                  <h1 className="text-xl font-black text-stone-900 tracking-tight">PLAZADO.COM</h1>
+                  <p className="text-[11px] text-stone-500 font-semibold">Marketplace Multi-Tienda Dominicano</p>
+                  <div className="mt-2 text-xs">
+                    <p className="font-bold text-stone-900">Tienda: {store.name}</p>
+                    {store.bankInfo?.rncOrCedula && <p className="text-stone-500 text-[10px]">RNC / Cédula: {store.bankInfo.rncOrCedula}</p>}
+                    <p className="text-stone-500 text-[10px]">Atención & Soporte: Chat Oficial PlazaDO</p>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <span className="inline-block px-2 py-1 bg-stone-900 text-white font-mono font-bold text-xs rounded">
+                    HOJA DE DESPACHO
+                  </span>
+                  <p className="font-mono font-black text-sm text-stone-900 mt-2">{printingPackingSlipOrder.id}</p>
+                  <p className="text-[10px] text-stone-500">Fecha: {new Date(printingPackingSlipOrder.createdAt).toLocaleDateString('es-DO')}</p>
+                  <p className="text-[10px] font-bold mt-1 text-stone-800">
+                    Método: {printingPackingSlipOrder.paymentMethod === 'CARD_AZUL' ? 'Tarjeta AZUL (PAGADO)' : printingPackingSlipOrder.paymentMethod === 'CASH_ON_DELIVERY' ? 'CONTRA ENTREGA' : 'Transferencia'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Destination Address */}
+              <div className="bg-stone-50 p-3 rounded-lg border border-stone-200">
+                <span className="font-bold text-[10px] uppercase text-stone-400 tracking-wider block mb-1">Destinatario / Entrega</span>
+                <p className="font-black text-sm text-stone-900">
+                  {printingPackingSlipOrder.deliveryAddress?.recipientName || (printingPackingSlipOrder as any).shippingAddress?.recipientName || printingPackingSlipOrder.customerName || 'Cliente'}
+                </p>
+                <p className="font-mono text-stone-800 font-bold">
+                  Teléfono: {printingPackingSlipOrder.deliveryAddress?.phone || (printingPackingSlipOrder as any).shippingAddress?.phone || printingPackingSlipOrder.customerPhone || 'N/A'}
+                </p>
+                <p className="text-stone-700 mt-1">
+                  {printingPackingSlipOrder.deliveryAddress?.street || (printingPackingSlipOrder as any).shippingAddress?.street || ''}
+                  {(printingPackingSlipOrder.deliveryAddress?.sector || (printingPackingSlipOrder as any).shippingAddress?.sector) ? `, ${printingPackingSlipOrder.deliveryAddress?.sector || (printingPackingSlipOrder as any).shippingAddress?.sector}` : ''}
+                </p>
+                <p className="text-stone-600 font-semibold">
+                  {printingPackingSlipOrder.deliveryAddress?.municipality || (printingPackingSlipOrder as any).shippingAddress?.municipality || ''}, {printingPackingSlipOrder.deliveryAddress?.province || (printingPackingSlipOrder as any).shippingAddress?.province || 'República Dominicana'}
+                </p>
+                {printingPackingSlipOrder.customerNotes && (
+                  <p className="mt-2 text-[10px] text-amber-900 font-medium bg-amber-50 p-1.5 rounded border border-amber-200">
+                    Nota: {printingPackingSlipOrder.customerNotes}
+                  </p>
+                )}
+              </div>
+
+              {/* Items Table */}
+              <div>
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b-2 border-stone-800 text-[10px] uppercase text-stone-600">
+                      <th className="py-1">Cant.</th>
+                      <th className="py-1">Descripción</th>
+                      <th className="py-1 text-right">Precio</th>
+                      <th className="py-1 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-200">
+                    {(printingPackingSlipOrder.items || []).map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="py-2 font-bold">{item.quantity}</td>
+                        <td className="py-2">
+                          <p className="font-semibold text-stone-800">{item.productName}</p>
+                          {item.sku && <span className="text-[10px] text-stone-400 font-mono">SKU: {item.sku}</span>}
+                        </td>
+                        <td className="py-2 text-right text-stone-600">RD$ {formatDOP(item.price)}</td>
+                        <td className="py-2 text-right font-bold text-stone-900">RD$ {formatDOP((item.price || 0) * (item.quantity || 0))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Total & Courier signature */}
+              <div className="border-t-2 border-stone-800 pt-3 flex justify-between items-end">
+                <div className="space-y-6">
+                  <div className="w-48 border-b border-stone-400 pb-1 mt-6">
+                    <span className="text-[9px] text-stone-400 uppercase">Firma del Destinatario al recibir</span>
+                  </div>
+                </div>
+
+                <div className="text-right space-y-1 text-xs">
+                  <div className="flex justify-between gap-6 text-stone-600">
+                    <span>Subtotal:</span>
+                    <span>RD$ {formatDOP(printingPackingSlipOrder.subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between gap-6 text-stone-600">
+                    <span>Envío:</span>
+                    <span>RD$ {formatDOP(printingPackingSlipOrder.shippingCost)}</span>
+                  </div>
+                  <div className="flex justify-between gap-6 font-black text-sm text-stone-900 border-t border-stone-300 pt-1">
+                    <span>TOTAL A COBRAR:</span>
+                    <span>RD$ {formatDOP(printingPackingSlipOrder.total)}</span>
+                  </div>
+                  {printingPackingSlipOrder.paymentMethod === 'CARD_AZUL' && (
+                    <span className="inline-block text-[10px] font-bold text-emerald-700 uppercase">
+                      *** PAGADO CON TARJETA EN LÍNEA ***
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: Cancelar Pedido por la Tienda con Motivo Obligatorio */}
+      {cancellingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 text-xs my-8 animate-in fade-in zoom-in-95 duration-200 border border-stone-200">
+            {/* Modal Header */}
+            <div className="flex justify-between items-start border-b border-stone-200 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-rose-50 text-rose-600 rounded-xl border border-rose-200">
+                  <AlertTriangle className="w-5 h-5 text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="font-black text-stone-900 text-sm">Cancelar Pedido #{cancellingOrder.id}</h3>
+                  <p className="text-[11px] text-stone-500">
+                    Cliente: <strong>{cancellingOrder.customerName}</strong> • Total: RD$ {formatDOP(cancellingOrder.total)}
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  setCancellingOrder(null);
+                  setCancelReason('');
+                  setCancelReasonError(null);
+                }}
+                className="text-stone-400 hover:text-stone-700 p-1 rounded-lg hover:bg-stone-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Error banner if any */}
+            {cancelReasonError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{cancelReasonError}</span>
+              </div>
+            )}
+
+            {/* Explanatory notice */}
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 space-y-1">
+              <span className="font-bold block">Importante sobre la cancelación:</span>
+              <p className="text-[11px] leading-relaxed text-amber-800">
+                Al cancelar este pedido, el comprador verá el motivo que especifiques a continuación en su historial de compras y el pedido quedará anulado sin cobros ni comisiones.
+              </p>
+            </div>
+
+            {/* Fast chip selector for common reasons */}
+            <div>
+              <label className="block font-bold text-stone-700 mb-1.5">
+                Motivos comunes (haz clic para autocompletar):
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  'Artículo agotado en inventario',
+                  'Cliente solicitó cancelación',
+                  'Dirección de entrega fuera de cobertura',
+                  'Imposible contactar al comprador',
+                  'Discrepancia en precio o variante'
+                ].map((reasonChip, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setCancelReason(reasonChip);
+                      setCancelReasonError(null);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors border ${
+                      cancelReason === reasonChip
+                        ? 'bg-rose-600 text-white border-rose-600'
+                        : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border-stone-200'
+                    }`}
+                  >
+                    {reasonChip}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Reason Textarea (Requerimiento crítico) */}
+            <div>
+              <label className="block font-bold text-stone-800 mb-1">
+                Motivo de la Cancelación <span className="text-rose-600">*</span>
+              </label>
+              <textarea
+                rows={3}
+                required
+                value={cancelReason}
+                onChange={(e) => {
+                  setCancelReason(e.target.value);
+                  if (cancelReasonError) setCancelReasonError(null);
+                }}
+                placeholder="Escribe detalladamente la razón por la cual no es posible completar este pedido..."
+                className="w-full p-3 bg-stone-50 border border-stone-300 rounded-xl outline-none focus:border-rose-500 font-medium text-stone-900 placeholder:text-stone-400"
+              />
+              <span className="text-[10px] text-stone-400 mt-1 block">
+                Este mensaje quedará registrado en el historial del pedido y será visible para el cliente y el Super Admin.
+              </span>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-200">
+              <button
+                type="button"
+                onClick={() => {
+                  setCancellingOrder(null);
+                  setCancelReason('');
+                  setCancelReasonError(null);
+                }}
+                className="px-4 py-2 text-stone-600 hover:text-stone-900 font-semibold rounded-xl"
+              >
+                No cancelar / Volver
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCancelOrder}
+                disabled={isSubmittingCancellation || !cancelReason.trim()}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs shadow-sm transition-colors flex items-center gap-1.5"
+              >
+                <X className="w-4 h-4" />
+                <span>{isSubmittingCancellation ? 'Cancelando...' : 'Confirmar Cancelación'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: CHAT DE CLIENTES (CANAL EXCLUSIVO TRAS COMPRA CONFIRMADA) */}
+      {activeTab === 'chats' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-stone-900">Mensajería y Chat con Clientes</h2>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">
+                  Canal Oficial PlazaDO
+                </span>
+              </div>
+              <p className="text-xs text-stone-500">
+                Comunícate exclusivamente a través de la plataforma con los clientes que tengan pedidos confirmados.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-stone-500 font-medium">
+                {storeOrders.length} {storeOrders.length === 1 ? 'pedido registrado' : 'pedidos registrados'}
+              </span>
+            </div>
+          </div>
+
+          {storeOrders.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-stone-200 p-12 text-center text-stone-500 space-y-3">
+              <div className="w-14 h-14 rounded-full bg-stone-100 flex items-center justify-center mx-auto text-stone-400">
+                <MessageSquare className="w-7 h-7" />
+              </div>
+              <h3 className="text-base font-bold text-stone-800">Aún no tienes pedidos registrados</h3>
+              <p className="text-xs text-stone-500 max-w-sm mx-auto">
+                Cuando los clientes realicen y confirmen compras en tu vitrina, podrás chatear con ellos aquí para coordinar la preparación y entrega.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3">
+              {storeOrders.map((order) => {
+                const unreadCount = getOrderUnreadCount(order.id, 'STORE');
+                const orderMsgs = orderMessages.filter(m => m.orderId === order.id);
+                const lastMsg = orderMsgs[orderMsgs.length - 1];
+
+                return (
+                  <div 
+                    key={order.id}
+                    className={`bg-white rounded-2xl border p-4 sm:p-5 transition-all hover:shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
+                      unreadCount > 0 ? 'border-red-300 ring-2 ring-red-100' : 'border-stone-200'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3.5 min-w-0 flex-1">
+                      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+                        unreadCount > 0 ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 text-stone-600 border border-stone-200'
+                      }`}>
+                        <MessageSquare className="w-5 h-5" />
+                      </div>
+
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-bold text-stone-900 text-sm">{order.customerName}</h4>
+                          <span className="font-mono text-xs text-stone-400">#{order.id.replace('ORD-', '')}</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            order.status === 'DELIVERED' 
+                              ? 'bg-emerald-100 text-emerald-800' 
+                              : order.status === 'SHIPPED'
+                              ? 'bg-sky-100 text-sky-800'
+                              : 'bg-amber-100 text-amber-900'
+                          }`}>
+                            {order.status === 'DELIVERED' ? 'Entregado' : order.status === 'SHIPPED' ? 'En Camino' : 'En Preparación'}
+                          </span>
+                          {unreadCount > 0 && (
+                            <span className="text-[10px] font-extrabold bg-red-600 text-white px-2 py-0.5 rounded-full shadow-2xs">
+                              {unreadCount} {unreadCount === 1 ? 'nuevo mensaje' : 'nuevos mensajes'}
+                            </span>
+                          )}
+                        </div>
+
+                        {lastMsg ? (
+                          <p className="text-xs text-stone-600 truncate max-w-xl">
+                            <span className="font-semibold text-stone-700">
+                              {lastMsg.senderRole === 'STORE' ? 'Tú: ' : `${lastMsg.senderName}: `}
+                            </span>
+                            {lastMsg.message}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-stone-400 italic">
+                            Sin mensajes todavía. Inicia la conversación con el cliente para coordinar la entrega.
+                          </p>
+                        )}
+
+                        <div className="flex items-center gap-3 text-[11px] text-stone-500 pt-0.5">
+                          <span>{order.items.length} artículos</span>
+                          <span>•</span>
+                          <span className="font-semibold text-stone-700">Total: RD$ {order.total.toLocaleString()}</span>
+                          <span>•</span>
+                          <span>{order.deliveryAddress?.municipality || 'Dirección registrada'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 w-full md:w-auto flex items-center justify-end">
+                      <button
+                        onClick={() => openOrderChat(order.id)}
+                        className={`w-full md:w-auto px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-xs ${
+                          unreadCount > 0
+                            ? 'bg-red-600 hover:bg-red-700 text-white'
+                            : 'bg-stone-900 hover:bg-stone-800 text-white'
+                        }`}
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>Abrir Chat con Cliente</span>
+                        {unreadCount > 0 && (
+                          <span className="w-4 h-4 rounded-full bg-white text-red-600 text-[10px] font-black flex items-center justify-center ml-0.5">
+                            {unreadCount}
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -892,14 +2434,21 @@ export const StoreDashboard: React.FC = () => {
               const isPublished = product.status === 'published' || product.status === 'active';
               const isPaused = product.status === 'paused';
               const isDraft = product.status === 'draft';
+              const isFulfillment = Boolean(product.isFulfillment || storeFulfillmentItems.some(fi => fi.productId === product.id));
 
               return (
                 <div key={product.id} className="bg-white rounded-2xl border border-stone-200 p-4 shadow-2xs space-y-3 flex flex-col justify-between">
                   <div className="flex gap-3">
                     <img src={product.images[0]} alt="" className="w-16 h-16 rounded-xl object-cover bg-stone-100 border border-stone-200 shrink-0" />
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-1 mb-1">
+                      <div className="flex items-center justify-between gap-1 mb-1 flex-wrap">
                         <span className="font-mono text-[10px] text-stone-400">SKU: {product.sku}</span>
+                        {isFulfillment && (
+                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                            <Warehouse className="w-2.5 h-2.5 text-amber-700" />
+                            Fulfillment
+                          </span>
+                        )}
                         {isPublished && !isOutOfStock && (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                             Publicado
@@ -935,7 +2484,14 @@ export const StoreDashboard: React.FC = () => {
 
                   <div className="flex items-center justify-between pt-2 border-t border-stone-100 text-xs">
                     <span className={`font-semibold ${isOutOfStock ? 'text-rose-600' : isLow ? 'text-amber-600' : 'text-emerald-700'}`}>
-                      Stock: {product.stock} {isOutOfStock ? '(Agotado)' : isLow ? '(Bajo stock)' : 'uds'}
+                      {isFulfillment ? (
+                        <span className="inline-flex items-center gap-1 text-amber-900 font-bold text-[11px]">
+                          <Warehouse className="w-3.5 h-3.5 text-amber-600" />
+                          Almacén: {product.stock} {isOutOfStock ? '(Agotado)' : 'uds'}
+                        </span>
+                      ) : (
+                        `Stock: ${product.stock} ${isOutOfStock ? '(Agotado)' : isLow ? '(Bajo stock)' : 'uds'}`
+                      )}
                     </span>
 
                     <div className="flex items-center gap-1.5">
@@ -1021,20 +2577,36 @@ export const StoreDashboard: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-stone-700 mb-1">Categoría</label>
+                  <label className="block font-semibold text-stone-700 mb-1">Categoría del Catálogo Global *</label>
                   <select
+                    id="store-product-category-select"
                     value={pCategory}
                     onChange={(e) => setPCategory(e.target.value)}
-                    className="w-full p-2 bg-stone-50 border border-stone-300 rounded-lg outline-none"
+                    className="w-full p-2 bg-stone-50 border border-stone-300 rounded-lg outline-none font-medium text-stone-800 focus:border-red-500 focus:bg-white transition-colors"
+                    required
                   >
-                    <option value="tecnologia">Tecnología y Electrónica</option>
-                    <option value="mascotas">Mascotas</option>
-                    <option value="moda-y-calzado">Moda y Calzado</option>
-                    <option value="hogar-y-decoracion">Hogar y Decoración</option>
-                    <option value="belleza-y-cuidado">Belleza y Cuidado</option>
-                    <option value="alimentos-y-bebidas">Alimentos y Bebidas</option>
+                    {categories.filter(c => !c.parentId).map(parent => {
+                      const children = categories.filter(c => c.parentId === parent.id);
+                      if (children.length > 0) {
+                        return (
+                          <optgroup key={parent.id} label={parent.name}>
+                            <option value={parent.id}>{parent.name} (General)</option>
+                            {children.map(child => (
+                              <option key={child.id} value={child.id}>
+                                &nbsp;&nbsp;↳ {child.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        );
+                      }
+                      return (
+                        <option key={parent.id} value={parent.id}>
+                          {parent.name}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
                 <div>
@@ -1051,7 +2623,7 @@ export const StoreDashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">Precio Regular (RD$) *</label>
                   <input
@@ -1076,16 +2648,43 @@ export const StoreDashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* If Fulfillment product, show notice & disable manual stock adjustment */}
+              {editingProduct && (editingProduct.isFulfillment || storeFulfillmentItems.some(fi => fi.productId === editingProduct.id)) && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-amber-900">
+                  <Warehouse className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="text-xs leading-relaxed">
+                    <p className="font-black text-amber-950">Producto en Plazado Fulfillment (Stock Físico Protegido)</p>
+                    <p className="text-amber-800 text-[11px] mt-0.5">
+                      Este producto se encuentra almacenado y custodiado por Plazado.
+                      Las cantidades solo se modifican mediante conteo y recepción física en almacén.
+                      Para enviar más unidades o solicitar retiro, utiliza el módulo <strong>Plazado Fulfillment</strong>.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-stone-700 mb-1">Stock Disponible *</label>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Stock Disponible *
+                    {editingProduct && (editingProduct.isFulfillment || storeFulfillmentItems.some(fi => fi.productId === editingProduct.id)) && (
+                      <span className="ml-2 text-[10px] text-amber-700 font-bold bg-amber-100 px-1.5 py-0.5 rounded">
+                        Bloqueado (Fulfillment)
+                      </span>
+                    )}
+                  </label>
                   <input
                     type="number"
                     required
                     min={0}
                     value={pStock}
+                    disabled={Boolean(editingProduct && (editingProduct.isFulfillment || storeFulfillmentItems.some(fi => fi.productId === editingProduct.id)))}
                     onChange={(e) => setPStock(Number(e.target.value))}
-                    className="w-full p-2 bg-stone-50 border border-stone-300 rounded-lg outline-none"
+                    className={`w-full p-2 rounded-lg outline-none ${
+                      editingProduct && (editingProduct.isFulfillment || storeFulfillmentItems.some(fi => fi.productId === editingProduct.id))
+                        ? 'bg-stone-100 text-stone-500 border border-stone-200 cursor-not-allowed'
+                        : 'bg-stone-50 border border-stone-300'
+                    }`}
                   />
                 </div>
                 <div>
@@ -1513,13 +3112,17 @@ export const StoreDashboard: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block font-semibold text-stone-700 mb-1">WhatsApp de Contacto Directo</label>
-                <input
-                  type="text"
-                  value={storeWhatsapp}
-                  onChange={(e) => setStoreWhatsapp(e.target.value)}
-                  className="w-full p-2 bg-stone-50 border border-stone-300 rounded-lg outline-none"
+              {/* Banner de Portada de la Tienda */}
+              <div className="p-3 bg-stone-50 rounded-xl border border-stone-200">
+                <ImageUploadInput
+                  label="Banner de Portada de la Tienda"
+                  value={storeBanner}
+                  onChange={setStoreBanner}
+                  presetAvatars={PRESET_STORE_BANNERS}
+                  shape="banner"
+                  aspectRatioLabel="Sube el banner o portada de tu comercio (Recomendado: 1200 x 350 px, PNG o JPG)"
+                  placeholder="https://ejemplo.com/banner-portada.jpg"
+                  helpText="Se mostrará en la cabecera panorámica de tu vitrina y en el directorio de tiendas."
                 />
               </div>
 
@@ -1577,10 +3180,22 @@ export const StoreDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Bank Account Settings */}
+            {/* Bank Account Settings - Cuenta para recibir pagos (Liquidación de los Viernes) */}
             <div className="md:col-span-2 space-y-4 pt-4 border-t border-stone-200">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+                <div className="flex items-center gap-2 text-emerald-800 font-extrabold text-xs">
+                  <CreditCard className="w-4 h-4 text-emerald-600" />
+                  <span>Cuenta para Recibir Pagos (Liquidaciones Semanales de los Viernes)</span>
+                </div>
+                <p className="text-[11px] text-emerald-700 mt-1 leading-relaxed">
+                  En esta cuenta bancaria recibirás la transferencia con tus fondos netos acumulados por ventas de cada semana (todos los viernes). 
+                  <strong> Los cobros con tarjeta de crédito de tus clientes son procesados y asegurados a través de la cuenta fiduciaria central de Plazado.com</strong>, 
+                  por lo que tu comercio no requiere contratar una pasarela de pago individual.
+                </p>
+              </div>
+
               <h3 className="font-bold text-stone-800 uppercase tracking-wider text-[11px] pb-2 border-b border-stone-100">
-                Datos Bancarios para Transferencias de Liquidación
+                Datos de tu Cuenta Bancaria de Destino
               </h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1650,8 +3265,97 @@ export const StoreDashboard: React.FC = () => {
               Guardar Cambios de Configuración
             </button>
           </div>
+
+          {/* Zona de Peligro del Comercio: Desactivar o Eliminar Tienda de Google Cloud */}
+          <div className="bg-rose-50/60 border border-rose-200 rounded-2xl p-6 shadow-2xs space-y-4">
+            <div className="flex items-center gap-2.5 text-rose-900 pb-2 border-b border-rose-200/80">
+              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+              <div>
+                <h3 className="font-black text-sm text-rose-950">Zona de Peligro: Gestión y Eliminación de Tienda</h3>
+                <p className="text-[11px] text-rose-700">Opciones para pausar la visibilidad o eliminar definitivamente tu comercio de Google Cloud</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              {/* Option 1: Pause / Unpublish */}
+              <div className="bg-white p-4 rounded-xl border border-stone-200 space-y-2">
+                <span className="font-bold text-stone-800 block text-xs">
+                  {store?.isPublished ? 'Pausar Publicación de la Tienda' : 'Reanudar Publicación de la Tienda'}
+                </span>
+                <p className="text-[11px] text-stone-500">
+                  {store?.isPublished 
+                    ? 'Oculta tu vitrina y catálogo de los clientes sin borrar tus datos en Google Cloud.'
+                    : 'Haz visible nuevamente tu tienda y sus productos en el mercado de Plazado.com.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => store && toggleStorePublish(store.id)}
+                  className={`mt-2 px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors ${
+                    store?.isPublished 
+                      ? 'bg-amber-100 text-amber-900 hover:bg-amber-200' 
+                      : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  }`}
+                >
+                  {store?.isPublished ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                  <span>{store?.isPublished ? 'Pausar / Despublicar Tienda' : 'Publicar Tienda'}</span>
+                </button>
+              </div>
+
+              {/* Option 2: Permanent Deletion */}
+              <div className="bg-white p-4 rounded-xl border border-rose-200 space-y-2">
+                <span className="font-bold text-rose-900 block text-xs">
+                  Eliminar Tienda Permanentemente
+                </span>
+                <p className="text-[11px] text-stone-500 leading-relaxed">
+                  Borra de forma irreversible tu comercio, publicaciones, catálogo y balances de Google Cloud (Firestore y Cloud SQL). Tu usuario continuará como comprador.
+                </p>
+
+                {deleteStoreError && (
+                  <div className="p-2 bg-rose-100 text-rose-800 text-[11px] rounded-lg font-medium">
+                    {deleteStoreError}
+                  </div>
+                )}
+
+                <div className="pt-1 space-y-1.5">
+                  <label className="block text-[11px] font-semibold text-stone-700">
+                    Escribe <span className="font-mono text-rose-600 font-bold">ELIMINAR</span> para confirmar:
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={deleteStoreConfirmText}
+                      onChange={(e) => setDeleteStoreConfirmText(e.target.value)}
+                      placeholder="ELIMINAR"
+                      className="p-2 border border-stone-300 rounded-lg text-xs outline-none focus:border-rose-500 font-medium flex-1"
+                    />
+                    <button
+                      type="button"
+                      disabled={isDeletingStore || deleteStoreConfirmText !== 'ELIMINAR'}
+                      onClick={handleDeleteStoreSubmit}
+                      className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 transition-colors whitespace-nowrap shadow-xs"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>{isDeletingStore ? 'Borrando...' : 'Eliminar Tienda'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </form>
       )}
+
+      {/* TAB: PLAZADO FULFILLMENT (ALMACENAMIENTO, INVENTARIO Y LOGÍSTICA) */}
+      {activeTab === 'fulfillment' && (
+        <FulfillmentStoreView 
+          storeId={effectiveStoreId} 
+          activeSubTab={fulfillmentStoreSubTab}
+          onTabChange={setFulfillmentStoreSubTab}
+        />
+      )}
+
+        </main>
+      </div>
 
       {/* Store Profile Modal */}
       <StoreProfileModal
@@ -1659,6 +3363,87 @@ export const StoreDashboard: React.FC = () => {
         isOpen={isStoreProfileModalOpen}
         onClose={() => setIsStoreProfileModalOpen(false)}
       />
+
+      {/* Modal: Generar Reclamación / Disputa por la Tienda */}
+      {disputeOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 text-xs">
+            <div className="flex justify-between items-start border-b border-stone-200 pb-3">
+              <div>
+                <h3 className="font-black text-stone-900 text-base flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-rose-600" />
+                  Generar Reclamación o Incidencia
+                </h3>
+                <p className="text-stone-500 text-[11px] mt-0.5">
+                  Pedido #{disputeOrder.id} • Cliente: <strong>{disputeOrder.customerName}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDisputeOrder(null)}
+                className="text-stone-400 hover:text-stone-700 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitStoreDispute} className="space-y-4">
+              <div>
+                <label className="block font-bold text-stone-700 mb-1">
+                  Tipo de Incidencia / Reclamación
+                </label>
+                <select
+                  value={disputeIssueType}
+                  onChange={(e) => setDisputeIssueType(e.target.value as Dispute['issueType'])}
+                  className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl outline-none font-medium text-stone-800"
+                >
+                  <option value="DELIVERY_ISSUE">Problema con la Entrega o Receptor</option>
+                  <option value="DAMAGED">Producto reportado con daños en transporte</option>
+                  <option value="WRONG_ITEM">Inconformidad con el artículo o variante</option>
+                  <option value="DESCRIPTION_MISMATCH">Discrepancia en especificaciones</option>
+                  <option value="NOT_RECEIVED">Disputa de confirmación de entrega</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-stone-700 mb-1">
+                  Descripción Detallada de la Reclamación
+                </label>
+                <textarea
+                  rows={4}
+                  required
+                  value={disputeDescription}
+                  onChange={(e) => setDisputeDescription(e.target.value)}
+                  placeholder="Describe detalladamente qué ocurrió con el pedido o el cliente para que el equipo de soporte y mediación de PlazaDO pueda intervenir..."
+                  className="w-full p-3 bg-stone-50 border border-stone-300 rounded-xl outline-none text-stone-900 placeholder:text-stone-400"
+                />
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-900 leading-snug">
+                Esta reclamación será registrada en la bitácora central de PlazaDO y el equipo administrativo de soporte intermediará entre tu comercio y el cliente para resolver la situación.
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-stone-200">
+                <button
+                  type="button"
+                  onClick={() => setDisputeOrder(null)}
+                  className="px-4 py-2 text-stone-600 font-semibold hover:bg-stone-100 rounded-xl transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingDispute}
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs shadow-sm transition-colors flex items-center gap-1.5"
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>{isSubmittingDispute ? 'Enviando...' : 'Enviar Reclamación'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

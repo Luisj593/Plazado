@@ -1,0 +1,124 @@
+{
+  "entities": {
+    "Store": {
+      "title": "Store",
+      "description": "Tienda en el marketplace Plazado",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "email": { "type": "string" },
+        "status": { "type": "string" },
+        "isPublished": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "slug", "ownerId", "status"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Producto en venta perteneciente a una tienda",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "storeId": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "price": { "type": "number" },
+        "stock": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "storeId", "categoryId", "name", "price"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Categoría comercial de productos",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" }
+      },
+      "required": ["id", "name", "slug"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Usuario cliente, dueño de tienda o super admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" }
+      },
+      "required": ["id", "email", "name", "role"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Orden de compra de productos",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerId": { "type": "string" },
+        "storeId": { "type": "string" },
+        "status": { "type": "string" },
+        "total": { "type": "number" }
+      },
+      "required": ["id", "storeId", "total"]
+    },
+    "Banner": {
+      "title": "Banner",
+      "description": "Banner visual principal",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "imageUrl": { "type": "string" }
+      },
+      "required": ["id", "title", "imageUrl"]
+    },
+    "SystemSetting": {
+      "title": "SystemSetting",
+      "description": "Configuraciones globales",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "platformName": { "type": "string" }
+      },
+      "required": ["id"]
+    }
+  },
+  "firestore": {
+    "/stores/{storeId}": {
+      "schema": "Store",
+      "description": "Colección de tiendas del marketplace"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Colección de productos vinculados a tiendas"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Colección de categorías globales"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Colección de usuarios"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Colección de órdenes comerciales"
+    },
+    "/banners/{bannerId}": {
+      "schema": "Banner",
+      "description": "Colección de banners del carrusel"
+    },
+    "/systemSettings/{settingId}": {
+      "schema": "SystemSetting",
+      "description": "Configuraciones globales de la plataforma"
+    }
+  }
+}

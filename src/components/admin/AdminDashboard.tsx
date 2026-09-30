@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { api } from '../../services/api';
 import { 
   ShieldAlert, 
   Store, 
@@ -33,10 +34,44 @@ import {
   Inbox,
   Pause,
   Play,
-  Eye
+  Eye,
+  EyeOff,
+  Palette,
+  Database,
+  RefreshCw,
+  Megaphone,
+  Smartphone,
+  FileCheck,
+  Key,
+  FolderPlus,
+  Plus,
+  Upload,
+  FolderTree,
+  Sliders
 } from 'lucide-react';
-import { Dispute, Settlement, UserRole, OrderStatus, Store as StoreType, User as UserType, isStorePubliclyVisible } from '../../types';
+import { Dispute, Settlement, UserRole, OrderStatus, Store as StoreType, User as UserType, Banner, isStorePubliclyVisible } from '../../types';
 import { StoreProfileModal } from '../common/StoreProfileModal';
+import { BrandingSettingsTab } from './BrandingSettingsTab';
+import { PersistenceSettingsTab } from './PersistenceSettingsTab';
+import { PaymentGatewaysTab } from './PaymentGatewaysTab';
+import { AdvertisingManagementTab } from './AdvertisingManagementTab';
+import { LegalDocsManagementTab } from './LegalDocsManagementTab';
+import { AndroidAppManagementTab } from './AndroidAppManagementTab';
+import { CreateCategoryModal } from './CreateCategoryModal';
+import { CreateBannerModal } from './CreateBannerModal';
+import { UserPasswordModal } from './UserPasswordModal';
+import { CategoriesAndSpecsManagement } from './CategoriesAndSpecsManagement';
+import { FulfillmentAdminView, FulfillmentAdminTab } from './FulfillmentAdminView';
+import { 
+  Warehouse,
+  BarChart3,
+  Scan,
+  Box,
+  Truck,
+  RotateCcw,
+  ChevronDown,
+  ChevronRight
+} from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
   const { 
@@ -52,6 +87,13 @@ export const AdminDashboard: React.FC = () => {
     banners, 
     categories, 
     systemSettings, 
+    paymentTransactions,
+    financialAuditLogs,
+    runWeeklySettlements,
+    storageRequests,
+    fulfillmentInventory,
+    fulfillmentOrders,
+    fulfillmentIncidences,
     adminActiveTab,
     setAdminActiveTab,
     setCurrentView,
@@ -80,6 +122,28 @@ export const AdminDashboard: React.FC = () => {
   const activeTab = adminActiveTab;
   const setActiveTab = setAdminActiveTab;
 
+  const [fulfillmentSubTab, setFulfillmentSubTab] = useState<FulfillmentAdminTab>('overview');
+  const [isFulfillmentMenuExpanded, setIsFulfillmentMenuExpanded] = useState<boolean>(true);
+
+  // Fulfillment KPI counts for sidebar badges
+  const totalPhysicalAll = (fulfillmentInventory || []).reduce((sum, i) => sum + (i.totalPhysical || 0), 0);
+  const pendingRequestsCount = (storageRequests || []).filter(r => r.status === 'PENDING_APPROVAL' || r.status === 'CREATED').length;
+  const pendingConfirmationOrdersCount = (fulfillmentOrders || []).filter(o => o.status === 'PENDING_STORE_CONFIRMATION').length;
+  const readyForPickingOrdersCount = (fulfillmentOrders || []).filter(o => o.status === 'CONFIRMED_BY_STORE' || o.status === 'PICKING_IN_PROGRESS').length;
+  const readyForPackingOrdersCount = (fulfillmentOrders || []).filter(o => o.status === 'PICKING_COMPLETED' || o.status === 'PACKING_IN_PROGRESS').length;
+  const readyForDispatchOrdersCount = (fulfillmentOrders || []).filter(o => o.status === 'PACKED' || o.status === 'READY_FOR_DISPATCH').length;
+  const openIncidencesCount = (fulfillmentIncidences || []).filter(i => i.status === 'OPEN' || i.status === 'INVESTIGATING').length;
+  const lowStockCount = (fulfillmentInventory || []).filter(item => {
+    const prod = products.find(p => p.id === item.productId);
+    const minAlert = prod?.minStockAlert ?? 5;
+    return item.available <= minAlert;
+  }).length;
+
+  const handleSelectFulfillmentSubTab = (subTab: FulfillmentAdminTab) => {
+    setActiveTab('fulfillment');
+    setFulfillmentSubTab(subTab);
+  };
+
   // Universal Delete Confirmation Modal State
   const [deleteModal, setDeleteModal] = useState<{
     typeLabel: string;
@@ -98,6 +162,16 @@ export const AdminDashboard: React.FC = () => {
   const [rejectingStore, setRejectingStore] = useState<StoreType | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
 
+  // Category creation modal state
+  const [isCreateCategoryModalOpen, setIsCreateCategoryModalOpen] = useState(false);
+
+  // Banner creation and editing modal state
+  const [isCreateBannerModalOpen, setIsCreateBannerModalOpen] = useState(false);
+  const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
+
+  // User password modal state
+  const [passwordModalUser, setPasswordModalUser] = useState<UserType | null>(null);
+
   // Dispute resolution modal state
   const [resolvingDispute, setResolvingDispute] = useState<Dispute | null>(null);
   const [disputeResolutionNote, setDisputeResolutionNote] = useState('');
@@ -105,9 +179,50 @@ export const AdminDashboard: React.FC = () => {
 
   // Settings form state
   const [defaultCommRate, setDefaultCommRate] = useState(systemSettings.defaultCommissionRate * 100);
+  const [plazaCommRate, setPlazaCommRate] = useState(
+    Number(((systemSettings.plazaCommissionRate !== undefined ? systemSettings.plazaCommissionRate : 0.0005) * 100).toFixed(4))
+  );
   const [whatsappComm, setWhatsappComm] = useState(systemSettings.whatsappCommercial);
   const [rncVal, setRncVal] = useState(systemSettings.rnc);
   const [businessName, setBusinessName] = useState(systemSettings.legalBusinessName);
+  const [isRunningSettlements, setIsRunningSettlements] = useState(false);
+
+  // Mailer settings state
+  const [mailSenderEmail, setMailSenderEmail] = useState(systemSettings.mailConfig?.senderEmail || 'Luiss.jimeness@gmail.com');
+  const [mailSenderName, setMailSenderName] = useState(systemSettings.mailConfig?.senderName || 'PlazaDO Marketplace Dominicano');
+  const [mailSmtpHost, setMailSmtpHost] = useState(systemSettings.mailConfig?.smtpHost || 'smtp.gmail.com');
+  const [mailSmtpPort, setMailSmtpPort] = useState(systemSettings.mailConfig?.smtpPort || 465);
+  const [mailSmtpPass, setMailSmtpPass] = useState(systemSettings.mailConfig?.smtpPass || '');
+  const [showMailPass, setShowMailPass] = useState(false);
+  const [testingSmtp, setTestingSmtp] = useState(false);
+  const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleTestSmtp = async () => {
+    setTestingSmtp(true);
+    setSmtpTestResult(null);
+    try {
+      const res = await api.testSmtpConnection({
+        testEmail: mailSenderEmail.trim() || 'luiss.jimeness@gmail.com',
+        senderEmail: mailSenderEmail.trim() || 'Luiss.jimeness@gmail.com',
+        senderName: mailSenderName.trim() || 'PlazaDO Marketplace Dominicano',
+        smtpHost: mailSmtpHost.trim() || 'smtp.gmail.com',
+        smtpPort: Number(mailSmtpPort) || 465,
+        smtpUser: mailSenderEmail.trim() || 'Luiss.jimeness@gmail.com',
+        smtpPass: mailSmtpPass.trim()
+      });
+      setSmtpTestResult(res);
+      if (res.success) {
+        showNotification(res.message, 'success');
+      } else {
+        showNotification(res.message, 'error');
+      }
+    } catch (err: any) {
+      setSmtpTestResult({ success: false, message: err?.message || 'Error probando conexión SMTP' });
+      showNotification(err?.message || 'Error probando conexión SMTP', 'error');
+    } finally {
+      setTestingSmtp(false);
+    }
+  };
 
   // Search & Filter States
   const [orderSearch, setOrderSearch] = useState('');
@@ -199,198 +314,729 @@ export const AdminDashboard: React.FC = () => {
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
     updateSystemSettings({
+      plazaCommissionRate: Number(plazaCommRate) / 100,
       defaultCommissionRate: Number(defaultCommRate) / 100,
       whatsappCommercial: whatsappComm,
       rnc: rncVal,
-      legalBusinessName: businessName
+      legalBusinessName: businessName,
+      mailConfig: {
+        senderEmail: mailSenderEmail.trim() || 'Luiss.jimeness@gmail.com',
+        senderName: mailSenderName.trim() || 'PlazaDO Marketplace Dominicano',
+        smtpHost: mailSmtpHost.trim() || 'smtp.gmail.com',
+        smtpPort: Number(mailSmtpPort) || 465,
+        smtpUser: mailSenderEmail.trim() || 'Luiss.jimeness@gmail.com',
+        smtpPass: mailSmtpPass.trim(),
+        useSsl: true,
+        isConfigured: true
+      }
     });
-    showNotification('Configuración global de PlazaDO.com guardada.');
+    showNotification('Configuración global y servicio de correo de PlazaDO.com guardados exitosamente.');
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 py-6">
       
-      {/* Super Admin Masthead with High-Privilege Notice */}
-      <div className="bg-stone-900 text-white rounded-2xl p-6 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="p-1.5 bg-red-600 rounded-lg">
-              <ShieldAlert className="w-5 h-5 text-white" />
-            </span>
-            <h1 className="text-xl font-extrabold tracking-tight">Super Administrador PlazaDO.com</h1>
-            <span className="bg-red-500/30 text-red-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-red-500/40">
-              ACCESO MAESTRO CON PERMISOS TOTALES
-            </span>
-          </div>
-          <p className="text-xs text-stone-300 mt-1.5 max-w-2xl">
-            Control de infraestructura, custodia fiduciaria escrow y arbitraje legal. Como Super Usuario tienes autorización plena para editar o <strong>borrar permanentemente cualquier registro</strong> realizado en la plataforma con trazabilidad en bitácora.
-          </p>
-        </div>
+      {/* Super Admin Layout: Left Sidebar + Right Content Area */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        
+        {/* LEFT SIDEBAR: MENÚ DEL SUPER ADMINISTRADOR GENERAL */}
+        <aside className="w-full lg:w-72 lg:shrink-0 space-y-4">
+          
+          {/* Executive Profile Card */}
+          <div className="bg-stone-900 text-white rounded-2xl border border-stone-800 p-5 shadow-xs relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-14 bg-gradient-to-r from-red-700 via-stone-900 to-amber-700 opacity-80" />
+            
+            <div className="relative pt-3 flex flex-col items-center text-center">
+              <div className="w-16 h-16 rounded-2xl bg-red-600/30 border-2 border-red-500 flex items-center justify-center mb-3 shadow-md backdrop-blur-xs">
+                <ShieldAlert className="w-8 h-8 text-white" />
+              </div>
 
-        <div className="flex flex-col items-start md:items-end gap-1 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-stone-400">Sesión activa:</span>
-            <span className="font-bold text-white bg-stone-800 px-2.5 py-1 rounded-lg border border-stone-700">{currentUser?.name || 'Super Admin'}</span>
-          </div>
-          <span className="text-[10px] text-emerald-400 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            Auditoría de acciones activada
-          </span>
-        </div>
-      </div>
+              <h2 className="text-base font-black tracking-tight text-white">Super Administrador</h2>
+              <span className="inline-block mt-1 bg-red-600/40 text-red-200 text-[10px] font-black px-2.5 py-0.5 rounded-full border border-red-500/50">
+                ACCESO MAESTRO GENERAL
+              </span>
+              
+              <p className="text-xs text-stone-300 mt-2 font-medium break-all">
+                {currentUser?.email || 'admin@plazado.com'}
+              </p>
 
-      {/* Banner de Solicitudes Pendientes para Super Admin */}
-      {pendingStoreRequests.length > 0 && activeTab !== 'solicitudes' && (
-        <div className="bg-gradient-to-r from-amber-500/10 via-amber-50 to-orange-50 border-2 border-amber-300/90 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-amber-500 text-stone-950 flex items-center justify-center shrink-0 shadow-xs">
-              <Clock className="w-5 h-5 animate-spin" />
+              <div className="w-full mt-3 pt-3 border-t border-stone-800 flex items-center justify-center gap-1.5 text-[10px] text-emerald-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="font-semibold">Auditoría en Tiempo Real Activa</span>
+              </div>
             </div>
+          </div>
+
+          {/* Menú Lateral Navegación Organizado */}
+          <nav className="bg-white rounded-2xl border border-stone-200 p-2 shadow-xs space-y-3">
+            
+            {/* Grupo 1: Control & Visión Global */}
             <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-extrabold text-sm text-stone-900">
-                  {pendingStoreRequests.length} Solicitud{pendingStoreRequests.length > 1 ? 'es' : ''} de Tienda Pendiente{pendingStoreRequests.length > 1 ? 's' : ''} de Aprobación
-                </h3>
-                <span className="bg-amber-200 text-amber-950 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  Acción Requerida
+              <div className="px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-stone-400">
+                Control & Métricas
+              </div>
+              <div className="space-y-0.5 mt-1">
+                <button
+                  onClick={() => setActiveTab('metrics')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'metrics'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Activity className="w-4 h-4" />
+                    <span>Métricas Globales</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('solicitudes')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'solicitudes'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Clock className="w-4 h-4" />
+                    <span>Solicitudes de Tienda</span>
+                  </div>
+                  {pendingStoreRequests.length > 0 && (
+                    <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-amber-500 text-stone-950 animate-pulse">
+                      {pendingStoreRequests.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Grupo 2: Comercio & Catálogo */}
+            <div className="pt-2 border-t border-stone-100">
+              <div className="px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-stone-400">
+                Catálogo & Comercios
+              </div>
+              <div className="space-y-0.5 mt-1">
+                <button
+                  onClick={() => setActiveTab('stores')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'stores'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Store className="w-4 h-4" />
+                    <span>Tiendas y Comercios</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    activeTab === 'stores' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+                  }`}>
+                    {stores.length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('products')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'products'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Package className="w-4 h-4" />
+                    <span>Catálogo de Productos</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    activeTab === 'products' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+                  }`}>
+                    {products.length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('categories_specs')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'categories_specs'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <FolderTree className="w-4 h-4 text-amber-600" />
+                    <span>Categorías & Specs</span>
+                  </div>
+                  <span className="text-[9px] bg-red-100 text-red-700 font-extrabold px-1.5 py-0.5 rounded-full">
+                    25 Cat
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('content')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'content'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Layers className="w-4 h-4" />
+                    <span>Banners Promocionales</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    activeTab === 'content' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+                  }`}>
+                    {banners.length}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Grupo 3: Operaciones & Seguridad */}
+            <div className="pt-2 border-t border-stone-100">
+              <div className="px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-stone-400">
+                Operaciones & Usuarios
+              </div>
+              <div className="space-y-0.5 mt-1">
+                <button
+                  onClick={() => setActiveTab('orders')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'orders'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <ShoppingBag className="w-4 h-4" />
+                    <span>Pedidos Globales</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    activeTab === 'orders' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+                  }`}>
+                    {orders.length}
+                  </span>
+                </button>
+
+
+
+                <button
+                  onClick={() => setActiveTab('users')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'users'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Users className="w-4 h-4" />
+                    <span>Usuarios & Roles</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    activeTab === 'users' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+                  }`}>
+                    {allUsers.length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('disputes')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'disputes'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>Disputas & Arbitraje</span>
+                  </div>
+                  {disputes.length > 0 && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700">
+                      {disputes.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('audit')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'audit'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <FileText className="w-4 h-4" />
+                    <span>Bitácora de Auditoría</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    activeTab === 'audit' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+                  }`}>
+                    {auditLogs.length}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Grupo 4: Plazado Fulfillment & Logística de Almacén */}
+            <div className="pt-2 border-t border-stone-100">
+              <div className="flex items-center justify-between px-3 py-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
+                  <Warehouse className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Plazado Fulfillment</span>
+                </span>
+                <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300/60">
+                  {totalPhysicalAll} uds
                 </span>
               </div>
-              <p className="text-xs text-stone-600 mt-0.5">
-                Nuevos comercios dominicanos han enviado su registro y están esperando la aprobación de Super Admin para activar su vitrina.
+
+              <div className="space-y-1 mt-1">
+                {/* Main Fulfillment Hub Button */}
+                <div
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'fulfillment'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-amber-50 hover:text-amber-900'
+                  }`}
+                >
+                  <button
+                    id="admin-tab-fulfillment-btn"
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('fulfillment');
+                      setIsFulfillmentMenuExpanded(true);
+                    }}
+                    className="flex-1 flex items-center gap-2.5 text-left cursor-pointer focus:outline-none"
+                  >
+                    <Warehouse className={`w-4 h-4 ${activeTab === 'fulfillment' ? 'text-white' : 'text-amber-600'}`} />
+                    <span>Centro Logístico</span>
+                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {lowStockCount > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[9px] font-black animate-pulse">
+                        {lowStockCount}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsFulfillmentMenuExpanded(!isFulfillmentMenuExpanded);
+                      }}
+                      className="p-0.5 hover:bg-black/10 rounded cursor-pointer focus:outline-none"
+                      title={isFulfillmentMenuExpanded ? 'Colapsar submenú' : 'Expandir submenú'}
+                    >
+                      {isFulfillmentMenuExpanded ? (
+                        <ChevronDown className="w-3.5 h-3.5 opacity-80" />
+                      ) : (
+                        <ChevronRight className="w-3.5 h-3.5 opacity-80" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-menu items on left sidebar */}
+                {isFulfillmentMenuExpanded && (
+                  <div className="pl-2 space-y-0.5 pt-0.5 border-l-2 border-amber-200 ml-3">
+                    <button
+                      id="admin-sidebar-subtab-overview-btn"
+                      onClick={() => handleSelectFulfillmentSubTab('overview')}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                        activeTab === 'fulfillment' && fulfillmentSubTab === 'overview'
+                          ? 'bg-amber-500 text-white font-black shadow-2xs'
+                          : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900 font-medium'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <BarChart3 className="w-3.5 h-3.5" />
+                        <span>Resumen General</span>
+                      </div>
+                      {lowStockCount > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[9px] font-black">
+                          {lowStockCount}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      id="admin-sidebar-subtab-receptions-btn"
+                      onClick={() => handleSelectFulfillmentSubTab('receptions')}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                        activeTab === 'fulfillment' && fulfillmentSubTab === 'receptions'
+                          ? 'bg-amber-500 text-white font-black shadow-2xs'
+                          : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900 font-medium'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Inbox className="w-3.5 h-3.5" />
+                        <span>Recepciones & Conteo</span>
+                      </div>
+                      {pendingRequestsCount > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-stone-950 text-[9px] font-black">
+                          {pendingRequestsCount}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      id="admin-sidebar-subtab-inventory-btn"
+                      onClick={() => handleSelectFulfillmentSubTab('inventory')}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                        activeTab === 'fulfillment' && fulfillmentSubTab === 'inventory'
+                          ? 'bg-amber-500 text-white font-black shadow-2xs'
+                          : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900 font-medium'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Layers className="w-3.5 h-3.5" />
+                        <span>Inventario & Anaqueles</span>
+                      </div>
+                    </button>
+
+                    <button
+                      id="admin-sidebar-subtab-confirmations-btn"
+                      onClick={() => handleSelectFulfillmentSubTab('pending_confirmations')}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                        activeTab === 'fulfillment' && fulfillmentSubTab === 'pending_confirmations'
+                          ? 'bg-amber-500 text-white font-black shadow-2xs'
+                          : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900 font-medium'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>Por Confirmar Tienda</span>
+                      </div>
+                      {pendingConfirmationOrdersCount > 0 && (
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                      )}
+                    </button>
+
+                    <button
+                      id="admin-sidebar-subtab-picking-btn"
+                      onClick={() => handleSelectFulfillmentSubTab('picking')}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                        activeTab === 'fulfillment' && fulfillmentSubTab === 'picking'
+                          ? 'bg-amber-500 text-white font-black shadow-2xs'
+                          : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900 font-medium'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Scan className="w-3.5 h-3.5" />
+                        <span>Estación de Picking</span>
+                      </div>
+                      {readyForPickingOrdersCount > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-800 text-[9px] font-black">
+                          {readyForPickingOrdersCount}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      id="admin-sidebar-subtab-packing-btn"
+                      onClick={() => handleSelectFulfillmentSubTab('packing')}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                        activeTab === 'fulfillment' && fulfillmentSubTab === 'packing'
+                          ? 'bg-amber-500 text-white font-black shadow-2xs'
+                          : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900 font-medium'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Box className="w-3.5 h-3.5" />
+                        <span>Estación de Packing</span>
+                      </div>
+                      {readyForPackingOrdersCount > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-800 text-[9px] font-black">
+                          {readyForPackingOrdersCount}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      id="admin-sidebar-subtab-dispatch-btn"
+                      onClick={() => handleSelectFulfillmentSubTab('dispatch')}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                        activeTab === 'fulfillment' && fulfillmentSubTab === 'dispatch'
+                          ? 'bg-amber-500 text-white font-black shadow-2xs'
+                          : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900 font-medium'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Truck className="w-3.5 h-3.5" />
+                        <span>Despachos & Rutas</span>
+                      </div>
+                      {readyForDispatchOrdersCount > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-cyan-100 text-cyan-800 text-[9px] font-black">
+                          {readyForDispatchOrdersCount}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      id="admin-sidebar-subtab-returns-btn"
+                      onClick={() => handleSelectFulfillmentSubTab('returns')}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                        activeTab === 'fulfillment' && fulfillmentSubTab === 'returns'
+                          ? 'bg-amber-500 text-white font-black shadow-2xs'
+                          : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900 font-medium'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Devoluciones</span>
+                      </div>
+                    </button>
+
+                    <button
+                      id="admin-sidebar-subtab-withdrawals-btn"
+                      onClick={() => handleSelectFulfillmentSubTab('withdrawals')}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                        activeTab === 'fulfillment' && fulfillmentSubTab === 'withdrawals'
+                          ? 'bg-amber-500 text-white font-black shadow-2xs'
+                          : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900 font-medium'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-3.5 h-3.5" />
+                        <span>Retiros de Tiendas</span>
+                      </div>
+                    </button>
+
+                    <button
+                      id="admin-sidebar-subtab-incidences-btn"
+                      onClick={() => handleSelectFulfillmentSubTab('incidences')}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                        activeTab === 'fulfillment' && fulfillmentSubTab === 'incidences'
+                          ? 'bg-amber-500 text-white font-black shadow-2xs'
+                          : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900 font-medium'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        <span>Incidencias Logísticas</span>
+                      </div>
+                      {openIncidencesCount > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-rose-600 text-white text-[9px] font-black">
+                          {openIncidencesCount}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      id="admin-sidebar-subtab-config-btn"
+                      onClick={() => handleSelectFulfillmentSubTab('config')}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                        activeTab === 'fulfillment' && fulfillmentSubTab === 'config'
+                          ? 'bg-amber-500 text-white font-black shadow-2xs'
+                          : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900 font-medium'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Settings className="w-3.5 h-3.5" />
+                        <span>Tarifas & Config</span>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Grupo 5: Finanzas & Publicidad */}
+            <div className="pt-2 border-t border-stone-100">
+              <div className="px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-stone-400">
+                Finanzas & Marketing
+              </div>
+              <div className="space-y-0.5 mt-1">
+                <button
+                  onClick={() => setActiveTab('settlements')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'settlements'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <DollarSign className="w-4 h-4 text-emerald-600" />
+                    <span>Liquidaciones Bancarias</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    activeTab === 'settlements' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+                  }`}>
+                    {settlements.length}
+                  </span>
+                </button>
+
+                <button
+                  id="admin-tab-payments-btn"
+                  onClick={() => setActiveTab('payments')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'payments'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <CreditCard className="w-4 h-4" />
+                    <span>Pasarelas de Pago</span>
+                  </div>
+                </button>
+
+                <button
+                  id="admin-tab-advertising-btn"
+                  onClick={() => setActiveTab('advertising')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'advertising'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Megaphone className="w-4 h-4" />
+                    <span>Publicidad & Anuncios</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Grupo 5: Sistema & Plataforma */}
+            <div className="pt-2 border-t border-stone-100">
+              <div className="px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-stone-400">
+                Sistema & Plataforma
+              </div>
+              <div className="space-y-0.5 mt-1">
+                <button
+                  id="admin-tab-branding-btn"
+                  onClick={() => setActiveTab('branding')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'branding'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Palette className="w-4 h-4" />
+                    <span>Logo & Favicon</span>
+                  </div>
+                </button>
+
+                <button
+                  id="admin-tab-persistence-btn"
+                  onClick={() => setActiveTab('persistence')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'persistence'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Database className="w-4 h-4" />
+                    <span>Persistencia & Backup</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('settings')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'settings'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Settings className="w-4 h-4" />
+                    <span>Configuración Global</span>
+                  </div>
+                </button>
+
+                <button
+                  id="admin-tab-legal-docs-btn"
+                  onClick={() => setActiveTab('legal_docs')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'legal_docs'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <FileCheck className="w-4 h-4" />
+                    <span>Términos & PDFs</span>
+                  </div>
+                </button>
+
+                <button
+                  id="admin-tab-android-app-btn"
+                  onClick={() => setActiveTab('android_app')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'android_app'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Smartphone className="w-4 h-4" />
+                    <span>App Android (APK)</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </nav>
+        </aside>
+
+        {/* RIGHT MAIN CONTENT AREA */}
+        <main className="flex-1 min-w-0 w-full space-y-6">
+
+          {/* Super Admin Masthead with High-Privilege Notice */}
+          <div className="bg-stone-900 text-white rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="p-1.5 bg-red-600 rounded-lg">
+                  <ShieldAlert className="w-4 h-4 text-white" />
+                </span>
+                <h1 className="text-base sm:text-lg font-black tracking-tight">Super Administrador PlazaDO.com</h1>
+                <span className="bg-red-500/30 text-red-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-red-500/40">
+                  Control Fiduciario & Arbitraje
+                </span>
+              </div>
+              <p className="text-xs text-stone-300 mt-1 max-w-2xl">
+                Plataforma en fase de producción. Gestiona comercios, catálogo unificado, seguridad de pagos y fondos en custodia.
               </p>
             </div>
+
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-stone-400">Usuario:</span>
+              <span className="font-bold text-white bg-stone-800 px-2.5 py-1 rounded-lg border border-stone-700">{currentUser?.name || 'Super Admin'}</span>
+            </div>
           </div>
-          <button
-            onClick={() => setActiveTab('solicitudes')}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs transition-colors shrink-0 shadow-xs flex items-center gap-1.5"
-          >
-            <span>Revisar Solicitudes</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
 
-      {/* Admin Navigation Tabs */}
-      <div className="flex items-center gap-1.5 border-b border-stone-200 pb-2 overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('metrics')}
-          className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'metrics' ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-          }`}
-        >
-          <Activity className="w-4 h-4" />
-          <span>Métricas</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('solicitudes')}
-          className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 relative ${
-            activeTab === 'solicitudes' ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-          }`}
-        >
-          <Clock className="w-4 h-4" />
-          <span>Solicitudes</span>
-          {pendingStoreRequests.length > 0 ? (
-            <span className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
-              activeTab === 'solicitudes' ? 'bg-white text-red-600' : 'bg-amber-500 text-stone-950 animate-pulse'
-            }`}>
-              {pendingStoreRequests.length}
-            </span>
-          ) : (
-            <span className="text-[10px] opacity-60">(0)</span>
+          {/* Banner de Solicitudes Pendientes para Super Admin */}
+          {pendingStoreRequests.length > 0 && activeTab !== 'solicitudes' && (
+            <div className="bg-gradient-to-r from-amber-500/10 via-amber-50 to-orange-50 border-2 border-amber-300/90 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+              <div className="flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-stone-950 flex items-center justify-center shrink-0 shadow-xs">
+                  <Clock className="w-5 h-5 animate-spin" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-extrabold text-sm text-stone-900">
+                      {pendingStoreRequests.length} Solicitud{pendingStoreRequests.length > 1 ? 'es' : ''} de Tienda Pendiente{pendingStoreRequests.length > 1 ? 's' : ''} de Aprobación
+                    </h3>
+                    <span className="bg-amber-200 text-amber-950 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                      Acción Requerida
+                    </span>
+                  </div>
+                  <p className="text-xs text-stone-600 mt-0.5">
+                    Nuevos comercios dominicanos han enviado su registro y están esperando la aprobación de Super Admin para activar su vitrina.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveTab('solicitudes')}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs transition-colors shrink-0 shadow-xs flex items-center gap-1.5"
+              >
+                <span>Revisar Solicitudes</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('stores')}
-          className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'stores' ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-          }`}
-        >
-          <Store className="w-4 h-4" />
-          <span>Tiendas ({stores.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('orders')}
-          className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'orders' ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-          }`}
-        >
-          <ShoppingBag className="w-4 h-4" />
-          <span>Pedidos ({orders.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('products')}
-          className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'products' ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-          }`}
-        >
-          <Package className="w-4 h-4" />
-          <span>Productos ({products.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('users')}
-          className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'users' ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Usuarios ({allUsers.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('settlements')}
-          className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'settlements' ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-          }`}
-        >
-          <DollarSign className="w-4 h-4" />
-          <span>Liquidaciones ({settlements.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('disputes')}
-          className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'disputes' ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-          }`}
-        >
-          <AlertTriangle className="w-4 h-4" />
-          <span>Disputas ({disputes.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('content')}
-          className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'content' ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-          }`}
-        >
-          <Layers className="w-4 h-4" />
-          <span>Banners & Categorías</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('settings')}
-          className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'settings' ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-          }`}
-        >
-          <Settings className="w-4 h-4" />
-          <span>Configuración & Purgas</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('audit')}
-          className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'audit' ? 'bg-red-600 text-white shadow-xs' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          <span>Auditoría ({auditLogs.length})</span>
-        </button>
-      </div>
 
       {/* TAB 1: MÉTRICAS GLOBALES */}
       {activeTab === 'metrics' && (
@@ -1048,9 +1694,27 @@ export const AdminDashboard: React.FC = () => {
                         </span>
                       </div>
 
-                      <div className="text-xs text-stone-600">
-                        <strong>Cliente:</strong> {order.customerName} ({order.deliveryAddress?.phone || order.customerPhone}) • 
-                        <span className="text-stone-500"> Destino: {order.deliveryAddress?.sector || 'Sector N/A'}, {order.deliveryAddress?.province || 'RD'}</span>
+                      <div className="text-xs text-stone-600 space-y-0.5">
+                        <div>
+                          <strong>Cliente:</strong> {order.customerName} ({order.deliveryAddress?.phone || order.customerPhone})
+                          {order.deliveryAddress?.label && (
+                            <span className="ml-1.5 px-1.5 py-0.2 bg-stone-100 text-stone-700 rounded text-[10px] font-bold">
+                              📍 {order.deliveryAddress.label}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-stone-500 text-[11px] flex items-center gap-1">
+                          <MapPin className="w-3 h-3 text-red-500 shrink-0" />
+                          <span>
+                            {order.deliveryAddress?.street || 'Calle N/A'}
+                            {order.deliveryAddress?.buildingNumber ? ` #${order.deliveryAddress.buildingNumber}` : ''}, {order.deliveryAddress?.sector || ''}, {order.deliveryAddress?.municipality || ''}, {order.deliveryAddress?.province || 'RD'}
+                          </span>
+                        </div>
+                        {order.deliveryAddress?.reference && (
+                          <div className="text-[10px] text-stone-400 italic pl-4">
+                            Ref: {order.deliveryAddress.reference}
+                          </div>
+                        )}
                       </div>
 
                       <div className="text-xs text-stone-500 flex items-center gap-2">
@@ -1328,6 +1992,15 @@ export const AdminDashboard: React.FC = () => {
 
                     <div className="flex items-center gap-2 shrink-0">
                       <button
+                        onClick={() => setPasswordModalUser(usr)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200"
+                        title="Asignar o restablecer contraseña"
+                      >
+                        <Key className="w-3.5 h-3.5 text-amber-700" />
+                        <span>Contraseña</span>
+                      </button>
+
+                      <button
                         disabled={isCurrent}
                         onClick={() => setDeleteModal({
                           typeLabel: 'CUENTA DE USUARIO',
@@ -1357,20 +2030,101 @@ export const AdminDashboard: React.FC = () => {
 
       {/* TAB 6: LIQUIDACIONES Y DESEMBOLSOS */}
       {activeTab === 'settlements' && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div>
-              <h2 className="text-base font-bold text-stone-900">Liquidaciones y Desembolsos a Comercios</h2>
+              <h2 className="text-base font-bold text-stone-900">Liquidaciones y Finanzas Centralizadas</h2>
               <p className="text-xs text-stone-500">
-                Autoriza pagos ACH, registra números de comprobante bancario y elimina solicitudes
+                Cuenta central de Plazado.com, comisiones (0.05%), retenciones de efectivo y desembolsos semanales
               </p>
             </div>
-            <span className="text-xs text-stone-500 bg-stone-100 px-3 py-1 rounded-full font-medium">
-              {settlements.length} solicitudes
-            </span>
+            
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                id="btn-run-weekly-settlement"
+                disabled={isRunningSettlements}
+                onClick={async () => {
+                  if (window.confirm('¿Deseas ejecutar el ciclo de liquidación semanal? Se procesarán los balances disponibles de todas las tiendas, descontando las comisiones adeudadas por ventas en efectivo y generando las transferencias correspondientes.')) {
+                    setIsRunningSettlements(true);
+                    try {
+                      await runWeeklySettlements();
+                    } finally {
+                      setIsRunningSettlements(false);
+                    }
+                  }
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-2 ${
+                  isRunningSettlements 
+                    ? 'bg-stone-300 text-stone-600 cursor-wait' 
+                    : 'bg-red-600 hover:bg-red-700 text-white hover:shadow-red-600/30 active:scale-95'
+                }`}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRunningSettlements ? 'animate-spin' : ''}`} />
+                <span>{isRunningSettlements ? 'Ejecutando Ciclo...' : 'Ejecutar Liquidación Semanal (Viernes)'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Centralized Financial Indicators Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-2xs">
+              <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider block">
+                Comisión Plazado.com
+              </span>
+              <div className="text-xl font-black text-red-600 mt-1">
+                {((systemSettings.plazaCommissionRate !== undefined ? systemSettings.plazaCommissionRate : 0.0005) * 100).toFixed(2)}%
+              </div>
+              <span className="text-[10px] text-stone-400 mt-0.5 block">
+                Fórmula: Venta × {(systemSettings.plazaCommissionRate !== undefined ? systemSettings.plazaCommissionRate : 0.0005)}
+              </span>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-2xs">
+              <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider block">
+                Custodia Central (Tarjetas)
+              </span>
+              <div className="text-xl font-black text-stone-900 mt-1">
+                RD$ {Object.values(storeBalances).reduce((acc, b) => acc + (b.availableBalance || 0) + (b.pendingBalance || 0), 0).toLocaleString()}
+              </div>
+              <span className="text-[10px] text-stone-400 mt-0.5 block">
+                Disponible a liquidar: RD$ {Object.values(storeBalances).reduce((acc, b) => acc + (b.availableBalance || 0), 0).toLocaleString()}
+              </span>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-2xs">
+              <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider block">
+                Comisiones por Cobrar (Efectivo)
+              </span>
+              <div className="text-xl font-black text-amber-600 mt-1">
+                RD$ {Object.values(storeBalances).reduce((acc, b) => acc + (b.pendingCashCommissions || 0) + (b.carriedOverDebt || 0), 0).toLocaleString()}
+              </div>
+              <span className="text-[10px] text-stone-400 mt-0.5 block">
+                Deducible en ciclo semanal de los viernes
+              </span>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-2xs">
+              <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider block">
+                Desembolsos Completados
+              </span>
+              <div className="text-xl font-black text-emerald-600 mt-1">
+                RD$ {settlements.filter(s => s.status === 'PAID').reduce((acc, s) => acc + s.netAmount, 0).toLocaleString()}
+              </div>
+              <span className="text-[10px] text-stone-400 mt-0.5 block">
+                {settlements.filter(s => s.status === 'PAID').length} transferencias realizadas
+              </span>
+            </div>
           </div>
 
           <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-2xs p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-xs uppercase tracking-wider text-stone-700">Historial de Liquidaciones por Tienda</h3>
+              <span className="text-xs text-stone-500 bg-stone-100 px-3 py-1 rounded-full font-medium">
+                {settlements.length} registros
+              </span>
+            </div>
             {settlements.length === 0 ? (
               <p className="text-xs text-stone-400 py-6 text-center">No hay solicitudes de liquidación registradas.</p>
             ) : (
@@ -1610,45 +2364,148 @@ export const AdminDashboard: React.FC = () => {
       {activeTab === 'content' && (
         <div className="space-y-6">
           <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-2xs space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-stone-100">
               <div>
                 <h3 className="font-bold text-sm text-stone-900">Banners Promocionales de Portada</h3>
-                <p className="text-xs text-stone-500">Imágenes destacadas mostradas en la página de inicio</p>
+                <p className="text-xs text-stone-500">
+                  Imágenes destacadas mostradas en la página de inicio ({banners.length} banners registrados). Puedes subir fotos directamente desde tu equipo.
+                </p>
               </div>
+              <button
+                type="button"
+                id="admin-create-banner-btn"
+                onClick={() => {
+                  setEditingBanner(null);
+                  setIsCreateBannerModalOpen(true);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 self-start sm:self-auto"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Crear Nuevo Banner</span>
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              {banners.map(b => (
-                <div key={b.id} className="rounded-xl border border-stone-200 overflow-hidden bg-stone-50 flex flex-col justify-between">
-                  <img src={b.imageUrl} alt="" className="w-full h-32 object-cover" />
-                  <div className="p-3 flex justify-between items-start">
-                    <div>
-                      <h4 className="font-bold text-stone-900">{b.title}</h4>
-                      <p className="text-stone-500">{b.subtitle}</p>
-                    </div>
-                    <button
-                      onClick={() => setDeleteModal({
-                        typeLabel: 'BANNER PUBLICITARIO',
-                        title: `Eliminar Banner: ${b.title}`,
-                        recordId: b.id,
-                        description: `Esta acción de Super Administrador eliminará el banner publicitario "${b.title}".`,
-                        action: () => deleteBanner(b.id)
-                      })}
-                      className="p-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg transition-colors"
-                      title="Borrar banner"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 text-red-600" />
-                    </button>
-                  </div>
+            {banners.length === 0 ? (
+              <div className="p-8 text-center bg-stone-50 border-2 border-dashed border-stone-200 rounded-2xl space-y-3">
+                <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto">
+                  <Upload className="w-6 h-6" />
                 </div>
-              ))}
-            </div>
+                <div>
+                  <h4 className="font-bold text-stone-900 text-sm">No hay banners promocionales registrados</h4>
+                  <p className="text-xs text-stone-500 max-w-md mx-auto mt-1">
+                    Crea el primer banner promocional de PlazaDO subiendo una foto directamente desde tu equipo (PC, laptop o móvil).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingBanner(null);
+                    setIsCreateBannerModalOpen(true);
+                  }}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors inline-flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Subir Foto y Crear Banner</span>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                {banners.map(b => (
+                  <div key={b.id} className="rounded-xl border border-stone-200 overflow-hidden bg-stone-50 flex flex-col justify-between shadow-2xs hover:border-stone-300 transition-colors">
+                    <div className="relative h-36 bg-stone-900">
+                      <img src={b.imageUrl} alt={b.title} className="w-full h-full object-cover" />
+                      <div className="absolute top-2 left-2 flex items-center gap-1.5">
+                        <span className="px-2 py-0.5 bg-stone-900/80 backdrop-blur-xs text-white text-[10px] font-black rounded-md">
+                          #{b.order}
+                        </span>
+                        {b.badge && (
+                          <span className="px-2 py-0.5 bg-red-600 text-white text-[9px] font-black uppercase rounded-md tracking-wider">
+                            {b.badge}
+                          </span>
+                        )}
+                      </div>
+                      <div className="absolute top-2 right-2">
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold backdrop-blur-xs ${
+                          b.isActive !== false 
+                            ? 'bg-emerald-600/90 text-white' 
+                            : 'bg-stone-800/90 text-stone-300'
+                        }`}>
+                          {b.isActive !== false ? 'Activo' : 'Pausado'}
+                        </span>
+                      </div>
+                      {b.imageUrl.startsWith('data:image') && (
+                        <div className="absolute bottom-2 left-2">
+                          <span className="px-2 py-0.5 bg-blue-600/90 backdrop-blur-xs text-white text-[9px] font-semibold rounded-md">
+                            📷 Foto Local
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-3.5 flex flex-col justify-between flex-1 gap-3">
+                      <div>
+                        <h4 className="font-bold text-stone-900 text-sm line-clamp-1">{b.title}</h4>
+                        {b.subtitle && <p className="text-stone-500 line-clamp-1 mt-0.5">{b.subtitle}</p>}
+                        <div className="mt-2 text-[11px] text-stone-600 font-medium">
+                          Destino:{' '}
+                          <span className="font-semibold text-stone-800">
+                            {b.targetType === 'STORE' && `🏪 Tienda (${b.targetValue || 'General'})`}
+                            {b.targetType === 'CATEGORY' && `🏷️ Categoría (${b.targetValue || 'General'})`}
+                            {b.targetType === 'PRODUCT' && `📦 Producto (#${b.targetValue})`}
+                            {b.targetType === 'URL' && `🌐 Enlace externo`}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-200">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingBanner(b);
+                            setIsCreateBannerModalOpen(true);
+                          }}
+                          className="px-3 py-1.5 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 rounded-lg transition-colors flex items-center gap-1.5 font-bold text-[11px]"
+                          title="Editar información y cambiar foto"
+                        >
+                          <Edit className="w-3.5 h-3.5 text-stone-600" />
+                          <span>Editar</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteModal({
+                            typeLabel: 'BANNER PUBLICITARIO',
+                            title: `Eliminar Banner: ${b.title}`,
+                            recordId: b.id,
+                            description: `Esta acción de Super Administrador eliminará el banner publicitario "${b.title}".`,
+                            action: () => deleteBanner(b.id)
+                          })}
+                          className="p-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg transition-colors"
+                          title="Borrar banner"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-2xs space-y-4">
-            <div>
-              <h3 className="font-bold text-sm text-stone-900">Categorías Principales del Mercado Dominicano</h3>
-              <p className="text-xs text-stone-500">Estructura taxonómica de productos en PlazaDO</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-stone-100">
+              <div>
+                <h3 className="font-bold text-sm text-stone-900">Categorías Principales del Mercado Dominicano</h3>
+                <p className="text-xs text-stone-500">Estructura taxonómica de productos en PlazaDO ({categories.length} categorías registradas)</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreateCategoryModalOpen(true)}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 self-start sm:self-auto"
+              >
+                <FolderPlus className="w-4 h-4" />
+                <span>+ Crear Nueva Categoría</span>
+              </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
@@ -1678,9 +2535,37 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
+      {/* TAB 8: IDENTIDAD VISUAL (LOGO & FAVICON) */}
+      {activeTab === 'branding' && <BrandingSettingsTab />}
+
+      {/* TAB 8.5: BLINDAJE DE PERSISTENCIA & RESPALDOS */}
+      {activeTab === 'persistence' && <PersistenceSettingsTab />}
+
       {/* TAB 9: CONFIGURACIÓN GLOBAL & PURGA DE REGISTROS */}
       {activeTab === 'settings' && (
         <div className="space-y-6">
+          {/* Direct link to Branding & Logo */}
+          <div className="bg-gradient-to-r from-red-50 via-white to-stone-50 rounded-2xl border border-red-200 p-5 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-red-600 text-white rounded-xl shadow-xs">
+                <Palette className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-stone-900">Identidad Visual: Logo y Favicon</h3>
+                <p className="text-xs text-stone-500">Configura el logotipo oficial de PlazaDO (fondos claros y oscuros) y el favicon de la pestaña del navegador.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              id="btn-goto-branding-from-settings"
+              onClick={() => setActiveTab('branding')}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 shrink-0"
+            >
+              <span>Configurar Logo & Favicon</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           <form onSubmit={handleSaveSettings} className="bg-white rounded-2xl border border-stone-200 p-6 shadow-2xs space-y-6 text-xs">
             <div>
               <h2 className="text-base font-bold text-stone-900">Parámetros Globales de PlazaDO.com</h2>
@@ -1688,18 +2573,39 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-3 bg-red-50/50 rounded-xl border border-red-200">
+                <label className="block font-bold text-red-900 mb-1">
+                  Comisión de Plazado.com (%) *
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0.001}
+                    max={10}
+                    step={0.001}
+                    value={plazaCommRate}
+                    onChange={(e) => setPlazaCommRate(Number(e.target.value))}
+                    className="w-full p-2.5 bg-white border border-red-300 rounded-lg text-sm font-black text-red-700 outline-none focus:ring-2 focus:ring-red-500/20"
+                  />
+                  <span className="text-xs font-black text-red-700">%</span>
+                </div>
+                <span className="text-[11px] text-red-700/80 mt-1 block">
+                  Tasa central: {plazaCommRate}% (factor multiplicador {(plazaCommRate / 100).toFixed(6)}). Cobrada automáticamente sobre cada venta.
+                </span>
+              </div>
+
               <div>
-                <label className="block font-semibold text-stone-700 mb-1">Comisión por Defecto sobre Ventas (%)</label>
+                <label className="block font-semibold text-stone-700 mb-1">Comisión Comercial Adicional / Estándar (%)</label>
                 <input
                   type="number"
-                  min={1}
+                  min={0}
                   max={30}
                   step={0.5}
                   value={defaultCommRate}
                   onChange={(e) => setDefaultCommRate(Number(e.target.value))}
                   className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-lg text-sm font-bold outline-none"
                 />
-                <span className="text-[11px] text-stone-400 mt-1 block">Vigente: 5% comercial.</span>
+                <span className="text-[11px] text-stone-400 mt-1 block">Referencia para planes premium de tiendas.</span>
               </div>
 
               <div>
@@ -1730,6 +2636,151 @@ export const AdminDashboard: React.FC = () => {
                   onChange={(e) => setRncVal(e.target.value)}
                   className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-lg outline-none font-mono"
                 />
+              </div>
+            </div>
+
+            {/* SERVICIO DE CORREO ELECTRÓNICO (DISPARADOR DE REGISTROS) */}
+            <div className="pt-4 border-t border-stone-200 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-stone-100">
+                <div className="flex items-center gap-2 text-stone-900">
+                  <div className="p-2 bg-blue-100 text-blue-700 rounded-xl">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm text-stone-900">
+                      Disparador de Correos de Verificación (OTP)
+                    </h3>
+                    <p className="text-stone-500 text-[11px]">
+                      Configura el correo oficial emisor y servidor SMTP para la validación obligatoria de cuentas
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-extrabold rounded-full border border-emerald-200">
+                  ● Servicio Habilitado ({mailSenderEmail})
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Correo Electrónico Emisor Oficial *
+                  </label>
+                  <input
+                    type="email"
+                    value={mailSenderEmail}
+                    onChange={(e) => setMailSenderEmail(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-stone-300 rounded-lg outline-none font-bold text-stone-900 focus:border-red-500"
+                    placeholder="Luiss.jimeness@gmail.com"
+                  />
+                  <span className="text-[10px] text-stone-400 mt-1 block">
+                    Desde esta dirección se dispara el código de 6 dígitos a nuevos usuarios y comercios.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Nombre del Remitente
+                  </label>
+                  <input
+                    type="text"
+                    value={mailSenderName}
+                    onChange={(e) => setMailSenderName(e.target.value)}
+                    className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-lg outline-none"
+                    placeholder="PlazaDO Marketplace Dominicano"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Servidor SMTP (Host)
+                  </label>
+                  <input
+                    type="text"
+                    value={mailSmtpHost}
+                    onChange={(e) => setMailSmtpHost(e.target.value)}
+                    className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-lg outline-none font-mono text-xs"
+                    placeholder="smtp.gmail.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Puerto SMTP
+                  </label>
+                  <input
+                    type="number"
+                    value={mailSmtpPort}
+                    onChange={(e) => setMailSmtpPort(Number(e.target.value))}
+                    className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-lg outline-none font-mono text-xs"
+                    placeholder="465"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Contraseña de Aplicación de Google (App Password)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showMailPass ? 'text' : 'password'}
+                      value={mailSmtpPass}
+                      onChange={(e) => setMailSmtpPass(e.target.value)}
+                      className="w-full p-2.5 bg-white border border-stone-300 rounded-lg outline-none font-mono text-xs pr-10"
+                      placeholder="•••• •••• •••• •••• (16 caracteres de App Password de Google)"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowMailPass(!showMailPass)}
+                      className="absolute right-3 top-2.5 text-stone-400 hover:text-stone-700"
+                    >
+                      {showMailPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <span className="text-[10px] text-stone-400 mt-1 block">
+                    Para Gmail con verificación en 2 pasos: Genera una "Contraseña de aplicaciones" en tu cuenta Google de {mailSenderEmail} y pégala aquí para envíos SMTP directos.
+                  </span>
+                </div>
+
+                {/* Botón de Prueba Directa de SMTP */}
+                <div className="sm:col-span-2 pt-2">
+                  <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-stone-100/80 rounded-xl border border-stone-200">
+                    <div>
+                      <p className="font-bold text-xs text-stone-800">Prueba de Entrega SMTP</p>
+                      <p className="text-[11px] text-stone-500">
+                        Dispara un código de prueba a {mailSenderEmail} para verificar que Google acepte la conexión.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={testingSmtp}
+                      onClick={handleTestSmtp}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5"
+                    >
+                      {testingSmtp ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Verificando SMTP...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Mail className="w-3.5 h-3.5" />
+                          <span>Probar Envío a {mailSenderEmail}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {smtpTestResult && (
+                    <div className={`mt-2 p-3 rounded-xl border text-xs ${
+                      smtpTestResult.success 
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-900' 
+                        : 'bg-rose-50 border-rose-300 text-rose-900'
+                    }`}>
+                      <span className="font-bold">{smtpTestResult.success ? '✅ ÉXITO: ' : '❌ ERROR: '}</span>
+                      <span>{smtpTestResult.message}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1910,6 +2961,42 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
+      {/* TAB 11: CONFIGURACIÓN DE PASARELAS DE PAGO & CUENTA RECEPTORA */}
+      {activeTab === 'payments' && (
+        <PaymentGatewaysTab />
+      )}
+
+      {/* TAB 12: GESTIÓN DE PUBLICIDAD & ESPACIOS COMERCIALES */}
+      {activeTab === 'advertising' && (
+        <AdvertisingManagementTab />
+      )}
+
+      {/* TAB 13: GESTIÓN DE DOCUMENTOS LEGALES & PDFs OFICIALES */}
+      {activeTab === 'legal_docs' && (
+        <LegalDocsManagementTab />
+      )}
+
+      {/* TAB 14: DISTRIBUCIÓN DE APLICACIÓN ANDROID (APK) */}
+      {activeTab === 'android_app' && (
+        <AndroidAppManagementTab />
+      )}
+
+      {/* TAB 15: CATEGORÍAS & ESPECIFICACIONES TÉCNICAS DINÁMICAS */}
+      {activeTab === 'categories_specs' && (
+        <CategoriesAndSpecsManagement />
+      )}
+
+      {/* TAB 16: PLAZADO FULFILLMENT - CENTRO DE OPERACIONES & LOGÍSTICA */}
+      {activeTab === 'fulfillment' && (
+        <FulfillmentAdminView 
+          activeSubTab={fulfillmentSubTab}
+          onTabChange={setFulfillmentSubTab}
+        />
+      )}
+
+        </main>
+      </div>
+
       {/* UNIVERSAL DELETE CONFIRMATION MODAL */}
       {deleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-in fade-in duration-150">
@@ -1967,6 +3054,29 @@ export const AdminDashboard: React.FC = () => {
           onClose={() => setEditingStore(null)}
         />
       )}
+
+      {/* Super Admin Create Category Modal */}
+      <CreateCategoryModal
+        isOpen={isCreateCategoryModalOpen}
+        onClose={() => setIsCreateCategoryModalOpen(false)}
+      />
+
+      {/* Super Admin Create / Edit Banner Modal */}
+      <CreateBannerModal
+        isOpen={isCreateBannerModalOpen}
+        bannerToEdit={editingBanner}
+        onClose={() => {
+          setIsCreateBannerModalOpen(false);
+          setEditingBanner(null);
+        }}
+      />
+
+      {/* Super Admin User Password Management Modal */}
+      <UserPasswordModal
+        user={passwordModalUser}
+        isOpen={Boolean(passwordModalUser)}
+        onClose={() => setPasswordModalUser(null)}
+      />
 
     </div>
   );

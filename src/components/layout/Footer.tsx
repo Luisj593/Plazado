@@ -2,10 +2,10 @@ import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { DominicanFlag } from '../common/DominicanFlag';
 import { PlazaDoLogo } from '../common/PlazaDoLogo';
-import { Phone, Mail, MapPin, ShieldCheck, CreditCard, Truck, RefreshCw, MessageSquare } from 'lucide-react';
+import { Phone, Mail, MapPin, ShieldCheck, CreditCard, Truck, RefreshCw, MessageSquare, Download, Smartphone, FileText } from 'lucide-react';
 
 export const Footer: React.FC = () => {
-  const { setCurrentView, setOpenPolicySlug, systemSettings, categories, setSelectedCategorySlug } = useApp();
+  const { setCurrentView, setOpenPolicySlug, systemSettings, categories, setSelectedCategorySlug, openDownloadModal } = useApp();
 
   const handleOpenPolicy = (slug: string) => {
     setOpenPolicySlug(slug);
@@ -121,8 +121,17 @@ export const Footer: React.FC = () => {
 
         {/* Para Vendedores */}
         <div>
-          <h5 className="text-xs font-bold uppercase tracking-wider text-stone-200 mb-3">Vende en PlazaDO</h5>
+          <h5 className="text-xs font-bold uppercase tracking-wider text-stone-200 mb-3">Tiendas y Comercios</h5>
           <ul className="space-y-2 text-xs text-stone-400">
+            <li>
+              <button 
+                id="footer-stores-directory-btn"
+                onClick={() => setCurrentView('stores')}
+                className="hover:text-white font-semibold transition-colors text-stone-300"
+              >
+                Directorio de Tiendas RD
+              </button>
+            </li>
             <li>
               <button 
                 onClick={() => setCurrentView('sell_with_us')}
@@ -192,6 +201,26 @@ export const Footer: React.FC = () => {
                 className="hover:text-white transition-colors"
               >
                 Políticas de Pagos (AZUL)
+              </button>
+            </li>
+            <li className="pt-2 border-t border-stone-800">
+              <button 
+                id="footer-download-pdf-btn"
+                onClick={() => openDownloadModal('pdf')}
+                className="text-stone-300 hover:text-white font-medium transition-colors flex items-center gap-1.5"
+              >
+                <FileText className="w-3.5 h-3.5 text-red-500" />
+                <span>Descargar Términos (PDF)</span>
+              </button>
+            </li>
+            <li>
+              <button 
+                id="footer-download-apk-btn"
+                onClick={() => openDownloadModal('app')}
+                className="text-emerald-400 hover:text-emerald-300 font-semibold transition-colors flex items-center gap-1.5"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>Descargar App Android (APK)</span>
               </button>
             </li>
           </ul>

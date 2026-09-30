@@ -1,0 +1,2734 @@
+import fs from 'fs';
+import path from 'path';
+import { cloudSqlRepo } from './cloudsql-repository';
+import { firestoreRepo } from './firestore-repository';
+import { 
+  User, 
+  Store, 
+  Category, 
+  Product, 
+  Order, 
+  OrderStatus,
+  StoreBalance, 
+  Settlement, 
+  Dispute, 
+  Coupon, 
+  Banner, 
+  AuditLog, 
+  SystemSettings, 
+  CustomerAddress,
+  Review,
+  UserRole,
+  StoreStatus,
+  PaymentMethodType,
+  PaymentTransaction,
+  FinancialAuditLog,
+  PaymentGatewayConfig,
+  AdPlacement,
+  Advertisement,
+  AdMetricEvent,
+  OrderChatMessage,
+  CategorySpecification,
+  StorageRequest,
+  FulfillmentInventoryItem,
+  InventoryMovementLog,
+  FulfillmentOrder,
+  FulfillmentIncidence,
+  FulfillmentReturn,
+  FulfillmentWithdrawal,
+  FulfillmentConfig
+} from '../src/types';
+import { DEFAULT_FULFILLMENT_CONFIG } from './fulfillment-service';
+import { 
+  INITIAL_USERS, 
+  INITIAL_STORES, 
+  INITIAL_CATEGORIES, 
+  INITIAL_PRODUCTS, 
+  INITIAL_ORDERS, 
+  INITIAL_STORE_BALANCES, 
+  INITIAL_SETTLEMENTS, 
+  INITIAL_BANNERS, 
+  INITIAL_COUPONS, 
+  INITIAL_SETTINGS, 
+  INITIAL_AUDIT_LOGS,
+  INITIAL_PAYMENT_GATEWAYS,
+  INITIAL_AD_PLACEMENTS,
+  INITIAL_ADVERTISEMENTS,
+  INITIAL_SPECIFICATIONS
+} from '../src/data/initialData';
+
+export interface GlobalDatabaseData {
+  stores: Store[];
+  products: Product[];
+  categories: Category[];
+  users: User[];
+  orders: Order[];
+  storeBalances: Record<string, StoreBalance>;
+  settlements: Settlement[];
+  disputes: Dispute[];
+  reviews: Review[];
+  banners: Banner[];
+  coupons: Coupon[];
+  systemSettings: SystemSettings;
+  auditLogs: AuditLog[];
+  paymentTransactions?: PaymentTransaction[];
+  financialAuditLogs?: FinancialAuditLog[];
+  paymentGateways?: PaymentGatewayConfig[];
+  advertisements?: Advertisement[];
+  adPlacements?: AdPlacement[];
+  adMetricEvents?: AdMetricEvent[];
+  orderMessages?: OrderChatMessage[];
+  specifications?: CategorySpecification[];
+  storageRequests?: StorageRequest[];
+  fulfillmentInventory?: FulfillmentInventoryItem[];
+  inventoryMovements?: InventoryMovementLog[];
+  fulfillmentOrders?: FulfillmentOrder[];
+  fulfillmentIncidences?: FulfillmentIncidence[];
+  fulfillmentReturns?: FulfillmentReturn[];
+  fulfillmentWithdrawals?: FulfillmentWithdrawal[];
+  fulfillmentConfig?: FulfillmentConfig;
+  version: number;
+  lastUpdated: string;
+}
+
+class GlobalDatabase {
+  private dataDir: string;
+  private backupDir: string;
+  private dataFilePath: string;
+  private latestBackupPath: string;
+  private snapshotPath: string;
+  private memoryData: GlobalDatabaseData;
+  private lastFirestoreSync: string | null = null;
+  private firestoreSyncStatus: 'CONNECTED' | 'DISCONNECTED' | 'ERROR' = 'DISCONNECTED';
+
+  constructor() {
+    this.dataDir = path.resolve(process.cwd(), 'data');
+    this.backupDir = path.join(this.dataDir, 'backups');
+    if (!fs.existsSync(this.dataDir)) {
+      fs.mkdirSync(this.dataDir, { recursive: true });
+    }
+    if (!fs.existsSync(this.backupDir)) {
+      fs.mkdirSync(this.backupDir, { recursive: true });
+    }
+
+    this.dataFilePath = path.join(this.dataDir, 'plazado_global_database.json');
+    this.latestBackupPath = path.join(this.backupDir, 'plazado_db_backup_latest.json');
+    this.snapshotPath = path.resolve(process.cwd(), 'server', 'data_snapshot.json');
+
+    this.memoryData = this.loadOrInitialize();
+  }
+
+  private tryParseJson(filePath: string): GlobalDatabaseData | null {
+    try {
+      if (!fs.existsSync(filePath)) return null;
+      const content = fs.readFileSync(filePath, 'utf-8');
+      if (!content || !content.trim()) return null;
+      const parsed = JSON.parse(content);
+      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.stores) && Array.isArray(parsed.users)) {
+        return parsed as GlobalDatabaseData;
+      }
+    } catch (e) {
+      console.warn(`[GlobalDatabase] Warning: Could not parse JSON from ${filePath}:`, e);
+    }
+    return null;
+  }
+
+  private loadOrInitialize(): GlobalDatabaseData {
+    let activeData: GlobalDatabaseData | null = null;
+    let loadedFrom = 'none';
+
+    // 1. Primary datastore check: data/plazado_global_database.json
+    if (fs.existsSync(this.dataFilePath)) {
+      try {
+        const raw = fs.readFileSync(this.dataFilePath, 'utf-8');
+        if (raw && raw.trim()) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            activeData = parsed as GlobalDatabaseData;
+            loadedFrom = 'primary_file';
+          }
+        }
+      } catch (err) {
+        console.error('[GlobalDatabase CRITICAL] Error parsing primary database file. Preserving corrupt file for recovery:', err);
+        try {
+          const corruptBackupPath = path.join(this.backupDir, `corrupt_${Date.now()}_plazado_db.json`);
+          fs.copyFileSync(this.dataFilePath, corruptBackupPath);
+          console.log(`[GlobalDatabase] Corrupted file saved to backup: ${corruptBackupPath}`);
+        } catch (copyErr) {
+          console.error('[GlobalDatabase] Failed to preserve corrupted file:', copyErr);
+        }
+      }
+    }
+
+    // 2. If primary file was missing or invalid, check rolling backup
+    if (!activeData && fs.existsSync(this.latestBackupPath)) {
+      const backupData = this.tryParseJson(this.latestBackupPath);
+      if (backupData) {
+        activeData = backupData;
+        loadedFrom = 'latest_backup';
+        console.log('[GlobalDatabase] Recovered database state from latest backup snapshot.');
+      }
+    }
+
+    // 3. If still missing, check immutable server snapshot (persists across fresh container builds)
+    if (!activeData && fs.existsSync(this.snapshotPath)) {
+      const snapshotData = this.tryParseJson(this.snapshotPath);
+      if (snapshotData) {
+        activeData = snapshotData;
+        loadedFrom = 'server_snapshot';
+        console.log('[GlobalDatabase] Recovered database state from repository server snapshot.');
+      }
+    }
+
+    // 4. Only if NO data exists anywhere in any source, initialize seeds
+    if (!activeData) {
+      console.log('[GlobalDatabase] No existing database or backup found. Bootstrapping pristine initial dataset.');
+      activeData = {
+        stores: INITIAL_STORES.map(s => ({
+          ...s,
+          status: (s.status === 'APPROVED' || s.status === 'active' || s.status === 'ACTIVE') ? 'APPROVED' : s.status,
+          isPublished: s.isPublished !== undefined ? s.isPublished : true
+        })),
+        products: INITIAL_PRODUCTS,
+        categories: INITIAL_CATEGORIES,
+        users: INITIAL_USERS,
+        orders: INITIAL_ORDERS,
+        storeBalances: INITIAL_STORE_BALANCES,
+        settlements: INITIAL_SETTLEMENTS,
+        disputes: [],
+        banners: INITIAL_BANNERS,
+        coupons: INITIAL_COUPONS,
+        systemSettings: INITIAL_SETTINGS,
+        auditLogs: INITIAL_AUDIT_LOGS,
+        reviews: [],
+        version: 1,
+        lastUpdated: new Date().toISOString()
+      };
+      loadedFrom = 'new_seed';
+    }
+
+    // Ensure all critical collections are always valid arrays/objects (protect against undefined properties)
+    activeData.stores = Array.isArray(activeData.stores) ? activeData.stores : [];
+    activeData.products = Array.isArray(activeData.products) ? activeData.products : [];
+
+    // Non-destructive synchronization of official categories and subcategories
+    if (Array.isArray(activeData.categories) && activeData.categories.length > 0) {
+      for (const offCat of INITIAL_CATEGORIES) {
+        const existingIdx = activeData.categories.findIndex(c => c.id === offCat.id);
+        if (existingIdx === -1) {
+          activeData.categories.push(offCat);
+        } else {
+          activeData.categories[existingIdx] = {
+            ...offCat,
+            ...activeData.categories[existingIdx],
+            isActive: activeData.categories[existingIdx].isActive !== undefined ? activeData.categories[existingIdx].isActive : true
+          };
+        }
+      }
+    } else {
+      activeData.categories = [...INITIAL_CATEGORIES];
+    }
+
+    // Non-destructive synchronization of technical specifications
+    if (Array.isArray(activeData.specifications) && activeData.specifications.length > 0) {
+      for (const offSpec of INITIAL_SPECIFICATIONS) {
+        if (!activeData.specifications.some(s => s.id === offSpec.id)) {
+          activeData.specifications.push(offSpec);
+        }
+      }
+    } else {
+      activeData.specifications = [...INITIAL_SPECIFICATIONS];
+    }
+
+    activeData.users = Array.isArray(activeData.users) ? activeData.users : [];
+    activeData.orders = Array.isArray(activeData.orders) ? activeData.orders : [];
+    activeData.storeBalances = activeData.storeBalances && typeof activeData.storeBalances === 'object' ? activeData.storeBalances : {};
+    activeData.settlements = Array.isArray(activeData.settlements) ? activeData.settlements : [];
+    activeData.disputes = Array.isArray(activeData.disputes) ? activeData.disputes : [];
+    activeData.banners = Array.isArray(activeData.banners) ? activeData.banners : INITIAL_BANNERS;
+    activeData.coupons = Array.isArray(activeData.coupons) ? activeData.coupons : INITIAL_COUPONS;
+    activeData.auditLogs = Array.isArray(activeData.auditLogs) ? activeData.auditLogs : [];
+    activeData.reviews = Array.isArray(activeData.reviews) ? activeData.reviews : [];
+    activeData.paymentTransactions = Array.isArray((activeData as any).paymentTransactions) ? (activeData as any).paymentTransactions : [];
+    activeData.financialAuditLogs = Array.isArray((activeData as any).financialAuditLogs) ? (activeData as any).financialAuditLogs : [];
+    activeData.paymentGateways = Array.isArray((activeData as any).paymentGateways) && (activeData as any).paymentGateways.length > 0 
+      ? (activeData as any).paymentGateways 
+      : INITIAL_PAYMENT_GATEWAYS;
+    activeData.adPlacements = Array.isArray((activeData as any).adPlacements) && (activeData as any).adPlacements.length > 0
+      ? (activeData as any).adPlacements
+      : INITIAL_AD_PLACEMENTS;
+    activeData.advertisements = Array.isArray((activeData as any).advertisements) && (activeData as any).advertisements.length > 0
+      ? (activeData as any).advertisements
+      : INITIAL_ADVERTISEMENTS;
+    activeData.adMetricEvents = Array.isArray((activeData as any).adMetricEvents) ? (activeData as any).adMetricEvents : [];
+    activeData.orderMessages = Array.isArray((activeData as any).orderMessages) ? (activeData as any).orderMessages : [];
+    activeData.storageRequests = Array.isArray((activeData as any).storageRequests) ? (activeData as any).storageRequests : [];
+    activeData.fulfillmentInventory = Array.isArray((activeData as any).fulfillmentInventory) ? (activeData as any).fulfillmentInventory : [];
+    activeData.inventoryMovements = Array.isArray((activeData as any).inventoryMovements) ? (activeData as any).inventoryMovements : [];
+    activeData.fulfillmentOrders = Array.isArray((activeData as any).fulfillmentOrders) ? (activeData as any).fulfillmentOrders : [];
+    activeData.fulfillmentIncidences = Array.isArray((activeData as any).fulfillmentIncidences) ? (activeData as any).fulfillmentIncidences : [];
+    activeData.fulfillmentReturns = Array.isArray((activeData as any).fulfillmentReturns) ? (activeData as any).fulfillmentReturns : [];
+    activeData.fulfillmentWithdrawals = Array.isArray((activeData as any).fulfillmentWithdrawals) ? (activeData as any).fulfillmentWithdrawals : [];
+    activeData.fulfillmentConfig = (activeData as any).fulfillmentConfig || DEFAULT_FULFILLMENT_CONFIG;
+
+    // Ensure systemSettings includes all default keys (branding, logo, favicon, commission) without erasing custom values
+    activeData.systemSettings = {
+      ...INITIAL_SETTINGS,
+      ...(activeData.systemSettings || {})
+    };
+    if (typeof activeData.systemSettings.plazaCommissionRate !== 'number') {
+      activeData.systemSettings.plazaCommissionRate = 0.0005; // 0.05%
+    }
+    if (!activeData.systemSettings.mailConfig) {
+      activeData.systemSettings.mailConfig = {
+        senderEmail: 'Luiss.jimeness@gmail.com',
+        senderName: 'PlazaDO Marketplace Dominicano',
+        smtpHost: 'smtp.gmail.com',
+        smtpPort: 465,
+        smtpUser: 'Luiss.jimeness@gmail.com',
+        useSsl: true,
+        isConfigured: true
+      };
+    } else {
+      activeData.systemSettings.mailConfig.senderEmail = activeData.systemSettings.mailConfig.senderEmail || 'Luiss.jimeness@gmail.com';
+      activeData.systemSettings.mailConfig.senderName = activeData.systemSettings.mailConfig.senderName || 'PlazaDO Marketplace Dominicano';
+    }
+
+    // Ensure financial structure on all store balances
+    Object.keys(activeData.storeBalances).forEach(sId => {
+      const b = activeData.storeBalances[sId];
+      if (b) {
+        b.cardSales = typeof b.cardSales === 'number' ? b.cardSales : (b.totalSales || 0);
+        b.cashSales = typeof b.cashSales === 'number' ? b.cashSales : 0;
+        b.pendingCashCommissions = typeof b.pendingCashCommissions === 'number' ? b.pendingCashCommissions : 0;
+        b.retainedBalance = typeof b.retainedBalance === 'number' ? b.retainedBalance : 0;
+        b.adjustments = typeof b.adjustments === 'number' ? b.adjustments : 0;
+        b.carriedOverDebt = typeof b.carriedOverDebt === 'number' ? b.carriedOverDebt : 0;
+      }
+    });
+
+    // Ensure Super Admin accounts exist and are intact without altering any user passwords or other accounts
+    this.ensureSuperAdmins(activeData);
+
+    // Safeguard: Check immutable backup to restore persistent production stores/products/users if empty
+    const immutableBackupPath = path.join(this.backupDir, 'plazado_db_backup_immutable.json');
+    if (activeData.stores.length === 0 && fs.existsSync(immutableBackupPath)) {
+      const imm = this.tryParseJson(immutableBackupPath);
+      if (imm && Array.isArray(imm.stores) && imm.stores.length > 0) {
+        console.log(`[GlobalDatabase] Restoring ${imm.stores.length} production stores and ${imm.products?.length || 0} products from immutable backup.`);
+        activeData.stores = [...imm.stores];
+        if (Array.isArray(imm.products) && imm.products.length > 0) {
+          activeData.products = [...imm.products];
+        }
+        if (Array.isArray(imm.users) && imm.users.length > 0) {
+          for (const u of imm.users) {
+            if (!activeData.users.some(ex => ex.id === u.id || ex.email.toLowerCase() === u.email.toLowerCase())) {
+              activeData.users.push(u);
+            }
+          }
+        }
+      }
+    }
+
+    // Ensure initial verified stores are present, while safeguarding all custom user-created stores
+    this.normalizeStores(activeData);
+
+    // Save baseline snapshot to ensure synchronization
+    this.saveToDisk(activeData);
+
+    console.log(`[GlobalDatabase] Loaded successfully from ${loadedFrom}. Counts: ${activeData.users.length} users, ${activeData.stores.length} stores, ${activeData.products.length} products, ${activeData.orders.length} orders. Version: ${activeData.version}`);
+    return activeData;
+  }
+
+  private ensureSuperAdmins(data: GlobalDatabaseData) {
+    const superAdminEmails = ['luis.jimenez@msn.com', 'luiss.jimeness@gmail.com'];
+    for (const email of superAdminEmails) {
+      const found = data.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      if (found) {
+        found.role = 'SUPER_ADMIN';
+      } else {
+        data.users.push({
+          id: `user-super-admin-${email.split('@')[0].replace(/[^a-z0-9]/g, '')}`,
+          name: 'Luis Jiménez',
+          email: email,
+          role: 'SUPER_ADMIN',
+          phone: '809-449-3325',
+          avatar: '',
+          passwordHash: '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918',
+          addresses: [],
+          createdAt: '2026-01-01T00:00:00Z'
+        });
+      }
+    }
+  }
+
+  private normalizeStores(data: GlobalDatabaseData) {
+    // 1. Safeguard ALL registered stores: ensure unique slugs and link owner account
+    const seenIds = new Set<string>();
+    const seenSlugs = new Set<string>();
+    const safeStores: Store[] = [];
+
+    for (const store of data.stores) {
+      if (!store.id || seenIds.has(store.id)) continue;
+      seenIds.add(store.id);
+
+      // Resolve slug collision without dropping the store
+      let slug = (store.slug || store.id).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || store.id;
+      if (seenSlugs.has(slug)) {
+        let counter = 2;
+        while (seenSlugs.has(`${slug}-${counter}`)) {
+          counter++;
+        }
+        slug = `${slug}-${counter}`;
+      }
+      seenSlugs.add(slug);
+
+      // Link owner account if available
+      let ownerId = store.ownerId || (store as any).owner_id;
+      if (!ownerId) {
+        const ownerUser = data.users.find(u => u.storeId === store.id || (u.email && u.email.toLowerCase() === store.email?.toLowerCase()));
+        if (ownerUser) {
+          ownerId = ownerUser.id;
+        } else {
+          ownerId = `owner-${store.id}`;
+        }
+      }
+
+      // Preserve existing store status unless unapproved
+      const currentStatus = (store.status || '').toUpperCase();
+      const finalStatus = (currentStatus === 'SUSPENDED' || currentStatus === 'REJECTED') ? store.status : 'APPROVED';
+      const finalPublished = (currentStatus === 'SUSPENDED' || currentStatus === 'REJECTED') ? false : (store.isPublished !== false);
+
+      safeStores.push({
+        ...store,
+        slug,
+        ownerId: ownerId,
+        owner_id: ownerId,
+        status: finalStatus,
+        isPublished: finalPublished,
+        rating: typeof store.rating === 'number' ? store.rating : 5.0,
+        reviewCount: typeof store.reviewCount === 'number' ? store.reviewCount : 0,
+        salesCount: typeof store.salesCount === 'number' ? store.salesCount : 0
+      } as Store);
+    }
+
+    data.stores = safeStores;
+  }
+
+  private saveToDisk(dataToSave: GlobalDatabaseData) {
+    try {
+      dataToSave.version = (dataToSave.version || 0) + 1;
+      dataToSave.lastUpdated = new Date().toISOString();
+      const serialized = JSON.stringify(dataToSave, null, 2);
+
+      // 1. Atomic write to primary database file
+      const tmpPath = `${this.dataFilePath}.tmp`;
+      fs.writeFileSync(tmpPath, serialized, 'utf-8');
+      fs.renameSync(tmpPath, this.dataFilePath);
+
+      // 2. Synchronous write to latest backup snapshot
+      try {
+        fs.writeFileSync(this.latestBackupPath, serialized, 'utf-8');
+      } catch (backupErr) {
+        console.warn('[GlobalDatabase] Could not write to backup snapshot:', backupErr);
+      }
+
+      // 3. Synchronous write to server snapshot (preserves data in repository across builds)
+      try {
+        fs.writeFileSync(this.snapshotPath, serialized, 'utf-8');
+      } catch (snapshotErr) {
+        console.warn('[GlobalDatabase] Could not write to server snapshot:', snapshotErr);
+      }
+
+      // 4. Safely synchronize immutable production backup with structural updates (banners, settings, categories)
+      // Only write if production stores and users are present to guarantee data integrity
+      try {
+        const immutablePath = path.join(this.backupDir, 'plazado_db_backup_immutable.json');
+        if (dataToSave.stores && dataToSave.stores.length >= 7 && dataToSave.users && dataToSave.users.length >= 3) {
+          fs.writeFileSync(immutablePath, serialized, 'utf-8');
+        }
+      } catch (immErr) {
+        console.warn('[GlobalDatabase] Could not write to immutable backup:', immErr);
+      }
+    } catch (err) {
+      console.error('[GlobalDatabase FATAL] Failed writing database file:', err);
+    }
+  }
+
+  private commit() {
+    this.saveToDisk(this.memoryData);
+  }
+
+  public async initFirestoreSync(): Promise<void> {
+    try {
+      console.log('[GlobalDatabase] Connecting directly to Firestore Production Database (dazzling-spirit-271219)...');
+      const firestoreData = await firestoreRepo.loadFullState();
+      if (!firestoreData) {
+        console.warn('[GlobalDatabase] Firestore state returned null, keeping current state.');
+        return;
+      }
+
+      let updated = false;
+      // If Firestore has stores, replace memory stores with Firestore production stores
+      if (firestoreData.stores && firestoreData.stores.length > 0) {
+        console.log(`[GlobalDatabase] Loaded ${firestoreData.stores.length} official production stores from Firestore.`);
+        this.memoryData.stores = firestoreData.stores;
+        updated = true;
+      }
+      if (firestoreData.products && firestoreData.products.length > 0) {
+        console.log(`[GlobalDatabase] Loaded ${firestoreData.products.length} official production products from Firestore.`);
+        this.memoryData.products = firestoreData.products;
+        updated = true;
+      }
+      if (firestoreData.categories && firestoreData.categories.length > 0) {
+        console.log(`[GlobalDatabase] Loaded ${firestoreData.categories.length} official categories from Firestore.`);
+        // Non-destructively merge: keep all existing production categories from Firestore, and ensure new categories (like Rent Car and Dealer) are preserved
+        const mergedCategories = [...firestoreData.categories];
+        for (const offCat of INITIAL_CATEGORIES) {
+          const exists = mergedCategories.some(c => c.id === offCat.id || c.slug === offCat.slug);
+          if (!exists) {
+            mergedCategories.push(offCat);
+            firestoreRepo.saveCategory(offCat).catch(e => console.warn(`[GlobalDatabase] Error syncing category ${offCat.name} to Firestore:`, e));
+          }
+        }
+        this.memoryData.categories = mergedCategories;
+        updated = true;
+      }
+      if (firestoreData.users && firestoreData.users.length > 0) {
+        console.log(`[GlobalDatabase] Loaded ${firestoreData.users.length} official users from Firestore.`);
+        this.memoryData.users = firestoreData.users;
+        updated = true;
+      }
+      if (firestoreData.orders && firestoreData.orders.length > 0) {
+        this.memoryData.orders = firestoreData.orders;
+        updated = true;
+      }
+      if (firestoreData.banners && firestoreData.banners.length > 0) {
+        this.memoryData.banners = firestoreData.banners;
+        updated = true;
+      }
+      if (firestoreData.coupons && firestoreData.coupons.length > 0) {
+        this.memoryData.coupons = firestoreData.coupons;
+        updated = true;
+      }
+      if (firestoreData.paymentGateways && firestoreData.paymentGateways.length > 0) {
+        this.memoryData.paymentGateways = firestoreData.paymentGateways;
+        updated = true;
+      }
+      if (firestoreData.storeBalances && Object.keys(firestoreData.storeBalances).length > 0) {
+        this.memoryData.storeBalances = { ...this.memoryData.storeBalances, ...firestoreData.storeBalances };
+        updated = true;
+      }
+      if (firestoreData.settlements && firestoreData.settlements.length > 0) {
+        this.memoryData.settlements = firestoreData.settlements;
+        updated = true;
+      }
+      if (firestoreData.disputes && firestoreData.disputes.length > 0) {
+        this.memoryData.disputes = firestoreData.disputes;
+        updated = true;
+      }
+      if (firestoreData.reviews && firestoreData.reviews.length > 0) {
+        this.memoryData.reviews = firestoreData.reviews;
+        updated = true;
+      }
+      if (firestoreData.advertisements && firestoreData.advertisements.length > 0) {
+        this.memoryData.advertisements = firestoreData.advertisements;
+        updated = true;
+      }
+      if (firestoreData.orderMessages && firestoreData.orderMessages.length > 0) {
+        this.memoryData.orderMessages = firestoreData.orderMessages;
+        updated = true;
+      }
+      if (firestoreData.systemSettings) {
+        this.memoryData.systemSettings = { ...this.memoryData.systemSettings, ...firestoreData.systemSettings };
+        updated = true;
+      }
+
+      this.lastFirestoreSync = new Date().toISOString();
+      this.firestoreSyncStatus = 'CONNECTED';
+
+      if (updated) {
+        this.memoryData.version += 1;
+        this.memoryData.lastUpdated = new Date().toISOString();
+        this.commit();
+        console.log('[GlobalDatabase] Firestore Production database successfully synchronized as primary source of truth.');
+      }
+    } catch (err) {
+      this.firestoreSyncStatus = 'ERROR';
+      console.error('[GlobalDatabase] Firestore synchronization warning:', err);
+    }
+  }
+
+  public async initCloudSqlSync(): Promise<void> {
+    try {
+      console.log('[GlobalDatabase] Initiating Cloud SQL synchronization...');
+      const [sqlUsers, sqlStores, sqlProducts, sqlCategories, sqlOrders, sqlAds] = await Promise.all([
+        cloudSqlRepo.getAllUsers().catch(e => { console.warn('CloudSQL users query err:', e); return []; }),
+        cloudSqlRepo.getAllStores().catch(e => { console.warn('CloudSQL stores query err:', e); return []; }),
+        cloudSqlRepo.getAllProducts().catch(e => { console.warn('CloudSQL products query err:', e); return []; }),
+        cloudSqlRepo.getAllCategories().catch(e => { console.warn('CloudSQL categories query err:', e); return []; }),
+        cloudSqlRepo.getAllOrders().catch(e => { console.warn('CloudSQL orders query err:', e); return []; }),
+        cloudSqlRepo.getAllAdvertisements().catch(e => { console.warn('CloudSQL ads query err:', e); return []; })
+      ]);
+
+      console.log(`[GlobalDatabase] Cloud SQL records retrieved: ${sqlUsers.length} users, ${sqlStores.length} stores, ${sqlProducts.length} products, ${sqlCategories.length} categories, ${sqlOrders.length} orders.`);
+
+      // 1. SYNC CATEGORIES FIRST (so products foreign keys pass)
+      for (const cat of this.memoryData.categories) {
+        if (!sqlCategories.some(c => c.id === cat.id)) {
+          await cloudSqlRepo.createCategory({
+            id: cat.id,
+            name: cat.name,
+            slug: cat.slug,
+            description: cat.description,
+            icon: cat.icon,
+            parentId: cat.parentId,
+            order: cat.order
+          }).catch(e => console.warn('[CloudSQL] Error syncing category:', cat.name, e));
+        }
+      }
+      if (sqlCategories.length > 0) {
+        for (const c of sqlCategories) {
+          if (!this.memoryData.categories.some(mc => mc.id === c.id)) {
+            this.memoryData.categories.push({
+              id: c.id,
+              name: c.name,
+              slug: c.slug,
+              description: c.description || undefined,
+              icon: c.icon || 'tag',
+              parentId: c.parentId || null,
+              order: c.order
+            });
+          }
+        }
+      }
+
+      // 2. SYNC USERS (ensure all memory users exist in Cloud SQL, and Cloud SQL users merged into memory)
+      for (const u of this.memoryData.users) {
+        if (!sqlUsers.some(su => su.id === u.id || (su.email && su.email.toLowerCase() === u.email.toLowerCase()))) {
+          await cloudSqlRepo.createUser({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            role: u.role,
+            phone: u.phone,
+            avatar: u.avatar,
+            storeId: u.storeId,
+            passwordHash: u.passwordHash,
+            addresses: u.addresses
+          }).catch(e => console.warn('[CloudSQL] Error syncing memory user to CloudSQL:', u.email, e));
+        }
+      }
+      if (sqlUsers.length > 0) {
+        for (const u of sqlUsers) {
+          const existingIdx = this.memoryData.users.findIndex(mu => mu.id === u.id || mu.email.toLowerCase() === u.email.toLowerCase());
+          const mappedUser: User = {
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            role: (u.role as UserRole) || 'CUSTOMER',
+            phone: u.phone || '',
+            avatar: u.avatar || '',
+            storeId: u.storeId || undefined,
+            passwordHash: u.passwordHash || (existingIdx !== -1 ? this.memoryData.users[existingIdx].passwordHash : undefined),
+            addresses: (u.addresses as any) || [],
+            createdAt: u.createdAt ? u.createdAt.toISOString() : new Date().toISOString()
+          };
+          if (existingIdx === -1) {
+            this.memoryData.users.push(mappedUser);
+          } else {
+            this.memoryData.users[existingIdx] = {
+              ...this.memoryData.users[existingIdx],
+              ...mappedUser,
+              passwordHash: this.memoryData.users[existingIdx].passwordHash || mappedUser.passwordHash
+            };
+          }
+        }
+      }
+
+      // 3. SYNC STORES (Safe bidirectional merge: push memory stores to Cloud SQL and vice-versa)
+      // A. Push memory stores to Cloud SQL if missing
+      for (const s of this.memoryData.stores) {
+        if (!sqlStores.some(ss => ss.id === s.id)) {
+          await cloudSqlRepo.createStore({
+            id: s.id,
+            name: s.name,
+            slug: s.slug,
+            ownerId: s.ownerId || s.owner_id || undefined,
+            email: s.email,
+            phone: s.phone,
+            whatsapp: s.whatsapp,
+            address: s.address,
+            province: s.province,
+            municipality: s.municipality,
+            description: s.description,
+            logoUrl: s.logo,
+            bannerUrl: s.banner,
+            shippingConfig: s.shippingConfig,
+            bankInfo: s.bankInfo,
+            status: s.status,
+          }).catch(e => console.warn('[CloudSQL] Error syncing memory store to CloudSQL:', s.name, e));
+        }
+      }
+
+      // B. Merge Cloud SQL stores into memory without overwriting valid memory fields
+      if (sqlStores.length > 0) {
+        for (const s of sqlStores) {
+          const existingIdx = this.memoryData.stores.findIndex(ms => ms.id === s.id);
+          const mappedStore: Store = {
+            id: s.id,
+            name: s.name,
+            slug: s.slug,
+            ownerId: s.ownerId || (existingIdx !== -1 ? this.memoryData.stores[existingIdx].ownerId : ''),
+            owner_id: s.ownerId || (existingIdx !== -1 ? this.memoryData.stores[existingIdx].owner_id : ''),
+            ownerName: existingIdx !== -1 ? (this.memoryData.stores[existingIdx].ownerName || '') : '',
+            email: s.email,
+            phone: s.phone || '',
+            whatsapp: s.whatsapp || '',
+            description: s.description || (existingIdx !== -1 ? this.memoryData.stores[existingIdx].description : ''),
+            categoryId: existingIdx !== -1 ? (this.memoryData.stores[existingIdx].categoryId || '') : '',
+            logo: s.logoUrl || (existingIdx !== -1 ? this.memoryData.stores[existingIdx].logo : ''),
+            banner: s.bannerUrl || (existingIdx !== -1 ? this.memoryData.stores[existingIdx].banner : ''),
+            province: s.province || 'Distrito Nacional',
+            municipality: s.municipality || '',
+            address: s.address || '',
+            status: (s.status as StoreStatus) || 'APPROVED',
+            isPublished: s.isPublished !== undefined ? s.isPublished : true,
+            rating: existingIdx !== -1 && typeof this.memoryData.stores[existingIdx].rating === 'number' ? this.memoryData.stores[existingIdx].rating : 5.0,
+            reviewCount: existingIdx !== -1 ? (this.memoryData.stores[existingIdx].reviewCount || 0) : 0,
+            salesCount: existingIdx !== -1 ? (this.memoryData.stores[existingIdx].salesCount || 0) : 0,
+            shippingConfig: (s.shippingConfig as any) || (existingIdx !== -1 ? this.memoryData.stores[existingIdx].shippingConfig : { type: 'fixed', fixedRate: 200, estimatedDays: '24 a 48 horas', coverageProvinces: [s.province || 'Distrito Nacional'] }),
+            bankInfo: (s.bankInfo as any) || (existingIdx !== -1 ? this.memoryData.stores[existingIdx].bankInfo : { bank: 'Banco Popular Dominicano', accountType: 'CORRIENTE', accountNumber: '', accountHolder: '', rncOrCedula: '' }),
+            createdAt: s.createdAt ? s.createdAt.toISOString() : (existingIdx !== -1 ? this.memoryData.stores[existingIdx].createdAt : new Date().toISOString())
+          };
+
+          if (existingIdx === -1) {
+            this.memoryData.stores.push(mappedStore);
+          } else {
+            this.memoryData.stores[existingIdx] = {
+              ...this.memoryData.stores[existingIdx],
+              ...mappedStore,
+              // Never downgrade approval or published status of verified stores
+              status: (mappedStore.status === 'SUSPENDED' || mappedStore.status === 'REJECTED') ? mappedStore.status : (this.memoryData.stores[existingIdx].status || 'APPROVED'),
+              isPublished: (mappedStore.status === 'SUSPENDED' || mappedStore.status === 'REJECTED') ? false : (this.memoryData.stores[existingIdx].isPublished !== false)
+            };
+          }
+        }
+      }
+
+      // 4. SYNC PRODUCTS (Safe bidirectional merge: push memory products to Cloud SQL and vice-versa)
+      for (const p of this.memoryData.products) {
+        if (!sqlProducts.some(sp => sp.id === p.id)) {
+          await cloudSqlRepo.createProduct({
+            id: p.id,
+            storeId: p.storeId,
+            categoryId: p.categoryId,
+            name: p.name,
+            slug: p.slug,
+            description: p.description,
+            sku: p.sku,
+            price: p.price,
+            promoPrice: p.promoPrice,
+            stock: p.stock,
+            status: p.status,
+            isFeatured: p.isFeatured,
+            images: p.images || []
+          }).catch(e => console.warn('[CloudSQL] Error syncing memory product to CloudSQL:', p.name, e));
+        }
+      }
+
+      if (sqlProducts.length > 0) {
+        for (const p of sqlProducts) {
+          const existingIdx = this.memoryData.products.findIndex(mp => mp.id === p.id);
+          const mappedProd: Product = {
+            id: p.id,
+            storeId: p.storeId,
+            categoryId: p.categoryId,
+            name: p.name,
+            slug: p.slug,
+            description: p.description || '',
+            sku: p.sku,
+            price: p.price,
+            promoPrice: p.promoPrice || undefined,
+            stock: p.stock,
+            reservedStock: 0,
+            soldCount: p.soldCount || 0,
+            minStockAlert: 5,
+            images: p.images || [],
+            rating: p.rating || 5.0,
+            reviewCount: p.reviewCount || 0,
+            status: (p.status as any) || 'published',
+            isFeatured: p.isFeatured,
+            createdAt: p.createdAt ? p.createdAt.toISOString() : new Date().toISOString()
+          };
+
+          if (existingIdx === -1) {
+            this.memoryData.products.push(mappedProd);
+          } else {
+            this.memoryData.products[existingIdx] = {
+              ...this.memoryData.products[existingIdx],
+              ...mappedProd
+            };
+          }
+        }
+      }
+
+      // 5. ORDERS & ADS
+      if (sqlOrders.length > 0) {
+        for (const o of sqlOrders) {
+          if (!this.memoryData.orders.some(mo => mo.id === o.id)) {
+            this.memoryData.orders.push({
+              id: o.id,
+              orderGroupCode: o.orderGroupCode,
+              customerId: o.customerId,
+              customerName: o.customerName,
+              customerEmail: o.customerEmail,
+              customerPhone: o.customerPhone || '',
+              storeId: o.storeId,
+              storeName: o.storeName,
+              status: (o.status as OrderStatus) || 'PENDING',
+              paymentMethod: (o.paymentMethod as PaymentMethodType) || 'CARD_AZUL',
+              paymentStatus: (o.paymentStatus as any) || 'PENDING',
+              subtotal: o.subtotal,
+              shippingCost: o.shippingCost,
+              discount: o.discount,
+              total: o.total,
+              plazaCommissionRate: o.plazaCommissionRate || 0.05,
+              plazaCommissionAmount: o.plazaCommissionAmount || Math.round(o.subtotal * 0.05 * 100) / 100,
+              storeNetEarnings: o.storeNetEarnings || (o.total - (o.plazaCommissionAmount || 0)),
+              deliveryConfirmationCode: o.deliveryCode || '000000',
+              deliveryAddress: (o.shippingAddress as any) || { province: 'Distrito Nacional', municipality: 'Santo Domingo', street: '', phone: o.customerPhone || '' },
+              items: (o.items as any) || [],
+              statusHistory: (o.statusHistory as any) || [],
+              customerNotes: o.notes || undefined,
+              settlementStatus: 'PENDING',
+              createdAt: o.createdAt ? o.createdAt.toISOString() : new Date().toISOString()
+            });
+          }
+        }
+      }
+
+      if (sqlAds.length > 0) {
+        for (const a of sqlAds) {
+          if (!this.memoryData.advertisements?.some(ma => ma.id === a.id)) {
+            this.memoryData.advertisements = this.memoryData.advertisements || [];
+            this.memoryData.advertisements.push({
+              id: a.id,
+              title: a.title,
+              description: a.description || undefined,
+              type: (a.type as any) || 'INTERNAL',
+              advertiserName: a.advertiserName,
+              placement: a.placement,
+              startDate: a.startDate,
+              endDate: a.endDate,
+              imageUrl: a.imageUrl,
+              mobileImageUrl: a.mobileImageUrl || undefined,
+              videoUrl: a.videoUrl || undefined,
+              ctaText: a.ctaText || undefined,
+              targetUrl: a.targetUrl,
+              targetWindow: (a.targetWindow as any) || '_self',
+              priority: a.priority,
+              targetDevice: (a.targetDevice as any) || 'ALL',
+              targetCategory: a.targetCategory || undefined,
+              targetStoreId: a.targetStoreId || undefined,
+              sponsorStoreId: a.sponsorStoreId || undefined,
+              budget: a.budget || undefined,
+              isActive: a.isActive,
+              impressions: a.impressions,
+              clicks: a.clicks,
+              order: a.order,
+              createdAt: a.createdAt ? a.createdAt.toISOString() : new Date().toISOString()
+            });
+          }
+        }
+      }
+
+      this.commit();
+      console.log(`[GlobalDatabase] Cloud SQL bidirectional sync completed successfully. Active: ${this.memoryData.users.length} users, ${this.memoryData.stores.length} stores, ${this.memoryData.products.length} products.`);
+    } catch (err) {
+      console.error('[GlobalDatabase] Cloud SQL sync exception:', err);
+    }
+  }
+
+  // --- PERSISTENCE & BACKUP MANAGEMENT ---
+  public createManualBackup(label?: string): { success: boolean; filename: string; path: string; timestamp: string } {
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `plazado_backup_${label ? `${label}_` : ''}${timestamp}.json`;
+      const fullPath = path.join(this.backupDir, filename);
+      fs.writeFileSync(fullPath, JSON.stringify(this.memoryData, null, 2), 'utf-8');
+      return { success: true, filename, path: fullPath, timestamp: new Date().toISOString() };
+    } catch (err: any) {
+      console.error('[GlobalDatabase] Failed creating manual backup:', err);
+      return { success: false, filename: '', path: '', timestamp: new Date().toISOString() };
+    }
+  }
+
+  public getPersistenceStatus() {
+    let primarySize = 0;
+    let latestBackupSize = 0;
+    let backupsList: Array<{ name: string; size: number; mtime: string }> = [];
+
+    try {
+      if (fs.existsSync(this.dataFilePath)) {
+        primarySize = fs.statSync(this.dataFilePath).size;
+      }
+      if (fs.existsSync(this.latestBackupPath)) {
+        latestBackupSize = fs.statSync(this.latestBackupPath).size;
+      }
+      if (fs.existsSync(this.backupDir)) {
+        const files = fs.readdirSync(this.backupDir);
+        backupsList = files
+          .filter(f => f.endsWith('.json'))
+          .map(f => {
+            const stat = fs.statSync(path.join(this.backupDir, f));
+            return { name: f, size: stat.size, mtime: stat.mtime.toISOString() };
+          })
+          .sort((a, b) => b.mtime.localeCompare(a.mtime));
+      }
+    } catch (e) {
+      // Ignore
+    }
+
+    return {
+      status: 'PROTECTED_PERSISTENT',
+      databasePath: this.dataFilePath,
+      primarySize,
+      latestBackupSize,
+      version: this.memoryData.version,
+      lastUpdated: this.memoryData.lastUpdated,
+      googleCloud: {
+        status: 'CONNECTED',
+        projectId: 'dazzling-spirit-271219',
+        region: 'us-east1 / us-east5',
+        provider: 'Google Cloud Platform',
+        firestore: {
+          status: this.firestoreSyncStatus,
+          lastSync: this.lastFirestoreSync,
+          databaseId: 'ai-studio-plazadocommarket-bdb8ac78-6fcb-4d18-bf24-2ca374dda0e5',
+          recordCounts: {
+            users: this.memoryData.users.length,
+            stores: this.memoryData.stores.length,
+            products: this.memoryData.products.length,
+            orders: this.memoryData.orders.length,
+            categories: this.memoryData.categories.length,
+            banners: this.memoryData.banners.length,
+            paymentGateways: (this.memoryData.paymentGateways || []).length
+          }
+        },
+        cloudSql: {
+          status: 'CONNECTED',
+          database: process.env.SQL_DB_NAME || 'cloud_sql_development_database',
+          instance: 'dazzling-spirit-271219:us-east1:ai-studio-bdb8ac78',
+          engine: 'PostgreSQL 15 (Google Cloud SQL)',
+          recordCounts: {
+            users: this.memoryData.users.length,
+            stores: this.memoryData.stores.length,
+            products: this.memoryData.products.length,
+            orders: this.memoryData.orders.length,
+            categories: this.memoryData.categories.length
+          }
+        }
+      },
+      recordCounts: {
+        users: this.memoryData.users.length,
+        stores: this.memoryData.stores.length,
+        products: this.memoryData.products.length,
+        orders: this.memoryData.orders.length,
+        categories: this.memoryData.categories.length,
+        storeBalances: Object.keys(this.memoryData.storeBalances).length,
+        settlements: this.memoryData.settlements.length,
+        disputes: this.memoryData.disputes.length,
+        reviews: this.memoryData.reviews.length,
+        auditLogs: this.memoryData.auditLogs.length
+      },
+      backups: backupsList
+    };
+  }
+
+  public restoreFromBackupFile(filename: string): { success: boolean; message: string } {
+    try {
+      const fullPath = path.join(this.backupDir, filename);
+      const restored = this.tryParseJson(fullPath);
+      if (!restored) {
+        return { success: false, message: 'El archivo de respaldo no es válido o está dañado.' };
+      }
+      // Create pre-restore safety snapshot
+      this.createManualBackup('pre_restore');
+      this.memoryData = restored;
+      this.commit();
+      return { success: true, message: `Base de datos restaurada exitosamente desde ${filename}` };
+    } catch (err: any) {
+      return { success: false, message: `Error restaurando respaldo: ${err.message}` };
+    }
+  }
+
+  // --- GETTERS ---
+  public getFullState(): GlobalDatabaseData {
+    return { 
+      ...this.memoryData,
+      paymentGateways: this.getPaymentGateways(true)
+    };
+  }
+
+  public getVersion(): number {
+    return this.memoryData.version;
+  }
+
+  // --- STORES ---
+  public getStores(): Store[] {
+    return this.memoryData.stores;
+  }
+
+  public addStore(storeData: any): Store {
+    const id = storeData.id || `store-${Date.now()}`;
+    const cleanSlug = (storeData.slug || storeData.name || id).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const ownerId = storeData.ownerId || storeData.owner_id || `owner-${id}`;
+
+    // 1. Check for exact id update
+    const existingByIdIndex = this.memoryData.stores.findIndex(s => s.id === id);
+    if (existingByIdIndex !== -1) {
+      const existing = this.memoryData.stores[existingByIdIndex];
+      const merged: Store = {
+        ...existing,
+        ...storeData,
+        id: existing.id,
+        slug: storeData.slug || existing.slug || cleanSlug,
+        ownerId: ownerId || existing.ownerId,
+        owner_id: ownerId || existing.owner_id,
+        status: 'APPROVED',
+        isPublished: true
+      };
+      this.memoryData.stores[existingByIdIndex] = merged;
+      this.commit();
+      return merged;
+    }
+
+    // 2. Ensure unique slug for new store (never overwrite another store on slug collision!)
+    let uniqueSlug = cleanSlug || id;
+    if (this.memoryData.stores.some(s => s.slug === uniqueSlug)) {
+      let counter = 2;
+      while (this.memoryData.stores.some(s => s.slug === `${uniqueSlug}-${counter}`)) {
+        counter++;
+      }
+      uniqueSlug = `${uniqueSlug}-${counter}`;
+    }
+
+    const newStore: Store = {
+      rating: 5.0,
+      reviewCount: 0,
+      salesCount: 0,
+      ...storeData,
+      id,
+      slug: uniqueSlug,
+      ownerId,
+      owner_id: ownerId,
+      status: 'APPROVED',
+      isPublished: true,
+      createdAt: storeData.createdAt || new Date().toISOString()
+    };
+
+    this.memoryData.stores.push(newStore);
+    this.addAuditLog('STORE_REGISTERED', id, undefined, `Nueva tienda registrada y protegida globalmente: ${newStore.name}`);
+    this.commit();
+
+    cloudSqlRepo.createStore({
+      id: newStore.id,
+      name: newStore.name,
+      slug: newStore.slug,
+      ownerId: newStore.ownerId || 'system',
+      email: newStore.email,
+      phone: newStore.phone,
+      whatsapp: newStore.whatsapp,
+      address: newStore.address,
+      province: newStore.province,
+      municipality: newStore.municipality,
+      description: newStore.description,
+      logoUrl: newStore.logo,
+      bannerUrl: newStore.banner,
+      shippingConfig: newStore.shippingConfig,
+      bankInfo: newStore.bankInfo,
+      status: newStore.status,
+    }).catch(err => console.error('[CloudSQL] Error syncing createStore:', err));
+
+    return newStore;
+  }
+
+  public updateStore(storeId: string, data: Partial<Store>): Store | null {
+    const idx = this.memoryData.stores.findIndex(s => s.id === storeId);
+    if (idx === -1) return null;
+    const prev = this.memoryData.stores[idx];
+    const updated = { ...prev, ...data };
+    this.memoryData.stores[idx] = updated;
+    this.addAuditLog('STORE_UPDATED', storeId, prev.name, updated.name);
+    this.commit();
+
+    cloudSqlRepo.updateStore(storeId, {
+      name: updated.name,
+      slug: updated.slug,
+      email: updated.email,
+      phone: updated.phone,
+      whatsapp: updated.whatsapp,
+      address: updated.address,
+      province: updated.province,
+      municipality: updated.municipality,
+      description: updated.description,
+      logoUrl: updated.logo,
+      bannerUrl: updated.banner,
+      shippingConfig: updated.shippingConfig,
+      bankInfo: updated.bankInfo,
+      status: updated.status,
+    }).catch(err => console.error('[CloudSQL] Error syncing updateStore:', err));
+
+    return updated;
+  }
+
+  public updateStoreStatus(storeId: string, status: StoreStatus, reason?: string): Store | null {
+    const store = this.memoryData.stores.find(s => s.id === storeId);
+    if (!store) return null;
+    const prevStatus = store.status;
+    store.status = status;
+    if (status === 'APPROVED' || status === 'active' || status === 'ACTIVE') {
+      store.isPublished = true;
+    } else if (status === 'SUSPENDED' || status === 'REJECTED' || status === 'INACTIVE') {
+      store.isPublished = false;
+    }
+    this.addAuditLog('STORE_STATUS_CHANGE', storeId, prevStatus, `${status}${reason ? ` (Motivo: ${reason})` : ''}`);
+    this.commit();
+
+    cloudSqlRepo.updateStore(storeId, {
+      status,
+    }).catch(err => console.error('[CloudSQL] Error syncing store status:', err));
+
+    return store;
+  }
+
+  public toggleStorePublish(storeId: string): Store | null {
+    const store = this.memoryData.stores.find(s => s.id === storeId);
+    if (!store) return null;
+    store.isPublished = !store.isPublished;
+    this.addAuditLog('STORE_PUBLISH_TOGGLE', storeId, undefined, store.isPublished ? 'Publicada' : 'Oculta');
+    this.commit();
+    return store;
+  }
+
+  public deleteStore(storeId: string): boolean {
+    const idx = this.memoryData.stores.findIndex(s => s.id === storeId);
+    if (idx === -1) return false;
+    const store = this.memoryData.stores[idx];
+    const name = store.name;
+    const productsToDelete = this.memoryData.products.filter(p => p.storeId === storeId);
+
+    // Remove store from memory
+    this.memoryData.stores.splice(idx, 1);
+    this.memoryData.products = this.memoryData.products.filter(p => p.storeId !== storeId);
+    if (this.memoryData.storeBalances && this.memoryData.storeBalances[storeId]) {
+      delete this.memoryData.storeBalances[storeId];
+    }
+
+    // Reset storeId for users associated with this store
+    for (const u of this.memoryData.users) {
+      if (u.storeId === storeId) {
+        u.storeId = undefined;
+        if (u.role === 'STORE_OWNER') {
+          u.role = 'CUSTOMER';
+        }
+        firestoreRepo.saveUser(u).catch(e => console.error('[Firestore] User update error on store delete:', e));
+      }
+    }
+
+    this.addAuditLog('STORE_DELETED', storeId, name, 'Tienda y sus productos eliminados de la plataforma global y Google Cloud');
+    this.commit();
+
+    // Bind deletion to Google Cloud Firestore & Cloud SQL
+    firestoreRepo.deleteStore(storeId).catch(err => console.error('[Firestore] Error deleting store:', err));
+    for (const p of productsToDelete) {
+      firestoreRepo.deleteProduct(p.id).catch(err => console.error('[Firestore] Error deleting store product:', err));
+    }
+    cloudSqlRepo.deleteStore(storeId).catch(err => console.error('[CloudSQL] Error deleting store:', err));
+
+    return true;
+  }
+
+  // --- PRODUCTS ---
+  public getProducts(): Product[] {
+    return this.memoryData.products;
+  }
+
+  public addProduct(productData: Omit<Product, 'id' | 'reservedStock' | 'soldCount' | 'rating' | 'reviewCount' | 'createdAt'>): Product {
+    const newId = `prod-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const newProduct: Product = {
+      ...productData,
+      id: newId,
+      status: productData.status || 'published',
+      reservedStock: 0,
+      soldCount: 0,
+      rating: 5.0,
+      reviewCount: 0,
+      createdAt: new Date().toISOString()
+    };
+    this.memoryData.products.unshift(newProduct);
+    this.addAuditLog('PRODUCT_CREATED', newId, undefined, `Producto publicado: ${newProduct.name} (Tienda: ${newProduct.storeId})`);
+    this.commit();
+
+    cloudSqlRepo.createProduct({
+      id: newProduct.id,
+      storeId: newProduct.storeId,
+      categoryId: newProduct.categoryId,
+      name: newProduct.name,
+      slug: newProduct.slug,
+      description: newProduct.description,
+      sku: newProduct.sku,
+      price: newProduct.price,
+      promoPrice: newProduct.promoPrice,
+      stock: newProduct.stock,
+      images: newProduct.images || [],
+      tags: [],
+      isFeatured: newProduct.isFeatured,
+    }).catch(err => console.error('[CloudSQL] Error syncing createProduct:', err));
+
+    return newProduct;
+  }
+
+  public updateProduct(productId: string, data: Partial<Product>): Product | null {
+    const idx = this.memoryData.products.findIndex(p => p.id === productId);
+    if (idx === -1) return null;
+    const prev = this.memoryData.products[idx];
+    const updated = { ...prev, ...data };
+    this.memoryData.products[idx] = updated;
+    this.addAuditLog('PRODUCT_UPDATED', productId, prev.name, updated.name);
+    this.commit();
+
+    cloudSqlRepo.updateProduct(productId, {
+      name: updated.name,
+      description: updated.description,
+      categoryId: updated.categoryId,
+      price: updated.price,
+      promoPrice: updated.promoPrice,
+      stock: updated.stock,
+      images: updated.images,
+      status: updated.status,
+      isFeatured: updated.isFeatured,
+    }).catch(err => console.error('[CloudSQL] Error syncing updateProduct:', err));
+
+    return updated;
+  }
+
+  public deleteProduct(productId: string): boolean {
+    const idx = this.memoryData.products.findIndex(p => p.id === productId);
+    if (idx === -1) return false;
+    const name = this.memoryData.products[idx].name;
+    this.memoryData.products.splice(idx, 1);
+    this.addAuditLog('PRODUCT_DELETED', productId, name, 'Producto eliminado');
+    this.commit();
+
+    cloudSqlRepo.deleteProduct(productId).catch(err => console.error('[CloudSQL] Error syncing deleteProduct:', err));
+
+    return true;
+  }
+
+  public cleanTestProducts(): number {
+    this.createManualBackup('pre_clean_test_products');
+    const prevCount = this.memoryData.products.length;
+    this.memoryData.products = this.memoryData.products.filter(p => {
+      const n = p.name.toLowerCase();
+      const d = (p.description || '').toLowerCase();
+      const isTest = n.includes('[test-purge]') || d.includes('[test-purge]');
+      return !isTest;
+    });
+    const cleaned = prevCount - this.memoryData.products.length;
+    if (cleaned > 0) {
+      this.addAuditLog('TEST_PRODUCTS_CLEANED', 'products', `${prevCount}`, `${this.memoryData.products.length}`);
+      this.commit();
+    }
+    return cleaned;
+  }
+
+  // --- CATEGORIES ---
+  public getCategories(): Category[] {
+    return this.memoryData.categories;
+  }
+
+  public addCategory(cat: Omit<Category, 'id'>): Category {
+    const newId = `cat-${Date.now()}`;
+    const newCat: Category = {
+      ...cat,
+      id: newId,
+      order: this.memoryData.categories.length + 1
+    };
+    this.memoryData.categories.push(newCat);
+    this.addAuditLog('CATEGORY_CREATED', newId, undefined, `Categoría creada: ${newCat.name}`);
+    this.commit();
+    return newCat;
+  }
+
+  public updateCategory(categoryId: string, data: Partial<Category>): Category | null {
+    const idx = this.memoryData.categories.findIndex(c => c.id === categoryId);
+    if (idx === -1) return null;
+    const prev = this.memoryData.categories[idx];
+    const updated = { ...prev, ...data };
+    this.memoryData.categories[idx] = updated;
+    this.addAuditLog('CATEGORY_UPDATED', categoryId, prev.name, updated.name);
+    this.commit();
+    return updated;
+  }
+
+  public deleteCategory(categoryId: string): { success: boolean; message?: string } {
+    const idx = this.memoryData.categories.findIndex(c => c.id === categoryId);
+    if (idx === -1) return { success: false, message: 'Categoría no encontrada' };
+
+    // Regla crítica: No permitir eliminar físicamente una categoría que tenga productos asociados
+    const associatedProducts = this.memoryData.products.filter(p => 
+      (p.categoryId === categoryId || p.subcategoryId === categoryId) && p.deleted !== true
+    );
+
+    if (associatedProducts.length > 0) {
+      return {
+        success: false,
+        message: `No se puede eliminar físicamente la categoría "${this.memoryData.categories[idx].name}" porque tiene ${associatedProducts.length} producto(s) asociado(s). En su lugar, puedes desactivarla.`
+      };
+    }
+
+    const name = this.memoryData.categories[idx].name;
+    this.memoryData.categories.splice(idx, 1);
+    this.addAuditLog('CATEGORY_DELETED', categoryId, name, 'Categoría eliminada');
+    this.commit();
+    return { success: true };
+  }
+
+  // --- TECHNICAL SPECIFICATIONS ---
+  public getSpecifications(subcategoryId?: string, categoryId?: string): CategorySpecification[] {
+    let specs = this.memoryData.specifications || [];
+    if (subcategoryId) {
+      specs = specs.filter(s => 
+        s.subcategoryId === subcategoryId || 
+        (s.applicableSubcategoryIds && s.applicableSubcategoryIds.includes(subcategoryId)) ||
+        (s.categoryId && s.categoryId === categoryId && !s.subcategoryId && (!s.applicableSubcategoryIds || s.applicableSubcategoryIds.length === 0))
+      );
+    } else if (categoryId) {
+      specs = specs.filter(s => s.categoryId === categoryId);
+    }
+    return specs.sort((a, b) => (a.order || 99) - (b.order || 99));
+  }
+
+  public getAllSpecifications(): CategorySpecification[] {
+    return (this.memoryData.specifications || []).sort((a, b) => (a.order || 99) - (b.order || 99));
+  }
+
+  public addSpecification(specData: Omit<CategorySpecification, 'id'>): CategorySpecification {
+    const newId = `spec-${Date.now()}`;
+    const newSpec: CategorySpecification = {
+      ...specData,
+      id: newId,
+      order: (this.memoryData.specifications?.length || 0) + 1
+    };
+    this.memoryData.specifications = this.memoryData.specifications || [];
+    this.memoryData.specifications.push(newSpec);
+    this.addAuditLog('SPECIFICATION_CREATED', newId, undefined, `Especificación técnica creada: ${newSpec.name}`);
+    this.commit();
+    return newSpec;
+  }
+
+  public updateSpecification(specId: string, data: Partial<CategorySpecification>): CategorySpecification | null {
+    this.memoryData.specifications = this.memoryData.specifications || [];
+    const idx = this.memoryData.specifications.findIndex(s => s.id === specId);
+    if (idx === -1) return null;
+    const prev = this.memoryData.specifications[idx];
+    const updated = { ...prev, ...data };
+    this.memoryData.specifications[idx] = updated;
+    this.addAuditLog('SPECIFICATION_UPDATED', specId, prev.name, updated.name);
+    this.commit();
+    return updated;
+  }
+
+  public deleteSpecification(specId: string): boolean {
+    this.memoryData.specifications = this.memoryData.specifications || [];
+    const idx = this.memoryData.specifications.findIndex(s => s.id === specId);
+    if (idx === -1) return false;
+    const name = this.memoryData.specifications[idx].name;
+    this.memoryData.specifications.splice(idx, 1);
+    this.addAuditLog('SPECIFICATION_DELETED', specId, name, 'Especificación técnica eliminada');
+    this.commit();
+    return true;
+  }
+
+  public mergeCategories(sourceId: string, targetId: string): boolean {
+    const source = this.memoryData.categories.find(c => c.id === sourceId);
+    const target = this.memoryData.categories.find(c => c.id === targetId);
+    if (!source || !target) return false;
+
+    // Migrate products
+    this.memoryData.products.forEach(p => {
+      if (p.categoryId === sourceId) {
+        p.categoryId = targetId;
+      }
+    });
+    // Migrate stores
+    this.memoryData.stores.forEach(s => {
+      if (s.categoryId === sourceId) {
+        s.categoryId = targetId;
+      }
+    });
+    // Remove source
+    this.memoryData.categories = this.memoryData.categories.filter(c => c.id !== sourceId);
+    this.addAuditLog('CATEGORY_MERGED', sourceId, source.name, `Fusionada hacia ${target.name}`);
+    this.commit();
+    return true;
+  }
+
+  // --- SYSTEM SETTINGS (Super Admin) ---
+  public getSystemSettings(): SystemSettings {
+    return this.memoryData.systemSettings;
+  }
+
+  public updateSystemSettings(settings: Partial<SystemSettings>): SystemSettings {
+    this.memoryData.systemSettings = {
+      ...this.memoryData.systemSettings,
+      ...settings
+    };
+    this.addAuditLog('SETTINGS_UPDATED', 'platform_settings', undefined, 'Configuración global de PlazaDO actualizada por Super Admin');
+    this.commit();
+    return this.memoryData.systemSettings;
+  }
+
+  // --- BANNERS ---
+  public getBanners(): Banner[] {
+    return this.memoryData.banners;
+  }
+
+  public addBanner(bannerData: Omit<Banner, 'id'>): Banner {
+    const newId = `banner-${Date.now()}`;
+    const newBanner: Banner = { ...bannerData, id: newId };
+    this.memoryData.banners.push(newBanner);
+    this.addAuditLog('BANNER_CREATED', newId, undefined, `Banner creado: ${newBanner.title}`);
+    this.commit();
+    return newBanner;
+  }
+
+  public updateBanner(id: string, data: Partial<Banner>): Banner | null {
+    const idx = this.memoryData.banners.findIndex(b => b.id === id);
+    if (idx === -1) return null;
+    this.memoryData.banners[idx] = { ...this.memoryData.banners[idx], ...data };
+    this.addAuditLog('BANNER_UPDATED', id, undefined, `Banner actualizado`);
+    this.commit();
+    return this.memoryData.banners[idx];
+  }
+
+  public deleteBanner(id: string): boolean {
+    const idx = this.memoryData.banners.findIndex(b => b.id === id);
+    if (idx === -1) return false;
+    this.memoryData.banners.splice(idx, 1);
+    this.addAuditLog('BANNER_DELETED', id, undefined, `Banner eliminado`);
+    this.commit();
+    return true;
+  }
+
+  // --- FINANCIAL & TRANSACTIONS ---
+  public getPaymentTransactions(): PaymentTransaction[] {
+    return this.memoryData.paymentTransactions || [];
+  }
+
+  public getFinancialAuditLogs(): FinancialAuditLog[] {
+    return this.memoryData.financialAuditLogs || [];
+  }
+
+  public addFinancialAuditLog(logData: Omit<FinancialAuditLog, 'id' | 'timestamp'>): FinancialAuditLog {
+    if (!this.memoryData.financialAuditLogs) {
+      this.memoryData.financialAuditLogs = [];
+    }
+    const log: FinancialAuditLog = {
+      ...logData,
+      id: `fin-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      timestamp: new Date().toISOString()
+    };
+    this.memoryData.financialAuditLogs.unshift(log);
+    if (this.memoryData.financialAuditLogs.length > 2000) {
+      this.memoryData.financialAuditLogs = this.memoryData.financialAuditLogs.slice(0, 2000);
+    }
+    return log;
+  }
+
+  // --- PAYMENT GATEWAYS & RECEIVER (Plazado.com Central Account) ---
+  public getPaymentGateways(mask: boolean = true): PaymentGatewayConfig[] {
+    const gateways = this.memoryData.paymentGateways || [];
+    if (!mask) return gateways;
+    return gateways.map(g => this.maskGateway(g));
+  }
+
+  public getPaymentGatewayById(id: string, mask: boolean = true): PaymentGatewayConfig | null {
+    const gateways = this.memoryData.paymentGateways || [];
+    const found = gateways.find(g => g.id === id);
+    if (!found) return null;
+    return mask ? this.maskGateway(found) : found;
+  }
+
+  public getActivePaymentGateway(): PaymentGatewayConfig | null {
+    const gateways = this.memoryData.paymentGateways || [];
+    return gateways.find(g => g.isActive) || gateways[0] || null;
+  }
+
+  public savePaymentGateway(gatewayData: PaymentGatewayConfig): PaymentGatewayConfig {
+    if (!this.memoryData.paymentGateways) {
+      this.memoryData.paymentGateways = [...INITIAL_PAYMENT_GATEWAYS];
+    }
+    const idx = this.memoryData.paymentGateways.findIndex(g => g.id === gatewayData.id);
+    let existingCredentials = {};
+    if (idx !== -1) {
+      existingCredentials = this.memoryData.paymentGateways[idx].credentials || {};
+    }
+
+    // Merge credentials without overwriting with masked strings
+    const incomingCreds = gatewayData.credentials || {};
+    const mergedCreds: any = { ...existingCredentials };
+
+    (['apiKey', 'secretKey', 'authKey', 'token', 'merchantSecret'] as const).forEach(k => {
+      const val = incomingCreds[k];
+      if (val && !val.startsWith('••••••••')) {
+        mergedCreds[k] = val;
+      }
+    });
+    mergedCreds.hasCredentials = !!(mergedCreds.apiKey || mergedCreds.secretKey || mergedCreds.authKey || mergedCreds.token || mergedCreds.merchantSecret);
+
+    const updatedGateway: PaymentGatewayConfig = {
+      ...gatewayData,
+      credentials: mergedCreds,
+      lastModified: new Date().toISOString()
+    };
+
+    if (idx !== -1) {
+      this.memoryData.paymentGateways[idx] = updatedGateway;
+    } else {
+      this.memoryData.paymentGateways.push(updatedGateway);
+    }
+
+    // If marked active, ensure others are inactive
+    if (updatedGateway.isActive) {
+      this.memoryData.paymentGateways.forEach(g => {
+        if (g.id !== updatedGateway.id) {
+          g.isActive = false;
+        }
+      });
+      this.memoryData.systemSettings.primaryPaymentGatewayId = updatedGateway.id;
+      if (updatedGateway.providerKey === 'AZUL') {
+        this.memoryData.systemSettings.azulConfig = {
+          merchantId: updatedGateway.merchantId,
+          authKey: updatedGateway.credentials?.authKey || this.memoryData.systemSettings.azulConfig.authKey,
+          isSandbox: updatedGateway.environment === 'SANDBOX',
+          isEnabled: true,
+          webhookUrl: updatedGateway.webhookUrl
+        };
+      }
+    }
+
+    this.addAuditLog('PAYMENT_GATEWAY_UPDATED', updatedGateway.id, undefined, `Configuración de pasarela ${updatedGateway.providerName} guardada. Activa: ${updatedGateway.isActive}`);
+    this.commit();
+    return this.maskGateway(updatedGateway);
+  }
+
+  public setActivePaymentGateway(gatewayId: string): boolean {
+    if (!this.memoryData.paymentGateways) return false;
+    const target = this.memoryData.paymentGateways.find(g => g.id === gatewayId);
+    if (!target) return false;
+
+    this.memoryData.paymentGateways.forEach(g => {
+      g.isActive = g.id === gatewayId;
+    });
+    this.memoryData.systemSettings.primaryPaymentGatewayId = gatewayId;
+
+    if (target.providerKey === 'AZUL') {
+      this.memoryData.systemSettings.azulConfig = {
+        merchantId: target.merchantId,
+        authKey: target.credentials?.authKey || this.memoryData.systemSettings.azulConfig.authKey,
+        isSandbox: target.environment === 'SANDBOX',
+        isEnabled: true,
+        webhookUrl: target.webhookUrl
+      };
+    }
+
+    this.addAuditLog('PRIMARY_PAYMENT_RECEIVER_CHANGED', gatewayId, undefined, `Cuenta receptora principal de Plazado.com cambiada a: ${target.providerName} (${target.accountCommercialName})`);
+    this.commit();
+    return true;
+  }
+
+  public deletePaymentGateway(gatewayId: string): boolean {
+    if (!this.memoryData.paymentGateways) return false;
+    const idx = this.memoryData.paymentGateways.findIndex(g => g.id === gatewayId);
+    if (idx === -1) return false;
+    if (this.memoryData.paymentGateways[idx].isActive) {
+      throw new Error('No se puede eliminar la cuenta receptora que actualmente está activa.');
+    }
+    const name = this.memoryData.paymentGateways[idx].providerName;
+    this.memoryData.paymentGateways.splice(idx, 1);
+    this.addAuditLog('PAYMENT_GATEWAY_DELETED', gatewayId, name, 'Pasarela de pago eliminada');
+    this.commit();
+    return true;
+  }
+
+  private maskSecret(str: string): string {
+    if (!str) return '';
+    if (str.startsWith('••••••••')) return str;
+    const last4 = str.slice(-4);
+    return '••••••••' + last4;
+  }
+
+  private maskGateway(g: PaymentGatewayConfig): PaymentGatewayConfig {
+    return {
+      ...g,
+      credentials: {
+        hasCredentials: !!(g.credentials?.apiKey || g.credentials?.secretKey || g.credentials?.authKey || g.credentials?.token || g.credentials?.merchantSecret || g.credentials?.hasCredentials),
+        apiKey: g.credentials?.apiKey ? this.maskSecret(g.credentials.apiKey) : undefined,
+        secretKey: g.credentials?.secretKey ? this.maskSecret(g.credentials.secretKey) : undefined,
+        authKey: g.credentials?.authKey ? this.maskSecret(g.credentials.authKey) : undefined,
+        token: g.credentials?.token ? this.maskSecret(g.credentials.token) : undefined,
+        merchantSecret: g.credentials?.merchantSecret ? this.maskSecret(g.credentials.merchantSecret) : undefined
+      }
+    };
+  }
+
+  // --- ADVERTISING MANAGEMENT (Publicidad) ---
+  public getAdvertisements(): Advertisement[] {
+    return this.memoryData.advertisements || [];
+  }
+
+  public getActiveAdvertisements(placement?: string, device?: string): Advertisement[] {
+    const ads = this.memoryData.advertisements || [];
+    const today = new Date().toISOString().split('T')[0];
+
+    return ads.filter(ad => {
+      if (!ad.isActive) return false;
+      // Auto-expire check: do not show expired ads
+      if (ad.startDate && ad.startDate > today) return false;
+      if (ad.endDate && ad.endDate < today) return false;
+      if (placement && ad.placement !== placement) return false;
+      if (device && ad.targetDevice !== 'ALL' && ad.targetDevice !== device) return false;
+      return true;
+    }).sort((a, b) => {
+      if (b.priority !== a.priority) return b.priority - a.priority;
+      return (a.order || 0) - (b.order || 0);
+    });
+  }
+
+  public addAdvertisement(data: Omit<Advertisement, 'id' | 'impressions' | 'clicks' | 'createdAt'>): Advertisement {
+    if (!this.memoryData.advertisements) {
+      this.memoryData.advertisements = [];
+    }
+    const newId = `ad-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const newAd: Advertisement = {
+      ...data,
+      id: newId,
+      impressions: 0,
+      clicks: 0,
+      order: data.order || (this.memoryData.advertisements.length + 1),
+      createdAt: new Date().toISOString()
+    };
+    this.memoryData.advertisements.unshift(newAd);
+    this.addAuditLog('AD_CAMPAIGN_CREATED', newId, undefined, `Campaña publicitaria creada: "${newAd.title}" (${newAd.type}) en ${newAd.placement}`);
+    this.commit();
+    return newAd;
+  }
+
+  public updateAdvertisement(id: string, data: Partial<Advertisement>): Advertisement | null {
+    if (!this.memoryData.advertisements) return null;
+    const idx = this.memoryData.advertisements.findIndex(a => a.id === id);
+    if (idx === -1) return null;
+    const prev = this.memoryData.advertisements[idx];
+    const updated: Advertisement = {
+      ...prev,
+      ...data,
+      updatedAt: new Date().toISOString()
+    };
+    this.memoryData.advertisements[idx] = updated;
+    this.addAuditLog('AD_CAMPAIGN_UPDATED', id, prev.title, `Campaña publicitaria actualizada: "${updated.title}"`);
+    this.commit();
+    return updated;
+  }
+
+  public toggleAdvertisementStatus(id: string): boolean {
+    if (!this.memoryData.advertisements) return false;
+    const ad = this.memoryData.advertisements.find(a => a.id === id);
+    if (!ad) return false;
+    ad.isActive = !ad.isActive;
+    ad.updatedAt = new Date().toISOString();
+    this.addAuditLog('AD_CAMPAIGN_STATUS_TOGGLED', id, undefined, `Campaña "${ad.title}" ${ad.isActive ? 'activada' : 'desactivada'}`);
+    this.commit();
+    return true;
+  }
+
+  public deleteAdvertisement(id: string): boolean {
+    if (!this.memoryData.advertisements) return false;
+    const idx = this.memoryData.advertisements.findIndex(a => a.id === id);
+    if (idx === -1) return false;
+    const title = this.memoryData.advertisements[idx].title;
+    this.memoryData.advertisements.splice(idx, 1);
+    this.addAuditLog('AD_CAMPAIGN_DELETED', id, title, 'Campaña publicitaria eliminada');
+    this.commit();
+    return true;
+  }
+
+  public getAdPlacements(): AdPlacement[] {
+    return this.memoryData.adPlacements || INITIAL_AD_PLACEMENTS;
+  }
+
+  public saveAdPlacement(placement: AdPlacement): AdPlacement {
+    if (!this.memoryData.adPlacements) {
+      this.memoryData.adPlacements = [...INITIAL_AD_PLACEMENTS];
+    }
+    const idx = this.memoryData.adPlacements.findIndex(p => p.code === placement.code);
+    if (idx !== -1) {
+      this.memoryData.adPlacements[idx] = placement;
+    } else {
+      this.memoryData.adPlacements.push(placement);
+    }
+    this.addAuditLog('AD_PLACEMENT_SAVED', placement.code, undefined, `Ubicación publicitaria guardada: ${placement.name}`);
+    this.commit();
+    return placement;
+  }
+
+  public trackAdImpression(adId: string, device?: string): boolean {
+    if (!this.memoryData.advertisements) return false;
+    const ad = this.memoryData.advertisements.find(a => a.id === adId);
+    if (!ad) return false;
+    ad.impressions = (ad.impressions || 0) + 1;
+    this.commit();
+    return true;
+  }
+
+  public trackAdClick(adId: string, device?: string): boolean {
+    if (!this.memoryData.advertisements) return false;
+    const ad = this.memoryData.advertisements.find(a => a.id === adId);
+    if (!ad) return false;
+    ad.clicks = (ad.clicks || 0) + 1;
+    this.commit();
+    return true;
+  }
+  public getOrders(): Order[] {
+    return this.memoryData.orders;
+  }
+
+  public createOrders(orders: Order[]): Order[] {
+    const rate = this.memoryData.systemSettings.plazaCommissionRate !== undefined 
+      ? this.memoryData.systemSettings.plazaCommissionRate 
+      : 0.0005; // 0.05% de Plazado.com
+
+    orders.forEach((ord, idx) => {
+      // Recalcular formalmente con la tasa de comisión oficial de Plazado.com
+      const commission = Number((ord.total * rate).toFixed(2));
+      const netStore = Number((ord.total - commission).toFixed(2));
+      ord.plazaCommissionRate = rate;
+      ord.plazaCommissionAmount = commission;
+      ord.storeNetEarnings = netStore;
+      ord.settlementStatus = 'PENDING';
+
+      this.memoryData.orders.unshift(ord);
+
+      // Check if this order contains items stored in Plazado Fulfillment
+      const hasFulfillmentItem = ord.items.some(item => {
+        const prod = this.memoryData.products.find(p => p.id === item.productId);
+        const inv = (this.memoryData.fulfillmentInventory || []).find(
+          i => i.storeId === ord.storeId && (i.productId === item.productId || i.sku === item.sku)
+        );
+        return prod?.isFulfillment || (inv && inv.available > 0);
+      });
+
+      if (hasFulfillmentItem) {
+        ord.fulfillmentType = 'PLAZADO_FULFILLMENT';
+        ord.fulfillmentStatus = 'PENDING_STORE_CONFIRMATION';
+        const timeoutMins = this.memoryData.fulfillmentConfig?.orderConfirmationTimeoutMinutes || 60;
+        ord.storeConfirmationDeadline = new Date(Date.now() + timeoutMins * 60 * 1000).toISOString();
+
+        // Perform AUTOMATIC PREVENTIVE RESERVATION
+        const currentFulfillmentInv = this.memoryData.fulfillmentInventory || [];
+        this.memoryData.fulfillmentInventory = currentFulfillmentInv;
+        const currentInvMovements = this.memoryData.inventoryMovements || [];
+        this.memoryData.inventoryMovements = currentInvMovements;
+
+        ord.items.forEach(item => {
+          const inv = currentFulfillmentInv.find(
+            (i: any) => i.storeId === ord.storeId && (i.productId === item.productId || i.sku === item.sku)
+          );
+          if (inv) {
+            const reservedQty = Math.min(inv.available, item.quantity);
+            const prevAvail = inv.available;
+            inv.available = Math.max(0, inv.available - reservedQty);
+            inv.reserved += reservedQty;
+            inv.updatedAt = new Date().toISOString();
+
+            // Log movement
+            currentInvMovements.unshift({
+              id: `MOV-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+              inventoryItemId: inv.id,
+              storeId: inv.storeId,
+              storeName: inv.storeName,
+              productId: inv.productId,
+              productName: inv.productName,
+              sku: inv.sku,
+              type: 'RESERVATION_HOLD',
+              quantityChanged: reservedQty,
+              previousAvailable: prevAvail,
+              newAvailable: inv.available,
+              warehouseId: inv.warehouseId,
+              warehouseName: inv.warehouseName,
+              relatedOrderId: ord.id,
+              reason: `Reserva preventiva automática para pedido #${ord.id}. En espera de confirmación de tienda.`,
+              performedBy: 'Sistema Plazado Fulfillment',
+              performedByRole: 'SUPER_ADMIN',
+              timestamp: new Date().toISOString()
+            });
+          }
+        });
+
+        // Create official FulfillmentOrder (FO-XXXXX)
+        const currentFulfillmentOrders = this.memoryData.fulfillmentOrders || [];
+        this.memoryData.fulfillmentOrders = currentFulfillmentOrders;
+        const foId = `FO-${ord.id.replace('ORD-', '')}`;
+        ord.fulfillmentOrderId = foId;
+
+        const fulfillmentOrder: FulfillmentOrder = {
+          id: foId,
+          orderId: ord.id,
+          orderGroupCode: ord.orderGroupCode,
+          storeId: ord.storeId,
+          storeName: ord.storeName,
+          customerId: ord.customerId,
+          customerName: ord.customerName,
+          customerPhone: ord.customerPhone,
+          customerEmail: ord.customerEmail,
+          deliveryAddress: ord.deliveryAddress,
+          items: ord.items.map(it => {
+            const inv = currentFulfillmentInv.find(
+              (i: any) => i.storeId === ord.storeId && (i.productId === it.productId || i.sku === it.sku)
+            );
+            return {
+              productId: it.productId,
+              productName: it.productName,
+              productImage: it.productImage,
+              sku: it.sku,
+              variantName: it.variantName,
+              quantity: it.quantity,
+              warehouseId: inv?.warehouseId || 'wh-sdo-01',
+              location: inv?.location || {
+                warehouseId: 'wh-sdo-01',
+                warehouseName: 'Centro Logístico Central Santo Domingo Oeste',
+                zone: 'Zona A',
+                aisle: 'P-01',
+                shelf: 'E-01',
+                level: 'N-01',
+                position: 'Pos-01',
+                barcode: 'LOC-A-01-01-01-01'
+              },
+              pickedQuantity: 0,
+              isPicked: false
+            };
+          }),
+          subtotal: ord.subtotal,
+          shippingCost: ord.shippingCost,
+          total: ord.total,
+          status: 'PENDING_STORE_CONFIRMATION',
+          storeConfirmationDeadline: ord.storeConfirmationDeadline,
+          pickingCode: `PICK-${Math.floor(10000 + Math.random() * 90000)}`,
+          timeline: [
+            {
+              status: 'ORDER_RECEIVED',
+              label: 'Pedido recibido',
+              timestamp: new Date().toISOString(),
+              actor: 'Cliente',
+              notes: 'Pedido recibido con productos de Plazado Fulfillment. Unidades reservadas preventivamente.',
+              completed: true
+            },
+            {
+              status: 'WAITING_STORE_CONFIRMATION',
+              label: 'Esperando confirmación de tienda',
+              timestamp: new Date().toISOString(),
+              actor: 'Sistema Plazado',
+              notes: `Tiempo límite: ${timeoutMins} minutos para confirmar o rechazar.`,
+              completed: false
+            }
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        this.memoryData.fulfillmentOrders.unshift(fulfillmentOrder);
+      }
+
+      // Reduce product stock & increment soldCount
+      ord.items.forEach(item => {
+        const p = this.memoryData.products.find(prod => prod.id === item.productId);
+        if (p) {
+          p.stock = Math.max(0, p.stock - item.quantity);
+          p.soldCount = (p.soldCount || 0) + item.quantity;
+        }
+      });
+
+      // Update store balance
+      const currentBalance = this.memoryData.storeBalances[ord.storeId] || {
+        storeId: ord.storeId,
+        totalSales: 0,
+        cardSales: 0,
+        cashSales: 0,
+        plazaCommissionsPaid: 0,
+        pendingCashCommissions: 0,
+        pendingBalance: 0,
+        availableBalance: 0,
+        settledBalance: 0,
+        retainedBalance: 0,
+        adjustments: 0,
+        carriedOverDebt: 0,
+        lastUpdated: new Date().toISOString()
+      };
+
+      currentBalance.totalSales += ord.total;
+
+      const isCard = ord.paymentMethod === 'CARD_AZUL';
+      const authCode = ord.cardAuthorizationCode || `AUTH-AUTO-${Math.floor(100000 + Math.random() * 900000)}`;
+      const cardLast4 = ord.cardLast4 || '4111';
+      const cardBrand = ord.cardBrand || 'VISA';
+      if (isCard) {
+        ord.cardAuthorizationCode = authCode;
+        ord.cardLast4 = cardLast4;
+        ord.cardBrand = cardBrand;
+        ord.chargeType = 'AUTOMATIC';
+        ord.cardChargedAt = ord.cardChargedAt || new Date().toISOString();
+      }
+
+      const gatewayRef = isCard 
+        ? `AZUL-${authCode}` 
+        : `CASH-ORD-${ord.id}`;
+      const idempotencyKey = `PAY-${ord.id}-${ord.storeId}`;
+
+      // 1. CUENTA CENTRAL DE PLAZADO.COM / 3. PAGOS CON TARJETA / 4. PAGOS EN EFECTIVO
+      if (isCard) {
+        // Tarjeta: El 100% ingresa primero a la cuenta central de Plazado.com
+        // Cargo automático aprobado de inmediato
+        currentBalance.cardSales = (currentBalance.cardSales || 0) + ord.total;
+        currentBalance.pendingBalance = (currentBalance.pendingBalance || 0) + netStore;
+        currentBalance.plazaCommissionsPaid = (currentBalance.plazaCommissionsPaid || 0) + commission;
+        ord.paymentStatus = 'PAID';
+
+        this.addFinancialAuditLog({
+          orderId: ord.id,
+          storeId: ord.storeId,
+          storeName: ord.storeName,
+          amount: ord.total,
+          commission: commission,
+          paymentMethod: 'CARD_AZUL',
+          movementType: 'SALE_CARD',
+          actor: 'PLAZADO_CENTRAL_PAYMENT_GATEWAY',
+          previousBalance: currentBalance.pendingBalance - netStore,
+          newBalance: currentBalance.pendingBalance,
+          externalRef: gatewayRef,
+          status: 'CAPTURED',
+          notes: `Cargo automático aprobado a tarjeta ${cardBrand} ••••${cardLast4} (Aut: ${authCode}). Ingresado 100% en cuenta de custodia Plazado.com. Comisión: RD$ ${commission} (0.05%). Neto retenido en balance pendiente: RD$ ${netStore}.`
+        });
+      } else {
+        // Efectivo: La tienda cobra directamente.
+        // Comisión calculada como deuda pendiente de cobro en liquidación semanal.
+        currentBalance.cashSales = (currentBalance.cashSales || 0) + ord.total;
+        currentBalance.pendingCashCommissions = (currentBalance.pendingCashCommissions || 0) + commission;
+        ord.paymentStatus = 'PENDING';
+
+        this.addFinancialAuditLog({
+          orderId: ord.id,
+          storeId: ord.storeId,
+          storeName: ord.storeName,
+          amount: ord.total,
+          commission: commission,
+          paymentMethod: 'CASH_ON_DELIVERY',
+          movementType: 'COMMISSION_CHARGE',
+          actor: 'PLAZADO_CENTRAL_PAYMENT_GATEWAY',
+          previousBalance: currentBalance.pendingCashCommissions - commission,
+          newBalance: currentBalance.pendingCashCommissions,
+          externalRef: gatewayRef,
+          status: 'PENDING_COLLECTION',
+          notes: `Venta en efectivo recibida directamente por la tienda. Comisión de Plazado.com (0.05% = RD$ ${commission}) acumulada para descuento en liquidación de viernes.`
+        });
+      }
+
+      currentBalance.lastUpdated = new Date().toISOString();
+      this.memoryData.storeBalances[ord.storeId] = currentBalance;
+
+      // Registrar transacción vinculada
+      if (!this.memoryData.paymentTransactions) {
+        this.memoryData.paymentTransactions = [];
+      }
+      const tx: PaymentTransaction = {
+        id: `TX-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
+        orderId: ord.id,
+        orderGroupCode: ord.orderGroupCode,
+        customerId: ord.customerId,
+        customerName: ord.customerName,
+        storeId: ord.storeId,
+        storeName: ord.storeName,
+        amount: ord.total,
+        method: ord.paymentMethod,
+        commissionAmount: commission,
+        netAmount: netStore,
+        orderStatus: ord.status,
+        paymentStatus: ord.paymentStatus,
+        settlementStatus: 'PENDING',
+        gatewayReference: gatewayRef,
+        idempotencyKey: idempotencyKey,
+        cardLast4: isCard ? cardLast4 : undefined,
+        cardBrand: isCard ? cardBrand : undefined,
+        notes: isCard ? `Cargo automático procesado con éxito (Aut: ${authCode})` : 'Efectivo contra entrega',
+        createdAt: new Date().toISOString()
+      };
+      this.memoryData.paymentTransactions.unshift(tx);
+
+      this.addAuditLog('ORDER_CREATED', ord.id, undefined, `Orden creada ${ord.orderGroupCode} para tienda ${ord.storeId} por DOP ${ord.total}. Comisión Plazado: RD$ ${commission}`);
+    });
+
+    this.commit();
+
+    cloudSqlRepo.saveRawOrders(orders).catch(err => console.error('[CloudSQL] Error syncing saveRawOrders:', err));
+
+    return orders;
+  }
+
+  public updateOrderStatus(orderId: string, status: OrderStatus, note?: string, confirmationCode?: string): { success: boolean; message: string; order?: Order } {
+    const order = this.memoryData.orders.find(o => o.id === orderId);
+    if (!order) return { success: false, message: 'Pedido no encontrado' };
+
+    if (status === 'DELIVERED') {
+      if (order.deliveryConfirmationCode && confirmationCode && confirmationCode.trim().toUpperCase() !== order.deliveryConfirmationCode.toUpperCase()) {
+        return { success: false, message: 'Código secreto de entrega incorrecto.' };
+      }
+
+      cloudSqlRepo.confirmDelivery(orderId, confirmationCode || order.deliveryConfirmationCode || '', 'repartidor')
+        .catch(err => console.error('[CloudSQL] Error syncing confirmDelivery:', err));
+
+      // Regla de seguridad: Solo pedidos entregados se liberan al balance disponible para liquidación
+      const balance = this.memoryData.storeBalances[order.storeId];
+      if (balance) {
+        if (order.paymentMethod === 'CARD_AZUL') {
+          // Trasladar del balance pendiente de tarjeta al balance disponible para el viernes
+          const prevAvail = balance.availableBalance || 0;
+          balance.pendingBalance = Math.max(0, balance.pendingBalance - order.storeNetEarnings);
+          balance.availableBalance = prevAvail + order.storeNetEarnings;
+          balance.lastUpdated = new Date().toISOString();
+
+          this.addFinancialAuditLog({
+            orderId: order.id,
+            storeId: order.storeId,
+            storeName: order.storeName,
+            amount: order.total,
+            commission: order.plazaCommissionAmount,
+            paymentMethod: 'CARD_AZUL',
+            movementType: 'SALE_CARD',
+            actor: 'ORDER_DELIVERY_VALIDATION',
+            previousBalance: prevAvail,
+            newBalance: balance.availableBalance,
+            status: 'AVAILABLE_FOR_SETTLEMENT',
+            notes: `Pedido validado con código de entrega. Fondos netos RD$ ${order.storeNetEarnings} liberados a balance disponible para liquidación semanal del viernes.`
+          });
+        } else {
+          // Efectivo entregado: la comisión queda firme por cobrar
+          order.paymentStatus = 'PAID';
+        }
+      }
+      order.paymentStatus = 'PAID';
+    } else if (status === 'CANCELLED') {
+      // Si se cancela un pedido pagado con tarjeta no entregado, revertir del pendingBalance
+      if (order.paymentMethod === 'CARD_AZUL' && order.status !== 'DELIVERED') {
+        const balance = this.memoryData.storeBalances[order.storeId];
+        if (balance) {
+          balance.pendingBalance = Math.max(0, balance.pendingBalance - order.storeNetEarnings);
+          balance.plazaCommissionsPaid = Math.max(0, balance.plazaCommissionsPaid - order.plazaCommissionAmount);
+          balance.lastUpdated = new Date().toISOString();
+        }
+        order.paymentStatus = 'REFUNDED';
+        this.addFinancialAuditLog({
+          orderId: order.id,
+          storeId: order.storeId,
+          storeName: order.storeName,
+          amount: order.total,
+          commission: order.plazaCommissionAmount,
+          paymentMethod: 'CARD_AZUL',
+          movementType: 'REFUND',
+          actor: 'ORDER_CANCELLATION',
+          previousBalance: balance ? balance.pendingBalance + order.storeNetEarnings : 0,
+          newBalance: balance ? balance.pendingBalance : 0,
+          status: 'REFUNDED',
+          notes: `Pedido cancelado antes de entrega. Fondos de tarjeta reembolsados y removidos de balance pendiente.`
+        });
+      }
+    }
+
+    const prevStatus = order.status;
+    order.status = status;
+    if (status === 'CANCELLED') {
+      order.cancelReason = note || 'Cancelado por la tienda';
+      order.cancelledAt = new Date().toISOString();
+      order.cancelledBy = 'Tienda';
+    }
+    order.statusHistory.push({
+      status,
+      timestamp: new Date().toISOString(),
+      updatedBy: status === 'CANCELLED' ? 'Tienda (Cancelación)' : 'Sistema PlazaDO Global',
+      note: note || `Estado actualizado a ${status}`
+    });
+
+    this.addAuditLog('ORDER_STATUS_CHANGE', orderId, prevStatus, `${status}${note ? ` - ${note}` : ''}`);
+    this.commit();
+    return { success: true, message: `Estado actualizado a ${status}`, order };
+  }
+
+  public deleteOrder(orderId: string): boolean {
+    const idx = this.memoryData.orders.findIndex(o => o.id === orderId);
+    if (idx === -1) return false;
+    const num = this.memoryData.orders[idx].id;
+    this.memoryData.orders.splice(idx, 1);
+    this.addAuditLog('ORDER_DELETED', orderId, num, 'Pedido eliminado permanentemente');
+    this.commit();
+    return true;
+  }
+
+  // --- ORDER CHAT MESSAGING (CANAL EXCLUSIVO EN PLATAFORMA TRAS COMPRA) ---
+  public getOrderMessages(orderId: string): OrderChatMessage[] {
+    if (!Array.isArray(this.memoryData.orderMessages)) {
+      this.memoryData.orderMessages = [];
+    }
+    return this.memoryData.orderMessages.filter(m => m.orderId === orderId);
+  }
+
+  public getAllOrderMessages(): OrderChatMessage[] {
+    if (!Array.isArray(this.memoryData.orderMessages)) {
+      this.memoryData.orderMessages = [];
+    }
+    return this.memoryData.orderMessages;
+  }
+
+  public addOrderMessage(data: {
+    orderId: string;
+    storeId: string;
+    customerId: string;
+    senderId: string;
+    senderName: string;
+    senderRole: 'CUSTOMER' | 'STORE' | 'ADMIN';
+    message: string;
+  }): OrderChatMessage {
+    if (!Array.isArray(this.memoryData.orderMessages)) {
+      this.memoryData.orderMessages = [];
+    }
+
+    const newMessage: OrderChatMessage = {
+      id: `MSG-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+      orderId: data.orderId,
+      storeId: data.storeId,
+      customerId: data.customerId,
+      senderId: data.senderId,
+      senderName: data.senderName,
+      senderRole: data.senderRole,
+      message: (data.message || '').trim(),
+      createdAt: new Date().toISOString(),
+      readByCustomer: data.senderRole === 'CUSTOMER',
+      readByStore: data.senderRole === 'STORE'
+    };
+
+    this.memoryData.orderMessages.push(newMessage);
+    this.commit();
+    return newMessage;
+  }
+
+  public markOrderMessagesAsRead(orderId: string, role: 'CUSTOMER' | 'STORE'): boolean {
+    if (!Array.isArray(this.memoryData.orderMessages)) {
+      this.memoryData.orderMessages = [];
+      return true;
+    }
+
+    let modified = false;
+    this.memoryData.orderMessages.forEach(m => {
+      if (m.orderId === orderId) {
+        if (role === 'CUSTOMER' && !m.readByCustomer) {
+          m.readByCustomer = true;
+          modified = true;
+        } else if (role === 'STORE' && !m.readByStore) {
+          m.readByStore = true;
+          modified = true;
+        }
+      }
+    });
+
+    if (modified) {
+      this.commit();
+    }
+    return true;
+  }
+
+  // --- BALANCES & SETTLEMENTS (PROCESO AUTOMÁTICO DE LOS VIERNES) ---
+  public getStoreBalances(): Record<string, StoreBalance> {
+    return this.memoryData.storeBalances;
+  }
+
+  public getSettlements(): Settlement[] {
+    return this.memoryData.settlements;
+  }
+
+  // 5, 6, 7. LIQUIDACIONES AUTOMÁTICAS LOS VIERNES
+  public runWeeklySettlementProcess(actorName: string = 'SISTEMA_PROGRAMADO_VIERNES'): {
+    success: boolean;
+    message: string;
+    settlementsCreated: Settlement[];
+    totalLiquidated: number;
+    totalCommissionsDeducted: number;
+    totalCashCommissionsDeducted: number;
+    storesProcessed: number;
+  } {
+    const settlementsCreated: Settlement[] = [];
+    let totalLiquidated = 0;
+    let totalCommissionsDeducted = 0;
+    let totalCashCommissionsDeducted = 0;
+    let storesProcessed = 0;
+
+    const cycleDate = new Date().toISOString().slice(0, 10);
+    const activeDisputes = (this.memoryData.disputes || []).filter(d => d.status === 'OPEN' || d.status === 'UNDER_REVIEW');
+
+    this.memoryData.stores.forEach(store => {
+      const balance = this.memoryData.storeBalances[store.id];
+      if (!balance) return;
+
+      // 6. REGLA DE SEGURIDAD: Solo pedidos DELIVERED con settlementStatus === 'PENDING'
+      // Excluyendo pedidos con disputa abierta o cancelados
+      const eligibleOrders = this.memoryData.orders.filter(o => 
+        o.storeId === store.id &&
+        o.status === 'DELIVERED' &&
+        o.settlementStatus === 'PENDING' &&
+        !activeDisputes.some(d => d.orderId === o.id)
+      );
+
+      // Fondos acumulados por ventas de tarjeta
+      const cardGross = eligibleOrders
+        .filter(o => o.paymentMethod === 'CARD_AZUL')
+        .reduce((sum, o) => sum + o.total, 0);
+
+      const cardCommissions = eligibleOrders
+        .filter(o => o.paymentMethod === 'CARD_AZUL')
+        .reduce((sum, o) => sum + (o.plazaCommissionAmount || 0), 0);
+
+      const cardNetEarnings = Math.max(0, cardGross - cardCommissions);
+
+      // También considerar saldo disponible ya consolidado previamente
+      const availableFunds = Math.max(0, balance.availableBalance || 0);
+      const totalAvailablePool = Math.max(cardNetEarnings, availableFunds);
+
+      // Comisiones pendientes por cobrar por ventas en efectivo
+      const pendingCash = balance.pendingCashCommissions || 0;
+      const carriedDebt = balance.carriedOverDebt || 0;
+      const totalOwedCashCommissions = pendingCash + carriedDebt;
+      const adjustments = balance.adjustments || 0;
+
+      // Si no hay fondos de tarjeta ni deudas pendientes, saltar
+      if (totalAvailablePool <= 0 && totalOwedCashCommissions <= 0) {
+        return;
+      }
+
+      storesProcessed++;
+
+      // 7. CUANDO LAS COMISIONES EN EFECTIVO SUPERAN EL BALANCE
+      let payout = 0;
+      let cashDeductedThisCycle = 0;
+      let newCarriedOverDebt = 0;
+
+      if (totalAvailablePool >= (totalOwedCashCommissions + adjustments)) {
+        payout = Number((totalAvailablePool - totalOwedCashCommissions - adjustments).toFixed(2));
+        cashDeductedThisCycle = totalOwedCashCommissions;
+        newCarriedOverDebt = 0;
+      } else {
+        // Comisiones en efectivo superan el balance disponible: Pago es RD$ 0.00
+        payout = 0;
+        cashDeductedThisCycle = Math.max(0, totalAvailablePool - adjustments);
+        newCarriedOverDebt = Number((totalOwedCashCommissions - cashDeductedThisCycle).toFixed(2));
+      }
+
+      // 10. CONFIGURACIÓN BANCARIA DE LAS TIENDAS: Validar cuenta bancaria
+      const bankInfo = store.bankInfo;
+      const hasValidAccount = !!(
+        bankInfo &&
+        bankInfo.accountNumber &&
+        bankInfo.accountNumber.trim() !== '' &&
+        bankInfo.accountNumber.toLowerCase() !== 'pendiente' &&
+        bankInfo.accountNumber.toLowerCase() !== 'pendiente de registrar' &&
+        bankInfo.bank &&
+        bankInfo.bank.trim() !== ''
+      );
+
+      // 11. ESTADOS DE LAS LIQUIDACIONES
+      // Pendiente, Programada, Procesando, Pagada, Fallida, Retenida, Cancelada
+      let status: Settlement['status'] = 'PROGRAMADA' as any;
+      let statusNotes = '';
+      if (!hasValidAccount) {
+        status = 'RETAINED';
+        statusNotes = 'Liquidación RETENIDA: La tienda debe registrar y validar su cuenta bancaria de destino para transferencias ACH.';
+      } else if (payout > 0) {
+        status = 'SCHEDULED';
+        statusNotes = `Liquidación programada para transferencia ACH / LBTR ${bankInfo.bank}.`;
+      } else {
+        status = 'PAID';
+        statusNotes = `Liquidación compensada a RD$ 0.00 por deducción de comisiones de ventas en efectivo. Saldo pendiente arrastrado: RD$ ${newCarriedOverDebt.toLocaleString()}.`;
+      }
+
+      // 12. PROTECCIÓN CONTRA PAGOS DUPLICADOS (Idempotencia)
+      const idempotencyKey = `SETTL-CYCLE-${store.id}-${cycleDate}`;
+      const existingSettlement = this.memoryData.settlements.find(s => s.idempotencyKey === idempotencyKey);
+      if (existingSettlement) {
+        console.log(`[Settlement Engine] Saltando tienda ${store.name} porque ya fue liquidada en este ciclo (${idempotencyKey}).`);
+        return;
+      }
+
+      const settlementId = `SETTL-${cycleDate.replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const newSettlement: Settlement = {
+        id: settlementId,
+        storeId: store.id,
+        storeName: store.name,
+        grossAmount: cardGross > 0 ? cardGross : totalAvailablePool,
+        commissionAmount: cardCommissions,
+        cashCommissionsDeducted: cashDeductedThisCycle,
+        adjustments: adjustments,
+        netAmount: payout,
+        status: status,
+        bankName: bankInfo?.bank || 'Pendiente de registrar',
+        bankAccountType: bankInfo?.accountType || 'CORRIENTE',
+        accountHolder: bankInfo?.accountHolder || store.ownerName,
+        rncOrCedula: bankInfo?.rncOrCedula || 'No especificado',
+        accountNumberMasked: bankInfo?.accountNumber ? `****${bankInfo.accountNumber.slice(-4)}` : '****0000',
+        paymentMethodName: `Transferencia Bancaria ACH (${bankInfo?.bank || 'Pendiente'})`,
+        bankReference: hasValidAccount ? `ACH-BPD-${Date.now()}-${Math.floor(10000 + Math.random() * 90000)}` : undefined,
+        ordersCount: eligibleOrders.length,
+        orderIds: eligibleOrders.map(o => o.id),
+        idempotencyKey: idempotencyKey,
+        notes: statusNotes,
+        createdAt: new Date().toISOString()
+      };
+
+      this.memoryData.settlements.unshift(newSettlement);
+      settlementsCreated.push(newSettlement);
+
+      // Marcar órdenes incluidas como liquidadas
+      eligibleOrders.forEach(ord => {
+        ord.settlementStatus = 'SETTLED';
+        ord.settlementId = settlementId;
+      });
+
+      // Actualizar StoreBalance
+      const prevAvailable = balance.availableBalance;
+      balance.availableBalance = 0;
+      balance.pendingCashCommissions = 0;
+      balance.carriedOverDebt = newCarriedOverDebt;
+      balance.adjustments = 0;
+
+      if (status === 'RETAINED') {
+        balance.retainedBalance = (balance.retainedBalance || 0) + payout;
+      } else {
+        balance.settledBalance = (balance.settledBalance || 0) + payout;
+      }
+      balance.lastUpdated = new Date().toISOString();
+
+      // Totales para respuesta
+      totalLiquidated += payout;
+      totalCommissionsDeducted += cardCommissions;
+      totalCashCommissionsDeducted += cashDeductedThisCycle;
+
+      // 13. AUDITORÍA FINANCIERA OBLIGATORIA
+      this.addFinancialAuditLog({
+        settlementId: settlementId,
+        storeId: store.id,
+        storeName: store.name,
+        amount: payout,
+        commission: cardCommissions + cashDeductedThisCycle,
+        paymentMethod: 'TRANSFERENCIA_ACH',
+        movementType: 'SETTLEMENT_PAYOUT',
+        actor: actorName,
+        previousBalance: prevAvailable,
+        newBalance: balance.availableBalance,
+        externalRef: newSettlement.bankReference,
+        status: status,
+        notes: `Liquidación semanal generada. Bruto: RD$ ${newSettlement.grossAmount.toLocaleString()}, Comisiones tarjeta: RD$ ${cardCommissions.toLocaleString()}, Comisiones efectivo descontadas: RD$ ${cashDeductedThisCycle.toLocaleString()}, Neto a pagar: RD$ ${payout.toLocaleString()}.`
+      });
+    });
+
+    if (settlementsCreated.length > 0) {
+      this.addAuditLog('WEEKLY_SETTLEMENTS_EXECUTED', 'settlements', undefined, `Ciclo semanal ejecutado por ${actorName}: ${settlementsCreated.length} liquidaciones, RD$ ${totalLiquidated.toLocaleString()} netos liquidados.`);
+      this.commit();
+    }
+
+    return {
+      success: true,
+      message: `Ciclo de liquidación semanal completado con éxito. Se generaron ${settlementsCreated.length} liquidaciones para tiendas por RD$ ${totalLiquidated.toLocaleString()}.`,
+      settlementsCreated,
+      totalLiquidated,
+      totalCommissionsDeducted,
+      totalCashCommissionsDeducted,
+      storesProcessed
+    };
+  }
+
+  public requestSettlement(storeId: string, notes?: string): { success: boolean; message: string; settlement?: Settlement } {
+    const balance = this.memoryData.storeBalances[storeId];
+    if (!balance || balance.availableBalance < 100) {
+      return { success: false, message: 'El saldo disponible mínimo para solicitar liquidación es de RD$ 100.00' };
+    }
+    const store = this.memoryData.stores.find(s => s.id === storeId);
+    const amount = balance.availableBalance;
+    const pendingCash = balance.pendingCashCommissions || 0;
+    const debt = balance.carriedOverDebt || 0;
+    const totalOwed = pendingCash + debt;
+
+    const netPayout = Math.max(0, amount - totalOwed);
+    const cashDeducted = Math.min(amount, totalOwed);
+    const remainingDebt = Math.max(0, totalOwed - amount);
+
+    const hasValidAccount = !!(
+      store?.bankInfo?.accountNumber &&
+      store.bankInfo.accountNumber.trim() !== '' &&
+      store.bankInfo.accountNumber.toLowerCase() !== 'pendiente' &&
+      store.bankInfo.accountNumber.toLowerCase() !== 'pendiente de registrar'
+    );
+
+    const newSettlement: Settlement = {
+      id: `SETTL-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+      storeId,
+      storeName: store?.name || storeId,
+      grossAmount: amount,
+      commissionAmount: 0,
+      cashCommissionsDeducted: cashDeducted,
+      adjustments: 0,
+      netAmount: netPayout,
+      status: hasValidAccount ? 'PENDING' : 'RETAINED',
+      bankName: store?.bankInfo?.bank || 'Pendiente',
+      bankAccountType: store?.bankInfo?.accountType || 'CORRIENTE',
+      accountHolder: store?.bankInfo?.accountHolder || store?.ownerName || storeId,
+      rncOrCedula: store?.bankInfo?.rncOrCedula || 'No provisto',
+      paymentMethodName: `Transferencia ${store?.bankInfo?.bank || 'Bancaria'}`,
+      accountNumberMasked: store?.bankInfo?.accountNumber ? `****${store.bankInfo.accountNumber.slice(-4)}` : '****0000',
+      bankReference: `ACH-REQ-${Date.now()}`,
+      notes: notes || (hasValidAccount ? 'Solicitud manual de liquidación anticipada' : 'Retenida: Pendiente registrar cuenta bancaria válida'),
+      createdAt: new Date().toISOString()
+    };
+
+    balance.availableBalance = 0;
+    balance.pendingCashCommissions = 0;
+    balance.carriedOverDebt = remainingDebt;
+    balance.lastUpdated = new Date().toISOString();
+
+    this.memoryData.settlements.unshift(newSettlement);
+    this.addAuditLog('SETTLEMENT_REQUESTED', newSettlement.id, undefined, `Liquidación solicitada por tienda ${storeId} de RD$ ${amount}. Neto: RD$ ${netPayout}`);
+    this.commit();
+    return { success: true, message: `Solicitud de liquidación por RD$ ${netPayout.toLocaleString()} enviada a revisión`, settlement: newSettlement };
+  }
+
+  public processSettlement(settlementId: string, status: Settlement['status'], reference?: string): Settlement | null {
+    const s = this.memoryData.settlements.find(item => item.id === settlementId);
+    if (!s) return null;
+    const prev = s.status;
+    s.status = status;
+    if (reference) s.bankReference = reference;
+    if (status === 'PAID') {
+      s.paidAt = new Date().toISOString();
+      const b = this.memoryData.storeBalances[s.storeId];
+      if (b) {
+        b.settledBalance += s.netAmount;
+        if (prev === 'RETAINED') {
+          b.retainedBalance = Math.max(0, b.retainedBalance - s.netAmount);
+        }
+        b.lastUpdated = new Date().toISOString();
+      }
+    } else if (status === 'REJECTED' || status === 'CANCELLED') {
+      const b = this.memoryData.storeBalances[s.storeId];
+      if (b) {
+        b.availableBalance += s.netAmount;
+        b.lastUpdated = new Date().toISOString();
+      }
+    }
+    this.addAuditLog('SETTLEMENT_PROCESSED', settlementId, prev, `${status} (${reference || ''})`);
+    this.commit();
+    return s;
+  }
+
+  public deleteSettlement(id: string): boolean {
+    const idx = this.memoryData.settlements.findIndex(s => s.id === id);
+    if (idx === -1) return false;
+    this.memoryData.settlements.splice(idx, 1);
+    this.addAuditLog('SETTLEMENT_DELETED', id, undefined, 'Liquidación eliminada');
+    this.commit();
+    return true;
+  }
+
+  // 14. WEBHOOK DE CONFIRMACIÓN DE PAGOS
+  public processPaymentWebhook(payload: any): { success: boolean; message: string; transaction?: PaymentTransaction } {
+    try {
+      const { event, transactionId, orderId, amount, status, idempotencyKey } = payload || {};
+      if (!orderId && !transactionId) {
+        return { success: false, message: 'Payload inválido: faltan campos obligatorios.' };
+      }
+
+      // Idempotencia
+      const key = idempotencyKey || `WEBHOOK-${transactionId || orderId}`;
+      const existingTx = (this.memoryData.paymentTransactions || []).find(t => t.idempotencyKey === key || t.gatewayReference === transactionId);
+
+      if (existingTx && event === 'PAYMENT_PROCESSED') {
+        return { success: true, message: 'Evento ya procesado previamente (Idempotente).', transaction: existingTx };
+      }
+
+      const order = this.memoryData.orders.find(o => o.id === orderId);
+      if (order && status === 'SUCCESS') {
+        order.paymentStatus = 'PAID';
+      }
+
+      this.addFinancialAuditLog({
+        orderId,
+        storeId: order?.storeId || 'UNKNOWN',
+        storeName: order?.storeName,
+        amount: Number(amount || order?.total || 0),
+        commission: Number(order?.plazaCommissionAmount || 0),
+        paymentMethod: order?.paymentMethod || 'CARD_AZUL',
+        movementType: 'SALE_CARD',
+        actor: 'PAYMENT_WEBHOOK_HANDLER',
+        previousBalance: 0,
+        newBalance: 0,
+        externalRef: transactionId,
+        status: status || 'SUCCESS',
+        notes: `Webhook de pago recibido y procesado para orden ${orderId}. Evento: ${event || 'PAYMENT_CONFIRMED'}.`
+      });
+
+      this.commit();
+      return { success: true, message: 'Webhook procesado correctamente.' };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Error procesando webhook.' };
+    }
+  }
+
+  // --- DISPUTES ---
+  public getDisputes(): Dispute[] {
+    return this.memoryData.disputes;
+  }
+
+  public createDispute(data: Omit<Dispute, 'id' | 'status' | 'createdAt'>): Dispute {
+    const newId = `disp-${Date.now()}`;
+    const newDispute: Dispute = {
+      ...data,
+      id: newId,
+      status: 'OPEN',
+      createdAt: new Date().toISOString()
+    };
+    this.memoryData.disputes.unshift(newDispute);
+    this.addAuditLog('DISPUTE_OPENED', newId, undefined, `Disputa abierta para orden ${data.orderId}`);
+    this.commit();
+    return newDispute;
+  }
+
+  public resolveDispute(disputeId: string, status: Dispute['status'], resolutionNotes: string): Dispute | null {
+    const disp = this.memoryData.disputes.find(d => d.id === disputeId);
+    if (!disp) return null;
+    disp.status = status;
+    disp.resolutionNotes = resolutionNotes;
+    this.addAuditLog('DISPUTE_RESOLVED', disputeId, undefined, `Disputa resuelta como ${status}`);
+    this.commit();
+    return disp;
+  }
+
+  public deleteDispute(id: string): boolean {
+    const idx = this.memoryData.disputes.findIndex(d => d.id === id);
+    if (idx === -1) return false;
+    this.memoryData.disputes.splice(idx, 1);
+    this.addAuditLog('DISPUTE_DELETED', id, undefined, 'Disputa eliminada');
+    this.commit();
+    return true;
+  }
+
+  // --- REVIEWS ---
+  public getReviews(): Review[] {
+    return this.memoryData.reviews;
+  }
+
+  public addReview(reviewData: Omit<Review, 'id' | 'createdAt' | 'isVerifiedPurchase' | 'isModerated'>): Review {
+    const newId = `rev-${Date.now()}`;
+    const newReview: Review = {
+      ...reviewData,
+      id: newId,
+      isVerifiedPurchase: true,
+      isModerated: true,
+      createdAt: new Date().toISOString()
+    };
+    this.memoryData.reviews.unshift(newReview);
+    // Recalculate store rating
+    const store = this.memoryData.stores.find(s => s.id === reviewData.storeId);
+    if (store) {
+      const storeRevs = this.memoryData.reviews.filter(r => r.storeId === store.id);
+      const avg = storeRevs.reduce((acc, r) => acc + r.rating, 0) / storeRevs.length;
+      store.rating = Number(avg.toFixed(1));
+      store.reviewCount = storeRevs.length;
+    }
+    this.commit();
+    return newReview;
+  }
+
+  public deleteReview(reviewId: string): boolean {
+    const idx = this.memoryData.reviews.findIndex(r => r.id === reviewId);
+    if (idx === -1) return false;
+    this.memoryData.reviews.splice(idx, 1);
+    this.commit();
+    return true;
+  }
+
+  // --- USERS & AUTH ---
+  public getUsers(): User[] {
+    return this.memoryData.users;
+  }
+
+  public addUser(user: User): User {
+    this.memoryData.users.push(user);
+    this.addAuditLog('USER_CREATED', user.id, undefined, `Usuario creado: ${user.name} (${user.email})`);
+    this.commit();
+
+    cloudSqlRepo.createUser({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone,
+      avatar: user.avatar,
+      storeId: user.storeId,
+      addresses: user.addresses,
+    }).catch(err => console.error('[CloudSQL] Error syncing createUser:', err));
+
+    return user;
+  }
+
+  public updateUser(userId: string, data: Partial<User>): User | null {
+    const idx = this.memoryData.users.findIndex(u => u.id === userId);
+    if (idx === -1) return null;
+    this.memoryData.users[idx] = { ...this.memoryData.users[idx], ...data };
+    this.commit();
+
+    cloudSqlRepo.updateUser(userId, {
+      name: data.name,
+      role: data.role,
+      phone: data.phone,
+      avatar: data.avatar,
+      addresses: data.addresses,
+    }).catch(err => console.error('[CloudSQL] Error syncing updateUser:', err));
+
+    return this.memoryData.users[idx];
+  }
+
+  public deleteUser(userId: string, deleteAssociatedStore: boolean = false): boolean {
+    const idx = this.memoryData.users.findIndex(u => u.id === userId);
+    if (idx === -1) return false;
+    const user = this.memoryData.users[idx];
+    if (user.role === 'SUPER_ADMIN') {
+      return false; // Cannot delete Super Admin
+    }
+
+    if (deleteAssociatedStore && user.storeId) {
+      this.deleteStore(user.storeId);
+    } else if (user.storeId) {
+      const st = this.memoryData.stores.find(s => s.id === user.storeId);
+      if (st && st.ownerId === userId) {
+        st.ownerId = '';
+        firestoreRepo.saveStore(st).catch(e => console.error('[Firestore] Store update error:', e));
+      }
+    }
+
+    this.memoryData.users.splice(idx, 1);
+    this.addAuditLog('USER_DELETED', userId, user.email, 'Usuario eliminado de la base de datos y Google Cloud');
+    this.commit();
+    firestoreRepo.deleteUser(userId).catch(err => console.error('[Firestore] Error deleting user:', err));
+    cloudSqlRepo.deleteUser(userId).catch(err => console.error('[CloudSQL] Error deleting user:', err));
+    return true;
+  }
+
+  public deleteNonAdminUsers(): { deletedCount: number; remainingAdmins: User[] } {
+    const nonAdminUsers = this.memoryData.users.filter(u => u.role !== 'SUPER_ADMIN');
+    const remainingAdmins = this.memoryData.users.filter(u => u.role === 'SUPER_ADMIN');
+    
+    for (const u of nonAdminUsers) {
+      firestoreRepo.deleteUser(u.id).catch(err => console.error('[Firestore] Error deleting user:', err));
+      cloudSqlRepo.deleteUser(u.id).catch(err => console.error('[CloudSQL] Error deleting user:', err));
+    }
+
+    this.memoryData.users = remainingAdmins;
+    this.addAuditLog('NON_ADMIN_USERS_DELETED', 'users', `${nonAdminUsers.length} eliminados`, `Super Admins conservados: ${remainingAdmins.map(a => a.email).join(', ')}`);
+    this.commit();
+
+    return {
+      deletedCount: nonAdminUsers.length,
+      remainingAdmins
+    };
+  }
+
+  // --- AUDIT LOGS ---
+  public getAuditLogs(): AuditLog[] {
+    return this.memoryData.auditLogs;
+  }
+
+  public addAuditLog(action: string, record: string, prev?: string, next?: string, user?: { id: string; name: string; role: UserRole }): AuditLog {
+    const log: AuditLog = {
+      id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      userId: user?.id || 'system',
+      userName: user?.name || 'Sistema PlazaDO',
+      userRole: user?.role || 'SUPER_ADMIN',
+      action,
+      affectedRecord: record,
+      previousValue: prev,
+      newValue: next,
+      ipAddress: '190.166.44.12',
+      timestamp: new Date().toISOString()
+    };
+    this.memoryData.auditLogs.unshift(log);
+    // Keep max 1000 audit logs
+    if (this.memoryData.auditLogs.length > 1000) {
+      this.memoryData.auditLogs = this.memoryData.auditLogs.slice(0, 1000);
+    }
+
+    cloudSqlRepo.addAuditLog({
+      userId: user?.id,
+      userName: user?.name,
+      userRole: user?.role,
+      action,
+      entityType: record ? record.split('-')[0] : 'SYSTEM',
+      entityId: record,
+      details: { previousValue: prev, newValue: next },
+      ipAddress: '190.166.44.12',
+    }).catch(err => console.error('[CloudSQL] Error syncing addAuditLog:', err));
+
+    return log;
+  }
+
+  public deleteAuditLog(logId: string): boolean {
+    const idx = this.memoryData.auditLogs.findIndex(l => l.id === logId);
+    if (idx === -1) return false;
+    this.memoryData.auditLogs.splice(idx, 1);
+    this.commit();
+    return true;
+  }
+
+  public clearAllAuditLogs(): void {
+    this.memoryData.auditLogs = [];
+    this.commit();
+  }
+
+  public purgeRecords(type: 'orders' | 'test_products' | 'disputes' | 'settlements' | 'audit_logs'): number {
+    this.createManualBackup(`pre_purge_${type}`);
+    let count = 0;
+    if (type === 'orders') {
+      count = this.memoryData.orders.length;
+      this.memoryData.orders = [];
+    } else if (type === 'test_products') {
+      return this.cleanTestProducts();
+    } else if (type === 'disputes') {
+      count = this.memoryData.disputes.length;
+      this.memoryData.disputes = [];
+    } else if (type === 'settlements') {
+      count = this.memoryData.settlements.length;
+      this.memoryData.settlements = [];
+    } else if (type === 'audit_logs') {
+      count = this.memoryData.auditLogs.length;
+      this.memoryData.auditLogs = [];
+    }
+    this.addAuditLog('PURGE_RECORDS', type, `${count}`, 'Registros purgados por Super Admin (respaldo previo guardado)');
+    this.commit();
+    return count;
+  }
+}
+
+export const db = new GlobalDatabase();

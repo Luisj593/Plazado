@@ -283,6 +283,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <span>Envíos ({cartGroups.length} tiendas):</span>
                   <span className="font-semibold text-stone-900">RD$ {cartTotal.shippingTotal.toLocaleString()}</span>
                 </div>
+                <p className="text-[10px] text-stone-500 italic text-right">
+                  * Los precios de envío pueden variar dependiendo de la distancia.
+                </p>
                 {cartTotal.discountTotal > 0 && (
                   <div className="flex justify-between text-emerald-700 font-semibold">
                     <span>Descuento aplicado:</span>

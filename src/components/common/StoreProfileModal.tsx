@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Store } from '../../types';
 import { DOMINICAN_PROVINCES } from '../../data/initialData';
-import { X, Building2, Phone, Mail, MapPin, Check, Image as ImageIcon } from 'lucide-react';
+import { X, Building2, Mail, MapPin, Check, Image as ImageIcon } from 'lucide-react';
 import { ImageUploadInput } from './ImageUploadInput';
 
 interface StoreProfileModalProps {
@@ -19,15 +19,23 @@ const PRESET_STORE_LOGOS = [
   'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=200&auto=format&fit=crop&q=80'
 ];
 
+export const PRESET_STORE_BANNERS = [
+  'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1600&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=1600&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1548767797-d8c844163c4c?w=1600&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=1600&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=1600&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1504148455328-c376907d081c?w=1600&auto=format&fit=crop&q=80',
+  'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=1600&auto=format&fit=crop&q=80'
+];
+
 export const StoreProfileModal: React.FC<StoreProfileModalProps> = ({ store, isOpen, onClose }) => {
   const { updateStoreDetails, categories } = useApp();
 
   const [name, setName] = useState(store.name);
-  const [logo, setLogo] = useState(store.logo);
-  const [banner, setBanner] = useState(store.banner);
+  const [logo, setLogo] = useState(store.logo || '');
+  const [banner, setBanner] = useState(store.banner || '');
   const [description, setDescription] = useState(store.description);
-  const [whatsapp, setWhatsapp] = useState(store.whatsapp);
-  const [phone, setPhone] = useState(store.phone);
   const [ownerName, setOwnerName] = useState(store.ownerName);
   const [province, setProvince] = useState(store.province);
   const [municipality, setMunicipality] = useState(store.municipality);
@@ -42,11 +50,11 @@ export const StoreProfileModal: React.FC<StoreProfileModalProps> = ({ store, isO
 
     updateStoreDetails(store.id, {
       name: name.trim(),
-      logo: logo.trim() || store.logo,
-      banner: banner.trim() || store.banner,
+      logo: (logo || '').trim() || store.logo || '',
+      banner: (banner || '').trim() || store.banner || '',
       description: description.trim(),
-      whatsapp: whatsapp.trim(),
-      phone: phone.trim(),
+      whatsapp: store.whatsapp,
+      phone: store.phone,
       ownerName: ownerName.trim(),
       province,
       municipality: municipality.trim(),
@@ -97,25 +105,17 @@ export const StoreProfileModal: React.FC<StoreProfileModalProps> = ({ store, isO
           </div>
 
           {/* Banner uploader */}
-          <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-2">
-            <div className="flex justify-between items-center">
-              <label className="block text-xs font-bold text-stone-800">Banner de Portada</label>
-              <span className="text-[11px] text-stone-400">Recomendado: 1200 x 300 px</span>
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={banner}
-                onChange={(e) => setBanner(e.target.value)}
-                placeholder="https://images.unsplash.com/photo-..."
-                className="flex-1 p-2 bg-white border border-stone-300 rounded-lg text-xs outline-none focus:border-amber-500"
-              />
-            </div>
-            {banner && (
-              <div className="w-full h-20 rounded-xl overflow-hidden border border-stone-200">
-                <img src={banner} alt="Banner portada" className="w-full h-full object-cover" />
-              </div>
-            )}
+          <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200">
+            <ImageUploadInput
+              label="Banner de Portada de la Tienda"
+              value={banner}
+              onChange={setBanner}
+              presetAvatars={PRESET_STORE_BANNERS}
+              shape="banner"
+              aspectRatioLabel="Sube el banner o portada de tu comercio (Recomendado: 1200 x 350 px, PNG o JPG)"
+              placeholder="https://ejemplo.com/banner-portada.jpg"
+              helpText="Esta imagen se muestra en la cabecera panorámica de tu tienda y en el directorio principal de comercios."
+            />
           </div>
 
           {/* Store info fields */}
@@ -152,17 +152,6 @@ export const StoreProfileModal: React.FC<StoreProfileModalProps> = ({ store, isO
                 value={ownerName}
                 onChange={(e) => setOwnerName(e.target.value)}
                 placeholder="Nombre del propietario o gerente"
-                className="w-full p-2 bg-stone-50 border border-stone-300 rounded-lg text-xs outline-none focus:bg-white focus:border-amber-500"
-              />
-            </div>
-
-            <div>
-              <label className="block font-semibold text-stone-700 mb-1">WhatsApp de Ventas & Soporte</label>
-              <input
-                type="text"
-                value={whatsapp}
-                onChange={(e) => setWhatsapp(e.target.value)}
-                placeholder="809-555-0101"
                 className="w-full p-2 bg-stone-50 border border-stone-300 rounded-lg text-xs outline-none focus:bg-white focus:border-amber-500"
               />
             </div>

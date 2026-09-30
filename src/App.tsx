@@ -5,16 +5,22 @@ import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
 import { HomePage } from './components/customer/HomePage';
 import { SearchCatalogPage } from './components/customer/SearchCatalogPage';
+import { StoresDirectoryPage } from './components/customer/StoresDirectoryPage';
 import { StorePublicPage } from './components/customer/StorePublicPage';
 import { SellWithUsPage } from './components/customer/SellWithUsPage';
 import { CustomerPortal } from './components/customer/CustomerPortal';
 import { StoreDashboard } from './components/store/StoreDashboard';
 import { AdminDashboard } from './components/admin/AdminDashboard';
+import { LegalAndPoliciesPage } from './components/public/LegalAndPoliciesPage';
+import { AndroidAppDownloadPage } from './components/public/AndroidAppDownloadPage';
 import { CartDrawer } from './components/customer/CartDrawer';
 import { CheckoutModal } from './components/customer/CheckoutModal';
 import { ProductDetailModal } from './components/customer/ProductDetailModal';
 import { PolicyModal } from './components/common/PolicyModal';
+import { DownloadSectionModal } from './components/common/DownloadSectionModal';
 import { AuthModal } from './components/auth/AuthModal';
+import { OrderChatModal } from './components/chat/OrderChatModal';
+import { MobileNavBar } from './components/layout/MobileNavBar';
 import { 
   CheckCircle2, 
   Key, 
@@ -22,6 +28,7 @@ import {
   Package, 
   Store, 
   ShieldCheck,
+  MessageSquare,
   X
 } from 'lucide-react';
 
@@ -31,9 +38,15 @@ const MarketplaceApp: React.FC = () => {
     setCurrentView, 
     notification, 
     orders, 
+    stores,
     currentUser,
     openAuthModal,
-    showNotification
+    showNotification,
+    isDownloadModalOpen,
+    downloadModalTab,
+    closeDownloadModal,
+    openOrderChat,
+    isBootstrapLoading
   } = useApp();
 
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -66,6 +79,28 @@ const MarketplaceApp: React.FC = () => {
     ? orders.filter(o => lastOrderSuccess.orderIds.includes(o.id))
     : [];
 
+  // Dedicated Production Loader: Wait for authoritative server state to guarantee identical view across devices
+  if (isBootstrapLoading) {
+    return (
+      <div className="min-h-screen bg-stone-900 flex flex-col items-center justify-center p-6 text-white selection:bg-red-600">
+        <div className="flex flex-col items-center gap-5 text-center max-w-sm animate-in fade-in duration-300">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-600 to-rose-700 flex items-center justify-center shadow-2xl shadow-red-600/30 animate-pulse border border-red-500/40">
+            <span className="text-3xl font-black text-white tracking-tighter">P<span className="text-stone-950">.</span></span>
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-white tracking-tight">PlazaDO.com</h1>
+            <p className="text-xs text-stone-400 mt-1.5 font-medium leading-relaxed">
+              Cargando catálogo central oficial…
+            </p>
+          </div>
+          <div className="w-48 h-1.5 bg-stone-800 rounded-full overflow-hidden border border-stone-700/60">
+            <div className="w-full h-full bg-gradient-to-r from-red-600 via-amber-400 to-red-600 animate-pulse rounded-full" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-stone-50 text-stone-900 selection:bg-red-500 selection:text-white font-sans antialiased">
       
@@ -85,19 +120,25 @@ const MarketplaceApp: React.FC = () => {
       {/* Marketplace Navigation Header */}
       <Header onOpenCart={() => setIsCartOpen(true)} />
 
-      {/* Main Viewport Content */}
-      <main className="flex-1">
+      {/* Main Viewport Content with mobile bottom nav compensation */}
+      <main className="flex-1 pb-16 md:pb-0">
         {currentView === 'home' && <HomePage />}
         {currentView === 'catalog' && <SearchCatalogPage />}
+        {currentView === 'stores' && <StoresDirectoryPage />}
         {currentView === 'store_public' && <StorePublicPage />}
         {currentView === 'sell_with_us' && <SellWithUsPage />}
         {currentView === 'customer_portal' && <CustomerPortal />}
         {currentView === 'store_dashboard' && <StoreDashboard />}
         {currentView === 'admin_dashboard' && <AdminDashboard />}
+        {currentView === 'policies' && <LegalAndPoliciesPage />}
+        {currentView === 'download_app' && <AndroidAppDownloadPage />}
       </main>
 
       {/* Marketplace Comprehensive Footer */}
       <Footer />
+
+      {/* Persistent Mobile Bottom Navigation Bar */}
+      <MobileNavBar onOpenCart={() => setIsCartOpen(true)} />
 
       {/* Slide-over Cart Drawer */}
       <CartDrawer 
@@ -119,8 +160,18 @@ const MarketplaceApp: React.FC = () => {
       {/* Dominican Legal Policies Modal */}
       <PolicyModal />
 
+      {/* Official Download Section Modal (Android APK & Legal PDFs) */}
+      <DownloadSectionModal 
+        isOpen={isDownloadModalOpen} 
+        onClose={closeDownloadModal} 
+        defaultTab={downloadModalTab} 
+      />
+
       {/* Auth & Registration Modal */}
       <AuthModal />
+
+      {/* Official In-Platform Order Chat Modal */}
+      <OrderChatModal />
 
       {/* Purchase Success Celebration Modal with Delivery Confirmation Code */}
       {lastOrderSuccess && (
@@ -148,19 +199,35 @@ const MarketplaceApp: React.FC = () => {
                 </div>
               </div>
 
-              <div className="space-y-2 max-h-48 overflow-y-auto">
+              <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
                 {completedOrders.map((ord) => (
-                  <div key={ord.id} className="p-3 bg-stone-50 rounded-xl border border-stone-200 flex items-center justify-between text-xs">
-                    <div>
-                      <span className="font-bold text-stone-900 block">{ord.storeName}</span>
-                      <span className="text-[11px] text-stone-500">{ord.items.length} artículos • RD$ {ord.total.toLocaleString()}</span>
+                  <div key={ord.id} className="p-3 bg-stone-50 rounded-xl border border-stone-200 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-bold text-stone-900 block">{ord.storeName}</span>
+                        <span className="text-[11px] text-stone-500">{ord.items.length} artículos • RD$ {ord.total.toLocaleString()}</span>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase font-bold text-stone-400 block">Código Secreto</span>
+                        <span className="font-mono font-black text-base text-red-600 tracking-wider">
+                          {ord.deliveryConfirmationCode}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="text-right">
-                      <span className="text-[10px] uppercase font-bold text-stone-400 block">Código Secreto</span>
-                      <span className="font-mono font-black text-base text-red-600 tracking-wider">
-                        {ord.deliveryConfirmationCode}
-                      </span>
+                    <div className="flex items-center justify-between pt-1 border-t border-stone-200">
+                      <span className="text-[10px] text-stone-500">Comunicación con la tienda:</span>
+                      <button
+                        onClick={() => {
+                          setLastOrderSuccess(null);
+                          openOrderChat(ord.id);
+                        }}
+                        className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 border border-red-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>Abrir Chat con Tienda</span>
+                      </button>
                     </div>
                   </div>
                 ))}

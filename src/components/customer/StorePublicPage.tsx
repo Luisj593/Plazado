@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { isProductPubliclyVisible, isStorePubliclyVisible } from '../../types';
 import { 
   Store, 
   MapPin, 
-  Phone, 
+  MessageSquare, 
   Truck, 
   Star, 
   ShieldCheck, 
@@ -14,7 +14,8 @@ import {
   ArrowLeft,
   CheckCircle2,
   Package,
-  Edit
+  Edit,
+  Check
 } from 'lucide-react';
 import { StoreProfileModal } from '../common/StoreProfileModal';
 
@@ -29,16 +30,65 @@ export const StorePublicPage: React.FC = () => {
     favorites,
     toggleFavoriteStore,
     showNotification,
-    currentUser
+    currentUser,
+    isBootstrapLoading,
+    copyStoreShareUrl
   } = useApp();
 
   const [productSearch, setProductSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
-  const store = stores.find(s => s.slug === selectedStoreSlug || s.id === selectedStoreSlug) || 
-                stores.find(isStorePubliclyVisible) || 
-                stores[0];
+  // Función de normalización de claves/slugs para búsquedas directas
+  const normalizeKey = (str?: string) => 
+    (str || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+  // Resolución robusta de la tienda solicitada
+  const matchedStore = useMemo(() => {
+    if (!selectedStoreSlug) return null;
+    const target = selectedStoreSlug.trim();
+    const targetLower = target.toLowerCase();
+    const targetNorm = normalizeKey(target);
+
+    // 1. Coincidencia directa por id o slug
+    let found = stores.find(s => s.id === target || s.slug?.toLowerCase() === targetLower);
+    if (found) return found;
+
+    // 2. Coincidencia normalizada de slug
+    found = stores.find(s => normalizeKey(s.slug) === targetNorm);
+    if (found) return found;
+
+    // 3. Coincidencia por nombre de la tienda (ej. "Phoenix caps" -> "phoenix-caps")
+    found = stores.find(s => normalizeKey(s.name) === targetNorm || s.name?.toLowerCase().trim() === targetLower);
+    if (found) return found;
+
+    // 4. Subcadena en slug o nombre
+    found = stores.find(s => 
+      (s.slug && normalizeKey(s.slug).includes(targetNorm)) || 
+      normalizeKey(s.name).includes(targetNorm)
+    );
+    return found || null;
+  }, [stores, selectedStoreSlug]);
+
+  // Si se solicitó una tienda específica mediante enlace o slug, NUNCA mostrar otra tienda como fallback
+  const store = selectedStoreSlug ? matchedStore : (stores.find(isStorePubliclyVisible) || stores[0]);
+
+  // Pantalla de carga mientras se sincroniza el estado inicial del servidor
+  if (isBootstrapLoading && !store) {
+    return (
+      <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center text-red-600 mb-4 shadow-sm animate-pulse">
+          <Store className="w-8 h-8" />
+        </div>
+        <div className="w-6 h-6 border-2 border-red-600 border-t-transparent rounded-full animate-spin mb-3 mx-auto" />
+        <h2 className="text-base font-bold text-stone-900">Cargando tienda oficial...</h2>
+        <p className="text-xs text-stone-500 mt-1 max-w-sm">
+          Accediendo a la vitrina comercial de PlazaDO
+        </p>
+      </div>
+    );
+  }
 
   if (!store) {
     return (
@@ -48,14 +98,24 @@ export const StorePublicPage: React.FC = () => {
         </div>
         <h2 className="text-lg font-bold text-stone-900">Tienda no encontrada</h2>
         <p className="text-xs text-stone-500 mt-1 max-w-md">
-          La tienda solicitada no se encuentra disponible en el catálogo de PlazaDO.
+          {selectedStoreSlug 
+            ? `No se encontró ninguna tienda asociada a "${selectedStoreSlug}". Es posible que el enlace haya cambiado o la tienda esté inactiva.` 
+            : 'La tienda solicitada no se encuentra disponible en el catálogo de PlazaDO.'}
         </p>
-        <button
-          onClick={() => setCurrentView('catalog')}
-          className="mt-4 px-4 py-2 bg-stone-900 text-white text-xs font-bold rounded-lg hover:bg-red-600 transition-colors"
-        >
-          Explorar catálogo
-        </button>
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+          <button
+            onClick={() => setCurrentView('stores')}
+            className="px-4 py-2 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 transition-colors shadow-xs"
+          >
+            Ver Directorio de Tiendas
+          </button>
+          <button
+            onClick={() => setCurrentView('catalog')}
+            className="px-4 py-2 bg-stone-100 text-stone-700 text-xs font-bold rounded-lg hover:bg-stone-200 transition-colors"
+          >
+            Explorar catálogo general
+          </button>
+        </div>
       </div>
     );
   }
@@ -96,10 +156,14 @@ export const StorePublicPage: React.FC = () => {
 
   const isFavorite = favorites.storeIds.includes(store.id);
 
-  const handleShare = () => {
-    const url = window.location.origin + `?store=${store.slug}`;
-    navigator.clipboard?.writeText(url);
-    showNotification('Enlace de la tienda copiado al portapapeles');
+  // Genera UNICAMENTE el link directo a la tienda correspondiente y lo copia
+  const handleShare = async () => {
+    if (!store) return;
+    setCopiedLink(true);
+    await copyStoreShareUrl(store);
+    setTimeout(() => {
+      setCopiedLink(false);
+    }, 2500);
   };
 
   return (
@@ -133,18 +197,29 @@ export const StorePublicPage: React.FC = () => {
               {(currentUser?.role === 'SUPER_ADMIN' || (currentUser?.role === 'STORE_OWNER' && currentUser?.storeId === store.id)) && (
                 <button
                   onClick={() => setIsEditModalOpen(true)}
-                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5"
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-md transition-all flex items-center gap-1.5"
                 >
                   <Edit className="w-3.5 h-3.5" />
-                  <span>Editar Perfil & Logo</span>
+                  <span>Cambiar Portada & Logo</span>
                 </button>
               )}
               <button
+                id="btn-share-store-public"
                 onClick={handleShare}
-                className="px-3 py-1.5 rounded-lg bg-white/90 hover:bg-white text-stone-800 text-xs font-semibold backdrop-blur-xs flex items-center gap-1.5 shadow-sm transition-all"
+                className="px-3.5 py-1.5 rounded-lg bg-white/95 hover:bg-white text-stone-800 text-xs font-bold backdrop-blur-xs flex items-center gap-1.5 shadow-sm hover:shadow transition-all active:scale-95"
+                title={`Compartir enlace directo de ${store.name}`}
               >
-                <Share2 className="w-3.5 h-3.5" />
-                <span>Compartir</span>
+                {copiedLink ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
+                    <span className="text-emerald-700">¡Enlace Copiado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-3.5 h-3.5 text-stone-700" />
+                    <span>Compartir</span>
+                  </>
+                )}
               </button>
               <button
                 onClick={() => toggleFavoriteStore(store.id)}
@@ -225,12 +300,12 @@ export const StorePublicPage: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-white rounded-lg border border-stone-200 text-blue-600 shadow-2xs">
-                  <Phone className="w-4 h-4" />
+                <div className="p-2 bg-white rounded-lg border border-stone-200 text-red-600 shadow-2xs">
+                  <MessageSquare className="w-4 h-4" />
                 </div>
                 <div>
-                  <span className="text-stone-400 block text-[10px] uppercase font-bold">Contacto Directo</span>
-                  <span className="font-bold text-stone-800">WhatsApp: {store.whatsapp}</span>
+                  <span className="text-stone-400 block text-[10px] uppercase font-bold">Chat en Plataforma</span>
+                  <span className="font-bold text-stone-800">Canal Oficial tras Compra</span>
                 </div>
               </div>
             </div>

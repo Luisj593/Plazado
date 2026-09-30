@@ -1,13 +1,17 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { X, ShieldCheck, FileText, CheckCircle2 } from 'lucide-react';
+import { X, ShieldCheck, FileText, CheckCircle2, Download, FileCheck } from 'lucide-react';
+import { triggerFileDownload, downloadOfficialPdfFallback } from '../../utils/fileDownloader';
 
 export const PolicyModal: React.FC = () => {
-  const { openPolicySlug, setOpenPolicySlug, systemSettings } = useApp();
+  const { openPolicySlug, setOpenPolicySlug, systemSettings, showNotification } = useApp();
 
   if (!openPolicySlug) return null;
 
-  let title = 'Términos y Condiciones';
+  const legalDocs = systemSettings.legalDocuments || [];
+  const matchedDoc = legalDocs.find(d => d.category === openPolicySlug || d.id === openPolicySlug);
+
+  let title = matchedDoc?.title || 'Términos y Condiciones';
   let content = '';
 
   if (openPolicySlug === 'customer_terms') {
@@ -77,12 +81,37 @@ El cliente puede ingresar a **Mis Pedidos → Abrir Reclamación**, adjuntando f
 
 Todas las transacciones se realizan en pesos dominicanos (DOP / RD$). Se aplican comprobantes fiscales cuando sean solicitados.
     `;
+  } else if (matchedDoc) {
+    title = matchedDoc.title;
+    content = matchedDoc.description;
   } else {
     title = 'Comisión Comercial PlazaDO';
     content = `
 PlazaDO.com opera con una comisión comercial fija del **5%** sobre las ventas generadas por cada tienda. Dicho monto cubre el mantenimiento tecnológico de la plataforma, el soporte a compradores, la seguridad transaccional y la exposición en el catálogo unificado de comercios dominicanos.
     `;
   }
+
+  const handleDownloadPdf = () => {
+    if (matchedDoc?.pdfUrl) {
+      triggerFileDownload(matchedDoc.pdfUrl, matchedDoc.pdfFileName || `${matchedDoc.title}.pdf`);
+      showNotification(`Descargando ${matchedDoc.pdfFileName || matchedDoc.title}...`);
+    } else {
+      downloadOfficialPdfFallback({
+        title,
+        version: matchedDoc?.version || systemSettings.policies.customerTermsVersion || 'v2.1-2026-RD',
+        lastUpdated: matchedDoc?.lastUpdated || new Date().toISOString().split('T')[0],
+        categoryLabel: matchedDoc?.categoryLabel || 'Documento Oficial',
+        description: matchedDoc?.description || title,
+        summaryPoints: matchedDoc?.summaryPoints,
+        legalBusinessName: systemSettings.legalBusinessName,
+        rnc: systemSettings.rnc,
+        contactEmail: systemSettings.contactEmail,
+        whatsappCommercial: systemSettings.whatsappCommercial,
+        fullContent: content
+      });
+      showNotification(`Generando vista oficial en PDF para ${title}...`);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
@@ -104,9 +133,20 @@ PlazaDO.com opera con una comisión comercial fija del **5%** sobre las ventas g
 
         {/* Content */}
         <div className="p-6 overflow-y-auto space-y-4 text-xs md:text-sm text-stone-700 leading-relaxed">
-          <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-red-800 text-xs flex items-center gap-2">
-            <FileText className="w-4 h-4 shrink-0" />
-            <span>Marco legal aplicable: República Dominicana • Vigencia {systemSettings.policies.customerTermsVersion}</span>
+          <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 shrink-0 text-red-600" />
+              <span>Marco legal aplicable: República Dominicana • Vigencia {matchedDoc?.version || systemSettings.policies.customerTermsVersion}</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shrink-0 shadow-2xs self-start sm:self-auto"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Descargar PDF</span>
+            </button>
           </div>
 
           <div className="prose prose-sm max-w-none prose-headings:font-bold prose-headings:text-stone-900 prose-p:text-stone-600 whitespace-pre-line">
@@ -115,7 +155,16 @@ PlazaDO.com opera con una comisión comercial fija del **5%** sobre las ventas g
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-stone-200 bg-stone-50 flex justify-end">
+        <div className="px-6 py-3 border-t border-stone-200 bg-stone-50 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            className="px-3 py-2 text-stone-700 hover:text-red-600 text-xs font-bold transition-colors flex items-center gap-1.5"
+          >
+            <Download className="w-4 h-4 text-red-600" />
+            <span>Descargar Documento Oficial (PDF)</span>
+          </button>
+
           <button
             onClick={() => setOpenPolicySlug(null)}
             className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"

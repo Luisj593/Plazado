@@ -11,7 +11,13 @@ import {
   Banner, 
   SupportTicket, 
   AuditLog, 
-  SystemSettings 
+  SystemSettings,
+  PaymentGatewayConfig,
+  AdPlacement,
+  Advertisement,
+  LegalDocument,
+  AndroidAppConfig,
+  CategorySpecification
 } from '../types';
 
 export const DOMINICAN_PROVINCES = [
@@ -51,521 +57,15 @@ export const DOMINICAN_BANKS = [
   'Banco Vimenca'
 ];
 
-export const INITIAL_CATEGORIES: Category[] = [
-  {
-    id: 'cat-tecnologia',
-    name: 'Tecnología',
-    slug: 'tecnologia',
-    icon: 'Smartphone',
-    description: 'Celulares, laptops, accesorios y electrónica en general',
-    parentId: null,
-    order: 1
-  },
-  {
-    id: 'cat-moda',
-    name: 'Moda y Calzado',
-    slug: 'moda-y-calzado',
-    icon: 'Shirt',
-    description: 'Ropa, zapatos, carteras y accesorios para damas, caballeros y niños',
-    parentId: null,
-    order: 2
-  },
-  {
-    id: 'cat-hogar',
-    name: 'Hogar y Decoración',
-    slug: 'hogar-y-decoracion',
-    icon: 'Home',
-    description: 'Muebles, cocina, organización y artículos para tu casa',
-    parentId: null,
-    order: 3
-  },
-  {
-    id: 'cat-mascotas',
-    name: 'Mascotas',
-    slug: 'mascotas',
-    icon: 'PawPrint',
-    description: 'Alimentos, accesorios, higiene y juguetes para perros, gatos y otras mascotas',
-    parentId: null,
-    order: 4
-  },
-  {
-    id: 'cat-belleza',
-    name: 'Belleza y Cuidado',
-    slug: 'belleza-y-cuidado',
-    icon: 'Sparkles',
-    description: 'Cosméticos, cuidado de la piel, perfumes y cuidado personal',
-    parentId: null,
-    order: 5
-  },
-  {
-    id: 'cat-deportes',
-    name: 'Deportes y Fitness',
-    slug: 'deportes-y-fitness',
-    icon: 'Dumbbell',
-    description: 'Equipamiento deportivo, ropa fitness y suplementos',
-    parentId: null,
-    order: 6
-  },
-  {
-    id: 'cat-alimentos',
-    name: 'Alimentos y Bebidas',
-    slug: 'alimentos-y-bebidas',
-    icon: 'Utensils',
-    description: 'Productos locales, café dominicano, snacks y delicatessen',
-    parentId: null,
-    order: 7
-  },
-  // Subcategorías de Mascotas (Cumplimiento estricto del punto #9: Unificado bajo Mascotas)
-  {
-    id: 'subcat-mascotas-perros',
-    name: 'Perros',
-    slug: 'perros',
-    icon: 'Dog',
-    description: 'Comida, snacks, correas y juguetes para caninos',
-    parentId: 'cat-mascotas',
-    order: 1
-  },
-  {
-    id: 'subcat-mascotas-gatos',
-    name: 'Gatos',
-    slug: 'gatos',
-    icon: 'Cat',
-    description: 'Arenas, rascadores, comida y accesorios felinos',
-    parentId: 'cat-mascotas',
-    order: 2
-  },
-  {
-    id: 'subcat-mascotas-accesorios',
-    name: 'Accesorios e Higiene',
-    slug: 'accesorios-e-higiene-mascotas',
-    icon: 'Bath',
-    description: 'Shampoos, cepillos, camitas y comederos',
-    parentId: 'cat-mascotas',
-    order: 3
-  },
-  // Subcategorías Tecnología
-  {
-    id: 'subcat-tec-audio',
-    name: 'Audio y Auriculares',
-    slug: 'audio-y-auriculares',
-    icon: 'Headphones',
-    parentId: 'cat-tecnologia',
-    order: 1
-  },
-  {
-    id: 'subcat-tec-cargadores',
-    name: 'Cables y Cargadores',
-    slug: 'cables-y-cargadores',
-    icon: 'Zap',
-    parentId: 'cat-tecnologia',
-    order: 2
-  }
-];
+import { OFFICIAL_CATEGORIES, OFFICIAL_SPECIFICATIONS } from './officialCategoriesCatalog.ts';
+import { PRODUCTION_OFFICIAL_STORES, PRODUCTION_OFFICIAL_PRODUCTS } from './officialStoresAndProducts.ts';
 
-export const INITIAL_STORES: Store[] = [
-  {
-    id: 'store-techzone',
-    name: 'TechZone RD',
-    slug: 'techzone-rd',
-    ownerName: 'Carlos Santana',
-    email: 'contacto@techzonerd.com',
-    phone: '809-555-8324',
-    whatsapp: '809-555-8324',
-    description: 'Comercio oficial de tecnología y electrónica en Santo Domingo. Especialistas en smartphones, laptops, audio y accesorios con garantía local.',
-    categoryId: 'cat-tecnologia',
-    logo: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=300&auto=format&fit=crop&q=80',
-    banner: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=1600&auto=format&fit=crop&q=80',
-    province: 'Distrito Nacional',
-    municipality: 'Santo Domingo de Guzmán',
-    address: 'Av. Winston Churchill #109, Piantini',
-    status: 'APPROVED',
-    isPublished: true,
-    rating: 4.9,
-    reviewCount: 84,
-    salesCount: 312,
-    shippingConfig: {
-      type: 'fixed',
-      fixedRate: 200,
-      estimatedDays: '24 a 48 horas',
-      coverageProvinces: ['Distrito Nacional', 'Santo Domingo', 'Santiago']
-    },
-    bankInfo: {
-      bank: 'Banco Popular Dominicano',
-      accountType: 'CORRIENTE',
-      accountNumber: '792184902',
-      accountHolder: 'TechZone Soluciones EIRL',
-      rncOrCedula: '131-89214-5'
-    },
-    createdAt: '2026-01-10T10:00:00Z'
-  },
-  {
-    id: 'store-modacriolla',
-    name: 'Moda Criolla RD',
-    slug: 'moda-criolla-rd',
-    ownerName: 'Rosa Almonte',
-    email: 'ventas@modacriollard.com',
-    phone: '809-582-4110',
-    whatsapp: '809-582-4110',
-    description: 'Confecciones dominicanas de alta costura, chacabanas en lino 100% puro, calzado artesanal en cuero y moda caribeña para damas y caballeros.',
-    categoryId: 'cat-moda',
-    logo: 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=300&auto=format&fit=crop&q=80',
-    banner: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1600&auto=format&fit=crop&q=80',
-    province: 'Santiago',
-    municipality: 'Santiago de los Caballeros',
-    address: 'Calle del Sol #45, Centro Histórico',
-    status: 'APPROVED',
-    isPublished: true,
-    rating: 4.8,
-    reviewCount: 52,
-    salesCount: 194,
-    shippingConfig: {
-      type: 'fixed',
-      fixedRate: 250,
-      estimatedDays: '24 a 48 horas',
-      coverageProvinces: ['Santiago', 'Distrito Nacional', 'La Vega', 'Puerto Plata']
-    },
-    bankInfo: {
-      bank: 'Banco de Reservas (Banreservas)',
-      accountType: 'CORRIENTE',
-      accountNumber: '2401894101',
-      accountHolder: 'Confecciones Rosa Almonte SRL',
-      rncOrCedula: '130-94125-2'
-    },
-    createdAt: '2026-01-12T11:30:00Z'
-  },
-  {
-    id: 'store-petlovers',
-    name: 'PetLovers Dominicana',
-    slug: 'petlovers-dominicana',
-    ownerName: 'Dr. Manuel Peña',
-    email: 'servicio@petloversrd.com',
-    phone: '809-688-9900',
-    whatsapp: '809-688-9900',
-    description: 'Nutrición veterinaria premium, camas ortopédicas, higiene y accesorios interactivos para consentir a los peludos del hogar en toda República Dominicana.',
-    categoryId: 'cat-mascotas',
-    logo: 'https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?w=300&auto=format&fit=crop&q=80',
-    banner: 'https://images.unsplash.com/photo-1548767797-d8c844163c4c?w=1600&auto=format&fit=crop&q=80',
-    province: 'Santo Domingo',
-    municipality: 'Santo Domingo Este',
-    address: 'Av. San Vicente de Paúl #88, Alma Rosa',
-    status: 'APPROVED',
-    isPublished: true,
-    rating: 5.0,
-    reviewCount: 96,
-    salesCount: 410,
-    shippingConfig: {
-      type: 'fixed',
-      fixedRate: 180,
-      estimatedDays: 'Mismo día / 24 hrs',
-      coverageProvinces: ['Distrito Nacional', 'Santo Domingo']
-    },
-    bankInfo: {
-      bank: 'Banco BHD',
-      accountType: 'AHORROS',
-      accountNumber: '0812948123',
-      accountHolder: 'Manuel Peña PetCare',
-      rncOrCedula: '001-1928412-4'
-    },
-    createdAt: '2026-01-15T09:15:00Z'
-  },
-  {
-    id: 'store-hogardeco',
-    name: 'Hogar & Deco Bella Vista',
-    slug: 'hogar-deco-bella-vista',
-    ownerName: 'Elena Rosario',
-    email: 'info@hogardecord.com',
-    phone: '809-535-7766',
-    whatsapp: '809-535-7766',
-    description: 'Artículos de diseño de interiores, iluminación tejida a mano, vajillas cerámicas artesanales y detalles decorativos para transformar tu hogar.',
-    categoryId: 'cat-hogar',
-    logo: 'https://images.unsplash.com/photo-1616046229478-9901c5536a45?w=300&auto=format&fit=crop&q=80',
-    banner: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=1600&auto=format&fit=crop&q=80',
-    province: 'Distrito Nacional',
-    municipality: 'Santo Domingo de Guzmán',
-    address: 'Av. Rómulo Betancourt #1420, Bella Vista',
-    status: 'APPROVED',
-    isPublished: true,
-    rating: 4.7,
-    reviewCount: 38,
-    salesCount: 145,
-    shippingConfig: {
-      type: 'fixed',
-      fixedRate: 220,
-      estimatedDays: '24 a 48 horas',
-      coverageProvinces: ['Distrito Nacional', 'Santo Domingo']
-    },
-    bankInfo: {
-      bank: 'Banco Santa Cruz',
-      accountType: 'CORRIENTE',
-      accountNumber: '551928410',
-      accountHolder: 'DecoHogar Dominicana SRL',
-      rncOrCedula: '132-84192-1'
-    },
-    createdAt: '2026-01-18T14:20:00Z'
-  },
-  {
-    id: 'store-saboresrd',
-    name: 'Sabores & Café Quisqueya',
-    slug: 'sabores-cafe-quisqueya',
-    ownerName: 'Eduardo Henríquez',
-    email: 'pedidos@saboresquisqueya.do',
-    phone: '809-525-1122',
-    whatsapp: '809-525-1122',
-    description: 'Café de altura de Jarabacoa y Polo Barahona, cacao orgánico dominicano, dulces tradicionales y miel silvestre cosechada en la Cordillera Central.',
-    categoryId: 'cat-alimentos',
-    logo: 'https://images.unsplash.com/photo-1509785307050-d4066910ec1e?w=300&auto=format&fit=crop&q=80',
-    banner: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=1600&auto=format&fit=crop&q=80',
-    province: 'La Vega',
-    municipality: 'Jarabacoa',
-    address: 'Carretera Jarabacoa-Constanza Km 3',
-    status: 'APPROVED',
-    isPublished: true,
-    rating: 4.9,
-    reviewCount: 67,
-    salesCount: 280,
-    shippingConfig: {
-      type: 'fixed',
-      fixedRate: 200,
-      estimatedDays: '24 a 48 horas',
-      coverageProvinces: ['La Vega', 'Distrito Nacional', 'Santiago', 'Santo Domingo']
-    },
-    bankInfo: {
-      bank: 'Banco Popular Dominicano',
-      accountType: 'CORRIENTE',
-      accountNumber: '819204128',
-      accountHolder: 'Sabores Quisqueyanos SRL',
-      rncOrCedula: '131-09412-8'
-    },
-    createdAt: '2026-01-20T08:45:00Z'
-  }
-];
+export const INITIAL_CATEGORIES: Category[] = OFFICIAL_CATEGORIES;
+export const INITIAL_SPECIFICATIONS: CategorySpecification[] = OFFICIAL_SPECIFICATIONS;
 
-export const INITIAL_PRODUCTS: Product[] = [
-  // TechZone RD
-  {
-    id: 'prod-tech-1',
-    storeId: 'store-techzone',
-    name: 'Apple iPhone 15 Pro 256GB - Titanio Natural',
-    slug: 'apple-iphone-15-pro-256gb-titanio-natural',
-    description: 'Smartphone insignia Apple con acabado en titanio de grado aeroespacial, chip A17 Pro revolucionario, cámara principal de 48 MP y puerto USB-C con velocidades USB 3. Equipo nuevo sellado con garantía oficial local en Santo Domingo.',
-    shortDescription: 'Chip A17 Pro, cámara 48MP, titanio de grado aeroespacial.',
-    categoryId: 'cat-tecnologia',
-    subcategoryId: 'subcat-tec-audio',
-    price: 68900,
-    promoPrice: 65900,
-    sku: 'IPH15P-256-NAT',
-    images: [
-      'https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=800&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?w=800&auto=format&fit=crop&q=80'
-    ],
-    stock: 14,
-    reservedStock: 0,
-    soldCount: 42,
-    minStockAlert: 3,
-    status: 'published',
-    rating: 4.9,
-    reviewCount: 28,
-    isFeatured: true,
-    createdAt: '2026-01-10T12:00:00Z'
-  },
-  {
-    id: 'prod-tech-2',
-    storeId: 'store-techzone',
-    name: 'Apple AirPods Pro 2da Generación con USB-C',
-    slug: 'apple-airpods-pro-2da-generacion-usb-c',
-    description: 'Auriculares inalámbricos con cancelación activa de ruido hasta 2x superior, audio espacial personalizado con seguimiento dinámico de la cabeza y estuche MagSafe USB-C resistente al agua y polvo IP54.',
-    shortDescription: 'Cancelación activa de ruido y audio espacial inmersivo.',
-    categoryId: 'cat-tecnologia',
-    subcategoryId: 'subcat-tec-audio',
-    price: 13900,
-    promoPrice: 12490,
-    sku: 'APP2-USBC-WHT',
-    images: [
-      'https://images.unsplash.com/photo-1600294037681-c80b4cb5b434?w=800&auto=format&fit=crop&q=80'
-    ],
-    stock: 25,
-    reservedStock: 0,
-    soldCount: 88,
-    minStockAlert: 5,
-    status: 'published',
-    rating: 4.8,
-    reviewCount: 39,
-    isFeatured: true,
-    createdAt: '2026-01-11T14:30:00Z'
-  },
-  {
-    id: 'prod-tech-3',
-    storeId: 'store-techzone',
-    name: 'MacBook Air 13.6" M3 - 8GB / 512GB SSD Medianoche',
-    slug: 'macbook-air-13-m3-512gb-medianoche',
-    description: 'Laptop ultradelgada y ligera con el chip Apple M3 de última generación. Pantalla Liquid Retina de 13.6 pulgadas, cámara FaceTime HD de 1080p y hasta 18 horas de batería ininterrumpida.',
-    categoryId: 'cat-tecnologia',
-    price: 74500,
-    promoPrice: 71900,
-    sku: 'MBA13-M3-512-MDN',
-    images: [
-      'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&auto=format&fit=crop&q=80'
-    ],
-    stock: 8,
-    reservedStock: 0,
-    soldCount: 19,
-    minStockAlert: 2,
-    status: 'published',
-    rating: 5.0,
-    reviewCount: 15,
-    isFeatured: true,
-    createdAt: '2026-01-12T10:00:00Z'
-  },
+export const INITIAL_STORES: Store[] = PRODUCTION_OFFICIAL_STORES;
 
-  // Moda Criolla RD
-  {
-    id: 'prod-moda-1',
-    storeId: 'store-modacriolla',
-    name: 'Chacabana Clásica Manga Larga Lino Puro Italiano - Blanco Nieve',
-    slug: 'chacabana-clasica-manga-larga-lino-puro-blanco',
-    description: 'Elegante chacabana tradicional dominicana confeccionada en 100% lino de primera calidad. Corte impecable, cuatro bolsillos frontales con alforzado fino hecho a mano por sastres en Santiago.',
-    shortDescription: '100% lino puro, alforzado artesanal tradicional dominicano.',
-    categoryId: 'cat-moda',
-    price: 4800,
-    promoPrice: 4250,
-    sku: 'CHA-LIN-ML-WHT',
-    images: [
-      'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=800&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1620012253295-c15c429fbb41?w=800&auto=format&fit=crop&q=80'
-    ],
-    stock: 30,
-    reservedStock: 0,
-    soldCount: 64,
-    minStockAlert: 5,
-    status: 'published',
-    rating: 4.9,
-    reviewCount: 31,
-    isFeatured: true,
-    createdAt: '2026-01-12T16:00:00Z'
-  },
-  {
-    id: 'prod-moda-2',
-    storeId: 'store-modacriolla',
-    name: 'Sandalias Artesanales en Cuero Genuino Dominicano',
-    slug: 'sandalias-artesanales-cuero-genuino-dominicano',
-    description: 'Calzado artesanal en cuero vacuno curtido al natural con suela antideslizante flexible. Ideal para el clima tropical con máxima comodidad para uso diario.',
-    categoryId: 'cat-moda',
-    price: 2400,
-    sku: 'SAN-CUE-DOM-BRN',
-    images: [
-      'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=800&auto=format&fit=crop&q=80'
-    ],
-    stock: 22,
-    reservedStock: 0,
-    soldCount: 35,
-    minStockAlert: 4,
-    status: 'published',
-    rating: 4.7,
-    reviewCount: 18,
-    isFeatured: false,
-    createdAt: '2026-01-13T11:00:00Z'
-  },
-
-  // PetLovers Dominicana
-  {
-    id: 'prod-pet-1',
-    storeId: 'store-petlovers',
-    name: 'Alimento Canino Super Premium Adulto Salmón & Arroz Integral 30 Lbs',
-    slug: 'alimento-canino-super-premium-salmon-30lb',
-    description: 'Fórmula nutricional completa elaborada con salmón fresco del Atlántico, ácidos grasos Omega 3 y 6 para un pelaje brillante y glucosamina para articulaciones saludables. Recomendado para razas medianas y grandes.',
-    shortDescription: 'Salmón fresco, Omega 3 y 6, nutrición completa premium.',
-    categoryId: 'cat-mascotas',
-    subcategoryId: 'subcat-mascotas-perros',
-    price: 4200,
-    promoPrice: 3850,
-    sku: 'DOG-SALM-30LB',
-    images: [
-      'https://images.unsplash.com/photo-1589924691995-400dc9ecc119?w=800&auto=format&fit=crop&q=80'
-    ],
-    stock: 18,
-    reservedStock: 0,
-    soldCount: 92,
-    minStockAlert: 4,
-    status: 'published',
-    rating: 5.0,
-    reviewCount: 45,
-    isFeatured: true,
-    createdAt: '2026-01-15T12:00:00Z'
-  },
-  {
-    id: 'prod-pet-2',
-    storeId: 'store-petlovers',
-    name: 'Cama Ortopédica Antiestrés Acolchada para Mascotas - Tamaño L',
-    slug: 'cama-ortopedica-antiestres-mascotas-l',
-    description: 'Cama circular con borde acolchado envolvente de felpa ultra suave que alivia la ansiedad y brinda soporte ortopédico para articulaciones y cuello. Funda desmontable y lavable.',
-    categoryId: 'cat-mascotas',
-    subcategoryId: 'subcat-mascotas-perros',
-    price: 2650,
-    promoPrice: 2290,
-    sku: 'PET-BED-ORT-L',
-    images: [
-      'https://images.unsplash.com/photo-1541781774459-bb2af2f05b55?w=800&auto=format&fit=crop&q=80'
-    ],
-    stock: 16,
-    reservedStock: 0,
-    soldCount: 54,
-    minStockAlert: 3,
-    status: 'published',
-    rating: 4.8,
-    reviewCount: 22,
-    isFeatured: true,
-    createdAt: '2026-01-16T15:00:00Z'
-  },
-
-  // Hogar & Deco Bella Vista
-  {
-    id: 'prod-hogar-1',
-    storeId: 'store-hogardeco',
-    name: 'Lámpara de Mesa Rústica Caribeña Tejida en Fibra Natural',
-    slug: 'lampara-mesa-rustica-caribena-fibra-natural',
-    description: 'Lámpara de acento hecha a mano con fibras de ratán y base de madera sólida dominicana. Produce una luz cálida y acogedora ideal para salas y habitaciones.',
-    categoryId: 'cat-hogar',
-    price: 3200,
-    sku: 'LAM-FIB-NAT-01',
-    images: [
-      'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=800&auto=format&fit=crop&q=80'
-    ],
-    stock: 12,
-    reservedStock: 0,
-    soldCount: 26,
-    minStockAlert: 2,
-    status: 'published',
-    rating: 4.9,
-    reviewCount: 14,
-    isFeatured: true,
-    createdAt: '2026-01-18T16:00:00Z'
-  },
-
-  // Sabores & Café Quisqueya
-  {
-    id: 'prod-sabor-1',
-    storeId: 'store-saboresrd',
-    name: 'Café de Altura de Jarabacoa 100% Arábica Tostado en Grano 1 Lb',
-    slug: 'cafe-altura-jarabacoa-arabica-grano-1lb',
-    description: 'Café de especialidad cosechado a más de 1,200 metros sobre el nivel del mar en las montañas de Jarabacoa. Notas aromáticas de chocolate negro, nuez y caramelo con acidez cítrica balanceada.',
-    shortDescription: 'Cosechado a 1,200m en Jarabacoa, notas de chocolate y caramelo.',
-    categoryId: 'cat-alimentos',
-    price: 580,
-    sku: 'CAF-JAR-ARA-1LB',
-    images: [
-      'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=800&auto=format&fit=crop&q=80'
-    ],
-    stock: 45,
-    reservedStock: 0,
-    soldCount: 120,
-    minStockAlert: 8,
-    status: 'published',
-    rating: 5.0,
-    reviewCount: 56,
-    isFeatured: true,
-    createdAt: '2026-01-20T10:00:00Z'
-  }
-];
+export const INITIAL_PRODUCTS: Product[] = PRODUCTION_OFFICIAL_PRODUCTS;
 
 export const INITIAL_USERS: User[] = [
   {
@@ -598,41 +98,7 @@ export const INITIAL_STORE_BALANCES: Record<string, StoreBalance> = {};
 
 export const INITIAL_SETTLEMENTS: Settlement[] = [];
 
-export const INITIAL_BANNERS: Banner[] = [
-  {
-    id: 'banner-1',
-    title: 'Muchas tiendas. Un solo lugar.',
-    subtitle: 'El marketplace oficial de República Dominicana. Compra tus marcas y emprendimientos locales favoritos.',
-    badge: 'PlazaDO Exclusivo',
-    imageUrl: 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=1600&auto=format&fit=crop&q=80',
-    targetType: 'CATEGORY',
-    targetValue: 'cat-tecnologia',
-    isActive: true,
-    order: 1
-  },
-  {
-    id: 'banner-2',
-    title: 'Todo para tus Consentidos',
-    subtitle: 'Alimentos premium, camas y juguetes en la categoría Mascotas con envío rápido a Santo Domingo y Santiago.',
-    badge: 'Mascotas PlazaDO',
-    imageUrl: 'https://images.unsplash.com/photo-1548767797-d8c844163c4c?w=1600&auto=format&fit=crop&q=80',
-    targetType: 'CATEGORY',
-    targetValue: 'cat-mascotas',
-    isActive: true,
-    order: 2
-  },
-  {
-    id: 'banner-3',
-    title: 'Moda y Artesanía Dominicana',
-    subtitle: 'Chacabanas de lino, calzado artesanal y diseño criollo con entrega a las 32 provincias.',
-    badge: 'Hecho en RD',
-    imageUrl: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1600&auto=format&fit=crop&q=80',
-    targetType: 'CATEGORY',
-    targetValue: 'cat-moda-y-calzado',
-    isActive: true,
-    order: 3
-  }
-];
+export const INITIAL_BANNERS: Banner[] = [];
 
 export const INITIAL_COUPONS: Coupon[] = [
   {
@@ -649,17 +115,122 @@ export const INITIAL_COUPONS: Coupon[] = [
   }
 ];
 
+export const DEFAULT_LEGAL_DOCUMENTS: LegalDocument[] = [
+  {
+    id: 'customer_terms',
+    title: 'Términos y Condiciones para Clientes Compradores',
+    category: 'customer_terms',
+    categoryLabel: 'Términos Clientes',
+    version: 'v2.1-2026-RD',
+    lastUpdated: '2026-09-20',
+    description: 'Marco legal que regula el uso de la plataforma por parte de los compradores, compra segura, pagos electrónicos y validación de entrega con código secreto conforme a la Ley 358-05.',
+    summaryPoints: [
+      'PlazaDO es un marketplace tecnológico intermediario entre compradores y comercios formales.',
+      'Cada tienda responde directamente por la calidad, garantía y despacho de sus artículos.',
+      'Protección al comprador mediante Código Secreto de Entrega de 6 dígitos.',
+      'Garantía de reembolso en caso de producto dañado o no recibido.'
+    ],
+    isPublished: true,
+    downloadCount: 142
+  },
+  {
+    id: 'store_terms',
+    title: 'Términos y Condiciones para Tiendas y Vendedores Asociados',
+    category: 'store_terms',
+    categoryLabel: 'Términos Vendedores',
+    version: 'v2.1-2026-RD',
+    lastUpdated: '2026-09-20',
+    description: 'Reglamento para comercios, marcas y emprendedores que comercializan sus productos en PlazaDO.com. Aislamiento estricto de datos, comisiones y condiciones de liquidación bancaria.',
+    summaryPoints: [
+      'Aislamiento de información: cada tienda solo tiene acceso a sus propios pedidos y clientes.',
+      'Comisión fijada según el acuerdo comercial sobre el valor neto de los productos vendidos.',
+      'Disponibilidad de fondos y liquidaciones bancarias directas en Banco Popular, Banreservas, BHD u otros.',
+      'Compromiso de entrega oportuna y despacho de órdenes.'
+    ],
+    isPublished: true,
+    downloadCount: 98
+  },
+  {
+    id: 'privacy',
+    title: 'Política de Privacidad y Protección de Datos Personales',
+    category: 'privacy',
+    categoryLabel: 'Privacidad RD',
+    version: 'v1.4-2026-RD',
+    lastUpdated: '2026-09-20',
+    description: 'Cumplimiento exhaustivo con la Ley No. 172-13 sobre Protección Integral de los Datos Personales en la República Dominicana.',
+    summaryPoints: [
+      'Cifrado de datos sensibles y protección en tránsito con TLS 1.3.',
+      'No almacenamiento de tarjetas completas ni códigos CVV (canalizado por pasarela bancaria AZUL).',
+      'No comercialización de bases de datos a terceros ajenos a la transacción.'
+    ],
+    isPublished: true,
+    downloadCount: 76
+  },
+  {
+    id: 'returns_refunds',
+    title: 'Política y Procedimiento de Devoluciones y Reclamaciones',
+    category: 'returns_refunds',
+    categoryLabel: 'Devoluciones y Disputas',
+    version: 'v1.2-2026-RD',
+    lastUpdated: '2026-09-20',
+    description: 'Procedimiento formal para resolver discrepancias, productos defectuosos, faltantes o garantías entre clientes y comercios asociados con intervención del Super Administrador.',
+    summaryPoints: [
+      'Plazo de 3 días hábiles para apertura de reclamos con evidencia fotográfica.',
+      '48 horas otorgadas al comercio para reposición o solución consensuada.',
+      'Custodia y mediación fiduciaria de PlazaDO para dictaminar reembolsos en caso de incumplimiento.'
+    ],
+    isPublished: true,
+    downloadCount: 61
+  },
+  {
+    id: 'shipping_procedures',
+    title: 'Procedimiento de Despacho, Envíos y Validación con Código Secreto',
+    category: 'shipping_procedures',
+    categoryLabel: 'Procedimiento de Envíos',
+    version: 'v1.1-2026-RD',
+    lastUpdated: '2026-09-20',
+    description: 'Manual operativo de envíos por mensajería propia, couriers o servicios locales, junto con la instrucción de entrega del Código Secreto de 6 dígitos.',
+    summaryPoints: [
+      'Registro del número de guía o chofer asignado para cada pedido.',
+      'Obligación del repartidor de solicitar el Código Secreto al destinatario al momento de la entrega física.',
+      'Liberación automática del pedido a estado COMPLETADO al validar el código.'
+    ],
+    isPublished: true,
+    downloadCount: 88
+  }
+];
+
+export const DEFAULT_ANDROID_APP_CONFIG: AndroidAppConfig = {
+  isEnabled: true,
+  appName: 'PlazaDO Marketplace RD',
+  versionName: '1.0.4',
+  versionCode: 104,
+  releaseDate: '2026-09-21',
+  apkFileName: 'PlazaDO-Marketplace-v1.0.4.apk',
+  apkFileSize: '18.6 MB',
+  minAndroidVersion: 'Android 8.0 (Oreo) o superior',
+  packageName: 'com.plazado.marketplace',
+  releaseNotes: 'Versión oficial de PlazaDO.com para Android. Incluye catálogo unificado multi-tienda, carrito multi-comercio, seguimiento de pedidos en tiempo real con Código Secreto de entrega, notificaciones instantáneas de despacho y pagos seguros en RD$.',
+  downloadCount: 312
+};
+
 export const INITIAL_SETTINGS: SystemSettings = {
   platformName: 'PlazaDO.com',
   legalBusinessName: 'PlazaDO Soluciones Tecnológicas SRL',
   rnc: '132-94812-3',
-  contactEmail: 'contacto@plazado.com',
+  contactEmail: 'Luis.jimenez@msn.com',
   contactPhone: '809-555-7529',
   whatsappCommercial: '809-449-3325', // Solicitado en el prompt
-  defaultCommissionRate: 0.05, // 5% solicitado en el prompt
+  plazaCommissionRate: 0.0005, // 0.05% solicitado en el prompt (Monto * 0.0005)
+  defaultCommissionRate: 0.0005, // 0.05%
   itbisTaxRate: 0.18,
   currency: 'DOP',
   currencySymbol: 'RD$',
+  logoType: 'default',
+  logoUrl: '',
+  logoDarkUrl: '',
+  faviconType: 'default',
+  faviconUrl: '/dominican-flag.svg',
   azulConfig: {
     merchantId: '3948102948',
     authKey: 'AZUL_AUTH_KEY_LIVE_PLAZADO_SECURE',
@@ -682,6 +253,17 @@ export const INITIAL_SETTINGS: SystemSettings = {
     storeTermsVersion: 'v2.1-2026-RD',
     privacyPolicyVersion: 'v1.4-2026-RD',
     refundPolicyVersion: 'v1.2-2026-RD'
+  },
+  legalDocuments: DEFAULT_LEGAL_DOCUMENTS,
+  androidApp: DEFAULT_ANDROID_APP_CONFIG,
+  mailConfig: {
+    senderEmail: 'Luiss.jimeness@gmail.com',
+    senderName: 'PlazaDO Marketplace Dominicano',
+    smtpHost: 'smtp.gmail.com',
+    smtpPort: 465,
+    smtpUser: 'Luiss.jimeness@gmail.com',
+    useSsl: true,
+    isConfigured: true
   }
 };
 
@@ -698,3 +280,219 @@ export const INITIAL_AUDIT_LOGS: AuditLog[] = [
     timestamp: '2026-09-19T10:00:00Z'
   }
 ];
+
+export const INITIAL_PAYMENT_GATEWAYS: PaymentGatewayConfig[] = [
+  {
+    id: 'azul',
+    providerKey: 'AZUL',
+    providerName: 'AZUL (Servicios Digitales Popular)',
+    accountCommercialName: 'Plazado Dominicana SRL',
+    merchantId: '39038540019',
+    affiliationNumber: '84729103',
+    currency: 'DOP',
+    associatedBankAccount: {
+      bank: 'Banco Popular Dominicano',
+      accountType: 'Corriente',
+      accountNumber: '8192847192',
+      accountHolder: 'Plazado Dominicana SRL',
+      rncOrCedula: '1-32-48921-1'
+    },
+    isActive: true,
+    environment: 'PRODUCTION',
+    webhookUrl: 'https://plazado.com/api/payments/webhook',
+    credentials: {
+      authKey: '••••••••8492',
+      merchantSecret: '••••••••2910',
+      hasCredentials: true
+    },
+    lastModified: '2026-09-19T12:00:00Z',
+    notes: 'Cuenta receptora principal oficial de Plazado.com para pagos con tarjeta en RD.'
+  },
+  {
+    id: 'cardnet',
+    providerKey: 'CARDNET',
+    providerName: 'CardNET (Consorcio de Tarjetas Dominicanas)',
+    accountCommercialName: 'Plazado Dominicana SRL',
+    merchantId: '928341029',
+    affiliationNumber: '5581920',
+    currency: 'DOP',
+    associatedBankAccount: {
+      bank: 'Banco de Reservas (Banreservas)',
+      accountType: 'Corriente',
+      accountNumber: '2409182391',
+      accountHolder: 'Plazado Dominicana SRL',
+      rncOrCedula: '1-32-48921-1'
+    },
+    isActive: false,
+    environment: 'SANDBOX',
+    webhookUrl: 'https://plazado.com/api/payments/cardnet/webhook',
+    credentials: {
+      apiKey: '••••••••1049',
+      hasCredentials: true
+    },
+    lastModified: '2026-09-19T12:00:00Z',
+    notes: 'Gateway secundario dominicano para contingencias y balanceo.'
+  },
+  {
+    id: 'stripe',
+    providerKey: 'STRIPE',
+    providerName: 'Stripe Payments International',
+    accountCommercialName: 'Plazado Dominicana SRL',
+    merchantId: 'acct_1PlazadoDoIntl',
+    affiliationNumber: 'STRIPE-INTL',
+    currency: 'USD',
+    associatedBankAccount: {
+      bank: 'Banco Popular Dominicano',
+      accountType: 'Corriente',
+      accountNumber: '7182930192',
+      accountHolder: 'Plazado Dominicana SRL',
+      rncOrCedula: '1-32-48921-1'
+    },
+    isActive: false,
+    environment: 'SANDBOX',
+    webhookUrl: 'https://plazado.com/api/payments/stripe/webhook',
+    credentials: {
+      secretKey: '••••••••9941',
+      hasCredentials: true
+    },
+    lastModified: '2026-09-19T12:00:00Z',
+    notes: 'Procesador internacional para tarjetas de crédito extranjeras y transacciones en USD.'
+  },
+  {
+    id: 'paypal',
+    providerKey: 'PAYPAL',
+    providerName: 'PayPal Commerce Platform',
+    accountCommercialName: 'Plazado Pay',
+    merchantId: 'PAYPAL-PLAZADO-RD',
+    affiliationNumber: 'PP-88219',
+    currency: 'USD',
+    associatedBankAccount: {
+      bank: 'Banco BHD',
+      accountType: 'Corriente',
+      accountNumber: '1928340192',
+      accountHolder: 'Plazado Dominicana SRL',
+      rncOrCedula: '1-32-48921-1'
+    },
+    isActive: false,
+    environment: 'SANDBOX',
+    webhookUrl: 'https://plazado.com/api/payments/paypal/webhook',
+    credentials: {
+      token: '••••••••7732',
+      hasCredentials: true
+    },
+    lastModified: '2026-09-19T12:00:00Z',
+    notes: 'Recepción de pagos mediante monedero digital PayPal.'
+  }
+];
+
+export const INITIAL_AD_PLACEMENTS: AdPlacement[] = [
+  {
+    code: 'HOME_TOP',
+    name: 'Banner Principal Superior',
+    description: 'Espacio de máximo impacto visual en la cabecera de la página principal (carrusel panorámico).',
+    supportedFormats: ['IMAGE', 'VIDEO'],
+    recommendedSize: '1200 x 400 px',
+    isActive: true,
+    maxSlots: 5
+  },
+  {
+    code: 'HOME_MIDDLE',
+    name: 'Banner Secundario Home',
+    description: 'Banner horizontal ubicado entre las secciones de productos destacados y comercios.',
+    supportedFormats: ['IMAGE'],
+    recommendedSize: '1200 x 250 px',
+    isActive: true,
+    maxSlots: 3
+  },
+  {
+    code: 'HOME_PRODUCTS',
+    name: 'Publicidad Entre Productos',
+    description: 'Tarjetas publicitarias patrocinadas insertadas orgánicamente en el catálogo de productos.',
+    supportedFormats: ['IMAGE'],
+    recommendedSize: '600 x 400 px',
+    isActive: true,
+    maxSlots: 4
+  },
+  {
+    code: 'CATEGORY_TOP',
+    name: 'Cabecera de Categorías',
+    description: 'Banners segmentados por categoría específica en la parte superior del catálogo filtrado.',
+    supportedFormats: ['IMAGE'],
+    recommendedSize: '1200 x 250 px',
+    isActive: true,
+    maxSlots: 3
+  },
+  {
+    code: 'CATEGORY_MIDDLE',
+    name: 'Intermedio de Categorías',
+    description: 'Espacio intermedio publicitario en el listado de navegación de categorías.',
+    supportedFormats: ['IMAGE'],
+    recommendedSize: '728 x 90 px',
+    isActive: true,
+    maxSlots: 2
+  },
+  {
+    code: 'STORE_TOP',
+    name: 'Cabecera en Tiendas',
+    description: 'Banner patrocinado en la vitrina pública de tiendas autorizadas.',
+    supportedFormats: ['IMAGE'],
+    recommendedSize: '1200 x 200 px',
+    isActive: true,
+    maxSlots: 2
+  },
+  {
+    code: 'PRODUCT_RELATED',
+    name: 'Publicidad en Detalle de Producto',
+    description: 'Espacio publicitario discreto en la ficha técnica del producto sin interferir con la compra.',
+    supportedFormats: ['IMAGE'],
+    recommendedSize: '400 x 300 px',
+    isActive: true,
+    maxSlots: 2
+  }
+];
+
+export const INITIAL_ADVERTISEMENTS: Advertisement[] = [
+  {
+    id: 'ad-plazado-vender',
+    title: 'Abre tu tienda en Plazado.com',
+    description: 'Vende a toda la República Dominicana. Registro gratuito, vitrina digital y pagos garantizados cada viernes.',
+    type: 'INTERNAL',
+    advertiserName: 'Plazado.com Oficial',
+    placement: 'HOME_TOP',
+    startDate: '2026-01-01',
+    endDate: '2027-12-31',
+    imageUrl: 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=1600&auto=format&fit=crop&q=80',
+    ctaText: 'Registrar Mi Tienda',
+    targetUrl: '/registro-tienda',
+    targetWindow: '_self',
+    priority: 10,
+    targetDevice: 'ALL',
+    isActive: true,
+    impressions: 1420,
+    clicks: 168,
+    order: 1,
+    createdAt: '2026-09-19T10:00:00Z'
+  },
+  {
+    id: 'ad-plazado-envios',
+    title: 'Envíos Rápidos en Todo el País',
+    description: 'Cobertura garantizada en el Gran Santo Domingo, Santiago y todas las provincias con entrega segura.',
+    type: 'INTERNAL',
+    advertiserName: 'Plazado.com Oficial',
+    placement: 'HOME_MIDDLE',
+    startDate: '2026-01-01',
+    endDate: '2027-12-31',
+    imageUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1600&auto=format&fit=crop&q=80',
+    ctaText: 'Conocer Políticas de Envío',
+    targetUrl: '/politicas',
+    targetWindow: '_self',
+    priority: 8,
+    targetDevice: 'ALL',
+    isActive: true,
+    impressions: 980,
+    clicks: 84,
+    order: 2,
+    createdAt: '2026-09-19T10:00:00Z'
+  }
+];
+

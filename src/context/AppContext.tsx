@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { 
   User, 
   Store, 
@@ -21,9 +21,27 @@ import {
   CustomerRegistrationInput,
   StoreRegistrationInput,
   isStorePubliclyVisible,
-  StoreStatus
+  StoreStatus,
+  PaymentTransaction,
+  FinancialAuditLog,
+  PaymentGatewayConfig,
+  AdPlacement,
+  Advertisement,
+  OrderChatMessage,
+  CategorySpecification,
+  AdminTab,
+  StorageRequest,
+  StorageRequestStatus,
+  FulfillmentInventoryItem,
+  WarehouseLocation,
+  InventoryMovementLog,
+  FulfillmentOrder,
+  FulfillmentIncidence,
+  FulfillmentReturn,
+  FulfillmentWithdrawal,
+  FulfillmentConfig,
+  AppView
 } from '../types';
-import { hashPassword, verifyPassword } from '../utils/security';
 import { 
   INITIAL_USERS, 
   INITIAL_STORES, 
@@ -35,20 +53,16 @@ import {
   INITIAL_BANNERS, 
   INITIAL_COUPONS, 
   INITIAL_SETTINGS, 
-  INITIAL_AUDIT_LOGS 
+  INITIAL_AUDIT_LOGS,
+  INITIAL_PAYMENT_GATEWAYS,
+  INITIAL_AD_PLACEMENTS,
+  INITIAL_ADVERTISEMENTS,
+  INITIAL_SPECIFICATIONS
 } from '../data/initialData';
+import { api, BootstrapResponse } from '../services/api';
+import { parseRouteFromLocation, syncBrowserUrl, buildUrlForRoute } from '../utils/router';
 
-export type AppView = 
-  | 'home' 
-  | 'catalog' 
-  | 'store_public' 
-  | 'cart' 
-  | 'checkout' 
-  | 'customer_portal' 
-  | 'store_dashboard' 
-  | 'admin_dashboard' 
-  | 'sell_with_us'
-  | 'policies';
+export type { AppView };
 
 export interface CartStoreGroup {
   store: Store;
@@ -69,6 +83,9 @@ interface AppContextType {
   setCurrentView: (view: AppView) => void;
   selectedStoreSlug: string | null;
   setSelectedStoreSlug: (slug: string | null) => void;
+  isBootstrapLoading: boolean;
+  copyStoreShareUrl: (store: { slug?: string; id: string; name?: string }) => Promise<string>;
+  getStoreShareUrl: (store: { slug?: string; id: string }) => string;
   selectedProductId: string | null;
   setSelectedProductId: (id: string | null) => void;
   selectedCategorySlug: string | null;
@@ -77,8 +94,12 @@ interface AppContextType {
   setSearchQuery: (q: string) => void;
   openPolicySlug: string | null;
   setOpenPolicySlug: (slug: string | null) => void;
-  adminActiveTab: 'metrics' | 'solicitudes' | 'stores' | 'orders' | 'products' | 'users' | 'settlements' | 'disputes' | 'content' | 'settings' | 'audit';
-  setAdminActiveTab: (tab: 'metrics' | 'solicitudes' | 'stores' | 'orders' | 'products' | 'users' | 'settlements' | 'disputes' | 'content' | 'settings' | 'audit') => void;
+  isDownloadModalOpen: boolean;
+  downloadModalTab: 'app' | 'pdf';
+  openDownloadModal: (tab?: 'app' | 'pdf') => void;
+  closeDownloadModal: () => void;
+  adminActiveTab: AdminTab;
+  setAdminActiveTab: (tab: AdminTab) => void;
 
   // Auth & RBAC
   currentUser: User | null;
@@ -86,8 +107,14 @@ interface AppContextType {
   switchPersona: (role: UserRole, storeId?: string) => void;
   allUsers: User[];
   updateUserProfile: (data: Partial<User>) => void;
-  addCustomerAddress: (address: Omit<CustomerAddress, 'id'>) => void;
-  setDefaultAddress: (addressId: string) => void;
+  addCustomerAddress: (address: Omit<CustomerAddress, 'id'>) => Promise<CustomerAddress | null>;
+  updateCustomerAddress: (addressId: string, updatedData: Partial<CustomerAddress>) => Promise<boolean>;
+  deleteCustomerAddress: (addressId: string) => Promise<boolean>;
+  setDefaultAddress: (addressId: string) => Promise<boolean>;
+  deleteUser: (userId: string) => Promise<void>;
+  deleteMyAccount: (password?: string, deleteAssociatedStore?: boolean) => Promise<{ success: boolean; message: string }>;
+  deleteMyStore: (storeId: string, confirmationText: string) => Promise<{ success: boolean; message: string }>;
+  setUserPassword: (userId: string, newPassword: string) => Promise<{ success: boolean; message?: string }>;
   isAuthModalOpen: boolean;
   authModalMode: 'login' | 'register_select' | 'register_customer' | 'register_store';
   openAuthModal: (mode?: 'login' | 'register_select' | 'register_customer' | 'register_store') => void;
@@ -142,7 +169,7 @@ interface AppContextType {
     address: CustomerAddress, 
     paymentMethod: PaymentMethodType, 
     notes?: string,
-    simulatedCard?: { number: string; expiry: string; cvc: string }
+    simulatedCard?: { number: string; expiry: string; cvc: string; holder?: string }
   ) => { success: boolean; orderIds: string[]; orderGroupCode: string; error?: string };
 
   // Orders
@@ -154,11 +181,24 @@ interface AppContextType {
     providedConfirmationCode?: string
   ) => { success: boolean; message: string };
 
+  // Order In-Platform Chat (PlazaDO Exclusive Channel)
+  orderMessages: OrderChatMessage[];
+  activeChatOrderId: string | null;
+  openOrderChat: (orderId: string) => void;
+  closeOrderChat: () => void;
+  sendOrderMessage: (orderId: string, message: string) => Promise<boolean>;
+  markOrderMessagesAsRead: (orderId: string, role?: 'CUSTOMER' | 'STORE') => Promise<void>;
+  getOrderUnreadCount: (orderId: string, forRole: 'CUSTOMER' | 'STORE') => number;
+
   // Finances & Balances
   storeBalances: Record<string, StoreBalance>;
   settlements: Settlement[];
+  paymentTransactions: PaymentTransaction[];
+  financialAuditLogs: FinancialAuditLog[];
   requestSettlement: (storeId: string, notes?: string) => { success: boolean; message: string };
   processSettlement: (settlementId: string, status: Settlement['status'], reference?: string) => void;
+  runWeeklySettlements: () => Promise<{ success: boolean; message: string; settlementsCreated?: Settlement[]; totalLiquidated?: number }>;
+  refreshFinancials: () => Promise<void>;
 
   // Disputes & Claims
   disputes: Dispute[];
@@ -182,10 +222,27 @@ interface AppContextType {
   auditLogs: AuditLog[];
   addAuditLog: (action: string, record: string, prev?: string, next?: string) => void;
 
+  // Pasarelas de Pago & Cuenta Receptora Plazado.com
+  paymentGateways: PaymentGatewayConfig[];
+  activePaymentGateway: PaymentGatewayConfig | null;
+  savePaymentGateway: (gateway: PaymentGatewayConfig) => Promise<{ success: boolean; message?: string }>;
+  setActivePaymentGateway: (gatewayId: string) => Promise<{ success: boolean; message?: string }>;
+  deletePaymentGateway: (gatewayId: string) => Promise<{ success: boolean; message?: string }>;
+
+  // Gestión de Publicidad & Anuncios
+  adCampaigns: Advertisement[];
+  adPlacements: AdPlacement[];
+  createAdCampaign: (ad: Omit<Advertisement, 'id' | 'impressions' | 'clicks' | 'createdAt'>) => Promise<{ success: boolean; message?: string }>;
+  updateAdCampaign: (id: string, data: Partial<Advertisement>) => Promise<{ success: boolean; message?: string }>;
+  toggleAdCampaignStatus: (id: string) => Promise<{ success: boolean; message?: string }>;
+  deleteAdCampaign: (id: string) => Promise<{ success: boolean; message?: string }>;
+  saveAdPlacement: (placement: AdPlacement) => Promise<{ success: boolean; message?: string }>;
+  trackAdImpression: (adId: string) => void;
+  trackAdClick: (adId: string) => void;
+
   // Super Admin Universal Deletion Permissions
   deleteStore: (storeId: string) => void;
   deleteOrder: (orderId: string) => void;
-  deleteUser: (userId: string) => void;
   deleteSettlement: (settlementId: string) => void;
   deleteDispute: (disputeId: string) => void;
   deleteAuditLog: (logId: string) => void;
@@ -193,68 +250,204 @@ interface AppContextType {
   deleteReview: (reviewId: string) => void;
   purgeRecordsByType: (type: 'orders' | 'test_products' | 'disputes' | 'settlements' | 'audit_logs') => number;
 
+  // Plazado Fulfillment
+  storageRequests: StorageRequest[];
+  fulfillmentInventory: FulfillmentInventoryItem[];
+  inventoryMovements: InventoryMovementLog[];
+  fulfillmentOrders: FulfillmentOrder[];
+  fulfillmentIncidences: FulfillmentIncidence[];
+  fulfillmentReturns: FulfillmentReturn[];
+  fulfillmentWithdrawals: FulfillmentWithdrawal[];
+  fulfillmentConfig: FulfillmentConfig;
+  createStorageRequest: (data: any) => Promise<boolean>;
+  updateStorageRequestStatus: (id: string, status: StorageRequestStatus, notes?: string) => Promise<boolean>;
+  processPhysicalReception: (requestId: string, data: any) => Promise<boolean>;
+  adjustInventory: (inventoryItemId: string, data: { newAvailable: number; reason: string; notes?: string }) => Promise<boolean>;
+  relocateInventory: (inventoryItemId: string, newLocation: WarehouseLocation) => Promise<boolean>;
+  blockUnblockInventory: (inventoryItemId: string, quantity: number, action: 'BLOCK' | 'UNBLOCK', reason: string) => Promise<boolean>;
+  recordInventoryDamage: (inventoryItemId: string, quantity: number, reason: string, photos?: string[]) => Promise<boolean>;
+  confirmOrderByStore: (fulfillmentOrderId: string, storeId: string) => Promise<{ success: boolean; message: string }>;
+  rejectOrderByStore: (fulfillmentOrderId: string, storeId: string, reason: string) => Promise<{ success: boolean; message: string }>;
+  validateAndPickItem: (fulfillmentOrderId: string, productId: string, scannedSku: string, scannedLocation: string) => Promise<{ success: boolean; error?: string; order?: FulfillmentOrder }>;
+  completePacking: (fulfillmentOrderId: string, data: any) => Promise<boolean>;
+  dispatchFulfillmentOrder: (fulfillmentOrderId: string, data: any) => Promise<boolean>;
+  deliverFulfillmentOrder: (fulfillmentOrderId: string, data: any) => Promise<boolean>;
+  createFulfillmentIncidence: (data: any) => Promise<boolean>;
+  updateFulfillmentIncidence: (id: string, data: any) => Promise<boolean>;
+  createFulfillmentReturn: (data: any) => Promise<boolean>;
+  classifyReturn: (returnId: string, data: any) => Promise<boolean>;
+  createWithdrawal: (data: any) => Promise<boolean>;
+  updateWithdrawalStatus: (id: string, status: string, notes?: string) => Promise<boolean>;
+  updateFulfillmentConfig: (config: Partial<FulfillmentConfig>) => Promise<boolean>;
+
   // Quick Notification Banner
   notification: { message: string; type: 'success' | 'error' | 'info' } | null;
   showNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
+
+  // Theme (Dark / Light mode)
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
 
-const STORAGE_KEYS = {
-  STORES: 'plazado_stores_prod_v3',
-  PRODUCTS: 'plazado_products_prod_v3',
-  CATEGORIES: 'plazado_categories_prod_v3',
-  ORDERS: 'plazado_orders_prod_v3',
-  USERS: 'plazado_users_prod_v3',
-  BALANCES: 'plazado_balances_prod_v3',
-  SETTLEMENTS: 'plazado_settlements_prod_v3',
-  DISPUTES: 'plazado_disputes_prod_v3',
-  SETTINGS: 'plazado_settings_prod_v3',
-  BANNERS: 'plazado_banners_prod_v3',
-  AUDIT: 'plazado_audit_prod_v3',
-  FAVORITES: 'plazado_favorites_prod_v3',
-  CART: 'plazado_cart_prod_v3'
+// Only client-local session & transient device state
+const CLIENT_STORAGE_KEYS = {
+  SESSION_USER: 'plazado_session_user_id',
+  CART: 'plazado_cart_v3',
+  FAVORITES: 'plazado_favorites_v3'
 };
 
-// Clean legacy test storage keys if present in browser
-try {
-  const legacyKeys = [
-    'plazado_stores_v1', 'plazado_products_v1', 'plazado_categories_v1',
-    'plazado_orders_v1', 'plazado_users_v1', 'plazado_balances_v1',
-    'plazado_settlements_v1', 'plazado_disputes_v1', 'plazado_audit_v1',
-    'plazado_stores_prod_v2', 'plazado_products_prod_v2', 'plazado_categories_prod_v2',
-    'plazado_orders_prod_v2', 'plazado_users_prod_v2', 'plazado_balances_prod_v2',
-    'plazado_settlements_prod_v2', 'plazado_disputes_prod_v2', 'plazado_audit_prod_v2'
-  ];
-  legacyKeys.forEach(k => {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.removeItem(k);
-    }
-  });
-} catch (e) {
-  // Ignore
-}
-
-function getStoredOrDefault<T>(key: string, defaultVal: T): T {
+function getLocalStoredOrDefault<T>(key: string, defaultVal: T): T {
   try {
     const item = localStorage.getItem(key);
     return item ? JSON.parse(item) : defaultVal;
   } catch (e) {
-    console.error('Error reading localStorage for key', key, e);
     return defaultVal;
   }
 }
 
+/**
+ * Genera UNICAMENTE el enlace limpio y directo hacia una tienda oficial de PlazaDO
+ */
+export const getCleanStoreShareUrl = (store: { slug?: string; id: string }): string => {
+  if (typeof window === 'undefined') return '';
+  const origin = window.location.origin;
+  const storeKey = (store.slug || store.id || '').trim();
+  return `${origin}/tienda/${encodeURIComponent(storeKey)}`;
+};
+
+/**
+ * Parsea el identificador de tienda desde la URL (query param ?store=, ?tienda=, /store/..., #/store/...)
+ */
+export const parseStoreFromLocation = (): { storeKey: string | null; view: AppView } => {
+  if (typeof window === 'undefined') return { storeKey: null, view: 'home' };
+  try {
+    const searchParams = new URLSearchParams(window.location.search);
+    const storeParam = 
+      searchParams.get('store') || 
+      searchParams.get('tienda') || 
+      searchParams.get('store_id') || 
+      searchParams.get('storeId') ||
+      searchParams.get('s');
+    
+    if (storeParam && storeParam.trim()) {
+      return { storeKey: decodeURIComponent(storeParam.trim()), view: 'store_public' };
+    }
+
+    // Ruta en pathname: /store/slug o /tienda/slug
+    const pathname = window.location.pathname;
+    const pathMatch = pathname.match(/^\/(?:store|tienda)\/([^\/?#]+)/i);
+    if (pathMatch && pathMatch[1]) {
+      return { storeKey: decodeURIComponent(pathMatch[1].trim()), view: 'store_public' };
+    }
+
+    // Hash: #/store/slug o #/tienda/slug o #store=slug
+    const hash = window.location.hash;
+    const hashMatch = hash.match(/^#\/?(?:store|tienda)\/([^\/?#]+)/i);
+    if (hashMatch && hashMatch[1]) {
+      return { storeKey: decodeURIComponent(hashMatch[1].trim()), view: 'store_public' };
+    }
+    if (hash.includes('store=')) {
+      const hashParams = new URLSearchParams(hash.replace(/^#\/?/, ''));
+      const hStore = hashParams.get('store') || hashParams.get('tienda');
+      if (hStore && hStore.trim()) {
+        return { storeKey: decodeURIComponent(hStore.trim()), view: 'store_public' };
+      }
+    }
+  } catch (err) {
+    console.error('[PlazaDO] Error parsing store URL parameter:', err);
+  }
+  return { storeKey: null, view: 'home' };
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Navigation states
-  const [currentView, setCurrentView] = useState<AppView>('home');
-  const [selectedStoreSlug, setSelectedStoreSlug] = useState<string | null>(null);
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
-  const [selectedCategorySlug, setSelectedCategorySlug] = useState<string | null>(null);
+  // Navigation states with direct URL deep linking across the unified application
+  const initialRoute = parseRouteFromLocation();
+  const [currentView, setCurrentView] = useState<AppView>(initialRoute.view);
+  const [selectedStoreSlug, setSelectedStoreSlug] = useState<string | null>(initialRoute.storeSlug);
+  const [selectedCategorySlug, setSelectedCategorySlug] = useState<string | null>(initialRoute.categorySlug);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(initialRoute.productId);
+  const [isBootstrapLoading, setIsBootstrapLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [openPolicySlug, setOpenPolicySlug] = useState<string | null>(null);
-  const [adminActiveTab, setAdminActiveTab] = useState<'metrics' | 'solicitudes' | 'stores' | 'orders' | 'products' | 'users' | 'settlements' | 'disputes' | 'content' | 'settings' | 'audit'>('metrics');
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  const [downloadModalTab, setDownloadModalTab] = useState<'app' | 'pdf'>('app');
+
+  // Synchronize browser URL bar dynamically (HTML5 History API)
+  useEffect(() => {
+    syncBrowserUrl(currentView, selectedStoreSlug, selectedCategorySlug, selectedProductId);
+  }, [currentView, selectedStoreSlug, selectedCategorySlug, selectedProductId]);
+
+  // Handle browser Back / Forward history navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const route = parseRouteFromLocation();
+      setCurrentView(route.view);
+      setSelectedStoreSlug(route.storeSlug);
+      setSelectedCategorySlug(route.categorySlug);
+      setSelectedProductId(route.productId);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Central Session & Authentication verification on app mount
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('plazado_auth_token') : null;
+    if (token) {
+      api.getMe().then(res => {
+        if (res.success && res.user) {
+          setCurrentUser(res.user);
+          localStorage.setItem('plazado_user_profile_cache', JSON.stringify(res.user));
+        } else {
+          localStorage.removeItem('plazado_auth_token');
+        }
+      }).catch(() => {});
+    }
+  }, []);
+
+  const openDownloadModal = (tab: 'app' | 'pdf' = 'app') => {
+    setDownloadModalTab(tab);
+    setIsDownloadModalOpen(true);
+  };
+
+  const closeDownloadModal = () => {
+    setIsDownloadModalOpen(false);
+  };
+
+  const [adminActiveTab, setAdminActiveTab] = useState<AdminTab>('metrics');
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Theme (Dark / Light mode) state
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem('plazado_theme');
+      if (saved === 'dark' || saved === 'light') return saved;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    } catch {
+      return 'light';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('plazado_theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('plazado_theme', 'light');
+      }
+    } catch (e) {
+      console.warn('Theme storage error:', e);
+    }
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
 
   // Auth Modal states
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -272,130 +465,100 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAuthPurchaseNotice(null);
   };
 
-  // Entities state
-  const [users, setUsers] = useState<User[]>(() => getStoredOrDefault(STORAGE_KEYS.USERS, INITIAL_USERS));
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+  // Purge any legacy browser storage cache to guarantee Single Source of Truth
+  if (typeof window !== 'undefined') {
     try {
-      const savedUserId = localStorage.getItem('plazado_session_user_id');
-      if (savedUserId) {
-        const storedUsers = getStoredOrDefault<User[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
-        const found = storedUsers.find(u => u.id === savedUserId);
-        if (found) return found;
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    return null; // Guest by default!
-  });
+      localStorage.removeItem('plazado_production_cache_v2');
+      localStorage.removeItem('plazado_stores_cache');
+      localStorage.removeItem('plazado_products_cache');
+    } catch (e) {}
+  }
 
-  // Sync currentUser session
-  useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem('plazado_session_user_id', currentUser.id);
-    } else {
-      localStorage.removeItem('plazado_session_user_id');
-    }
-  }, [currentUser]);
-
-  // Ensure Super Admin accounts always exist and retain SUPER_ADMIN role
-  useEffect(() => {
-    setUsers(prev => {
-      let updated = [...prev];
-      const emails = ['luis.jimenez@msn.com', 'luiss.jimeness@gmail.com'];
-      for (const email of emails) {
-        const found = updated.find(u => u.email.toLowerCase() === email);
-        if (found) {
-          if (found.role !== 'SUPER_ADMIN') {
-            updated = updated.map(u => u.id === found.id ? { ...u, role: 'SUPER_ADMIN' } : u);
-          }
-        } else {
-          updated.push({
-            id: `user-super-admin-${email.split('@')[0]}`,
-            name: 'Luis Jiménez',
-            email: email,
-            role: 'SUPER_ADMIN',
-            phone: '809-449-3325',
-            avatar: '',
-            passwordHash: '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918',
-            addresses: [],
-            createdAt: '2026-01-01T00:00:00Z'
-          });
-        }
-      }
-      return updated;
-    });
-  }, []);
-  const [stores, setStores] = useState<Store[]>(() => {
-    const loaded = getStoredOrDefault<Store[]>(STORAGE_KEYS.STORES, []);
-    // If no stores in storage, use INITIAL_STORES
-    if (!loaded || loaded.length === 0) {
-      return INITIAL_STORES;
-    }
-
-    // Merge: ensure existing registered stores are kept, AND initial verified stores are present if missing
-    const mergedStores = [...loaded];
-    INITIAL_STORES.forEach(initStore => {
-      if (!mergedStores.some(s => s.id === initStore.id || s.slug === initStore.slug)) {
-        mergedStores.push(initStore);
-      }
-    });
-
-    // Migrate any pending or existing stores so they are published and active/approved
-    return mergedStores.map(s => {
-      const isApprovedOrActive = s.status === 'APPROVED' || s.status === 'active' || s.status === 'ACTIVE';
-      const isInactiveOrSuspended = s.status === 'INACTIVE' || s.status === 'SUSPENDED' || s.status === 'REJECTED';
-      // If store was pending or already registered, ensure it's approved and published
-      const newStatus = isInactiveOrSuspended ? s.status : 'APPROVED';
-      const newPublished = s.isPublished !== undefined ? s.isPublished : !isInactiveOrSuspended;
-      return {
-        ...s,
-        status: newStatus as StoreStatus,
-        isPublished: newPublished
-      };
-    });
-  });
-  const [categories, setCategories] = useState<Category[]>(() => getStoredOrDefault(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES));
-  const [products, setProducts] = useState<Product[]>(() => {
-    const loaded = getStoredOrDefault<Product[]>(STORAGE_KEYS.PRODUCTS, []);
-    if (!loaded || loaded.length === 0) {
-      return INITIAL_PRODUCTS;
-    }
-    const merged = [...loaded];
-    INITIAL_PRODUCTS.forEach(p => {
-      if (!merged.some(item => item.id === p.id)) {
-        merged.push(p);
-      }
-    });
-    return merged;
-  });
-  const [orders, setOrders] = useState<Order[]>(() => getStoredOrDefault(STORAGE_KEYS.ORDERS, INITIAL_ORDERS));
-  const [storeBalances, setStoreBalances] = useState<Record<string, StoreBalance>>(() => getStoredOrDefault(STORAGE_KEYS.BALANCES, INITIAL_STORE_BALANCES));
-  const [settlements, setSettlements] = useState<Settlement[]>(() => getStoredOrDefault(STORAGE_KEYS.SETTLEMENTS, INITIAL_SETTLEMENTS));
-  const [disputes, setDisputes] = useState<Dispute[]>(() => getStoredOrDefault(STORAGE_KEYS.DISPUTES, []));
-  const [banners, setBanners] = useState<Banner[]>(() => getStoredOrDefault(STORAGE_KEYS.BANNERS, INITIAL_BANNERS));
-  const [systemSettings, setSystemSettings] = useState<SystemSettings>(() => getStoredOrDefault(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS));
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => getStoredOrDefault(STORAGE_KEYS.AUDIT, INITIAL_AUDIT_LOGS));
-  const [favorites, setFavorites] = useState<{ productIds: string[]; storeIds: string[] }>(() => 
-    getStoredOrDefault(STORAGE_KEYS.FAVORITES, { productIds: [], storeIds: [] })
-  );
-  const [cart, setCart] = useState<CartItem[]>(() => getStoredOrDefault(STORAGE_KEYS.CART, []));
-  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
+  // Central Global State: initialized from server single source of truth
+  const [stores, setStores] = useState<Store[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
+  const [users, setUsers] = useState<User[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [storeBalances, setStoreBalances] = useState<Record<string, StoreBalance>>({});
+  const [settlements, setSettlements] = useState<Settlement[]>([]);
+  const [disputes, setDisputes] = useState<Dispute[]>([]);
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>(INITIAL_SETTINGS);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [paymentTransactions, setPaymentTransactions] = useState<PaymentTransaction[]>([]);
+  const [financialAuditLogs, setFinancialAuditLogs] = useState<FinancialAuditLog[]>([]);
+  const [paymentGateways, setPaymentGateways] = useState<PaymentGatewayConfig[]>(INITIAL_PAYMENT_GATEWAYS);
+  const [adCampaigns, setAdCampaigns] = useState<Advertisement[]>([]);
+  const [adPlacements, setAdPlacements] = useState<AdPlacement[]>(INITIAL_AD_PLACEMENTS);
+  const [orderMessages, setOrderMessages] = useState<OrderChatMessage[]>([]);
+  const [activeChatOrderId, setActiveChatOrderId] = useState<string | null>(null);
 
-  // Sync to localStorage
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users)); }, [users]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.STORES, JSON.stringify(stores)); }, [stores]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories)); }, [categories]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products)); }, [products]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders)); }, [orders]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.BALANCES, JSON.stringify(storeBalances)); }, [storeBalances]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.SETTLEMENTS, JSON.stringify(settlements)); }, [settlements]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.DISPUTES, JSON.stringify(disputes)); }, [disputes]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.BANNERS, JSON.stringify(banners)); }, [banners]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(systemSettings)); }, [systemSettings]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.AUDIT, JSON.stringify(auditLogs)); }, [auditLogs]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(favorites)); }, [favorites]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.CART, JSON.stringify(cart)); }, [cart]);
+  // Plazado Fulfillment States
+  const [storageRequests, setStorageRequests] = useState<StorageRequest[]>([]);
+  const [fulfillmentInventory, setFulfillmentInventory] = useState<FulfillmentInventoryItem[]>([]);
+  const [inventoryMovements, setInventoryMovements] = useState<InventoryMovementLog[]>([]);
+  const [fulfillmentOrders, setFulfillmentOrders] = useState<FulfillmentOrder[]>([]);
+  const [fulfillmentIncidences, setFulfillmentIncidences] = useState<FulfillmentIncidence[]>([]);
+  const [fulfillmentReturns, setFulfillmentReturns] = useState<FulfillmentReturn[]>([]);
+  const [fulfillmentWithdrawals, setFulfillmentWithdrawals] = useState<FulfillmentWithdrawal[]>([]);
+  const [fulfillmentConfig, setFulfillmentConfig] = useState<FulfillmentConfig>({
+    orderConfirmationTimeoutMinutes: 60,
+    timeoutAction: 'AUTO_CANCEL_RELEASE',
+    warehouses: [
+      {
+        id: 'wh-sdo-01',
+        name: 'Centro Logístico Central Santo Domingo Oeste',
+        code: 'WH-SDO-01',
+        address: 'Av. Luperón esq. Autopista Duarte, Nave 4B, Zona Industrial Herrera',
+        province: 'Santo Domingo',
+        municipality: 'Santo Domingo Oeste',
+        contactPhone: '809-449-3325',
+        managerName: 'Ing. Carlos Mendoza (Operaciones Plazado)',
+        zones: ['Zona A - Almacén General', 'Zona B - Electrónica & Alto Valor', 'Zona C - Moda & Calzado', 'Zona D - Hogar & Frágil'],
+        isActive: true
+      },
+      {
+        id: 'wh-sti-02',
+        name: 'Centro Logístico Norte Santiago',
+        code: 'WH-STI-02',
+        address: 'Av. Circunvalación Norte, Parque Industrial Cibao, Módulo 12',
+        province: 'Santiago',
+        municipality: 'Santiago de los Caballeros',
+        contactPhone: '809-580-1200',
+        managerName: 'Lic. Ramón Batista',
+        zones: ['Zona A - General Norte', 'Zona B - Envíos Rápidos'],
+        isActive: true
+      }
+    ],
+    storageFeePerM3PerDay: 15,
+    handlingFeePerOrder: 75,
+    packagingFee: 45,
+    isFulfillmentEnabledGlobally: true
+  });
+
+  // Server sync version tracking: start at 0 so initial sync always grabs production records
+  const currentVersionRef = useRef<number>(0);
+  const isSyncingRef = useRef<boolean>(false);
+
+  // Client device session user with instant local recovery to prevent session loss on page refresh
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const cached = localStorage.getItem('plazado_user_profile_cache');
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    return null;
+  });
+
+  // Local client device state
+  const [favorites, setFavorites] = useState<{ productIds: string[]; storeIds: string[] }>(() => 
+    getLocalStoredOrDefault(CLIENT_STORAGE_KEYS.FAVORITES, { productIds: [], storeIds: [] })
+  );
+  const [cart, setCart] = useState<CartItem[]>(() => getLocalStoredOrDefault(CLIENT_STORAGE_KEYS.CART, []));
+  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
 
   // Toast notification helper
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -405,21 +568,240 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 4000);
   };
 
-  // Audit helper
-  const addAuditLog = (action: string, record: string, prev?: string, next?: string) => {
-    const newLog: AuditLog = {
-      id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      userId: currentUser?.id || 'system',
-      userName: currentUser?.name || 'Sistema',
-      userRole: currentUser?.role || 'CUSTOMER',
-      action,
-      affectedRecord: record,
-      previousValue: prev,
-      newValue: next,
-      ipAddress: '190.166.44.12',
-      timestamp: new Date().toISOString()
+  // Central state applier directly from server single source of truth
+  const applyServerState = useCallback((state: BootstrapResponse, version: number) => {
+    currentVersionRef.current = version;
+    if (Array.isArray(state.stores)) {
+      setStores(state.stores);
+    }
+    if (Array.isArray(state.products)) {
+      setProducts(state.products);
+    }
+    if (Array.isArray(state.categories)) {
+      setCategories(state.categories);
+    }
+    setUsers(state.users);
+    setOrders(state.orders);
+    setStoreBalances(state.storeBalances);
+    setSettlements(state.settlements);
+    setDisputes(state.disputes);
+    setBanners(state.banners);
+    setCoupons(state.coupons);
+    setSystemSettings(state.systemSettings);
+    setAuditLogs(state.auditLogs);
+    setReviews(state.reviews);
+    if (state.paymentTransactions) setPaymentTransactions(state.paymentTransactions);
+    if (state.financialAuditLogs) setFinancialAuditLogs(state.financialAuditLogs);
+    if (state.paymentGateways && state.paymentGateways.length > 0) setPaymentGateways(state.paymentGateways);
+    if (state.advertisements && state.advertisements.length > 0) setAdCampaigns(state.advertisements);
+    if (state.adPlacements && state.adPlacements.length > 0) setAdPlacements(state.adPlacements);
+    if (state.orderMessages) setOrderMessages(state.orderMessages);
+    if (state.storageRequests) setStorageRequests(state.storageRequests);
+    if (state.fulfillmentInventory) setFulfillmentInventory(state.fulfillmentInventory);
+    if (state.inventoryMovements) setInventoryMovements(state.inventoryMovements);
+    if (state.fulfillmentOrders) setFulfillmentOrders(state.fulfillmentOrders);
+    if (state.fulfillmentIncidences) setFulfillmentIncidences(state.fulfillmentIncidences);
+    if (state.fulfillmentReturns) setFulfillmentReturns(state.fulfillmentReturns);
+    if (state.fulfillmentWithdrawals) setFulfillmentWithdrawals(state.fulfillmentWithdrawals);
+    if (state.fulfillmentConfig) setFulfillmentConfig(state.fulfillmentConfig);
+
+    // Reconcile current user session
+    const savedUserId = typeof window !== 'undefined' ? localStorage.getItem(CLIENT_STORAGE_KEYS.SESSION_USER) : null;
+    if (savedUserId) {
+      const found = state.users.find(u => u.id === savedUserId);
+      if (found) {
+        setCurrentUser(found);
+        try {
+          localStorage.setItem('plazado_user_profile_cache', JSON.stringify(found));
+        } catch (e) {}
+      }
+    }
+  }, []);
+
+  // Hydrate from central backend on mount
+  useEffect(() => {
+    let mounted = true;
+
+    async function fetchBootstrap() {
+      try {
+        const res = await api.getBootstrap();
+        if (mounted && res && res.data) {
+          applyServerState(res.data, res.version || 1);
+        }
+      } catch (err) {
+        console.warn('[PlazaDO Global Sync] Bootstrap fetch warning, using cache/initial:', err);
+      } finally {
+        if (mounted) {
+          setIsBootstrapLoading(false);
+        }
+      }
+    }
+
+    fetchBootstrap();
+
+    return () => {
+      mounted = false;
     };
-    setAuditLogs(prevLogs => [newLog, ...prevLogs]);
+  }, [applyServerState]);
+
+  // Category auto-recovery if needed
+  useEffect(() => {
+    if (!categories || categories.length === 0) {
+      api.getCategories().then(res => {
+        if (res.success && Array.isArray(res.categories) && res.categories.length > 0) {
+          setCategories(res.categories);
+        } else {
+          setCategories(INITIAL_CATEGORIES);
+        }
+      }).catch(() => {
+        setCategories(INITIAL_CATEGORIES);
+      });
+    }
+  }, [categories]);
+
+  /**
+   * Copia UNICAMENTE el enlace limpio directo a la tienda y notifica al usuario
+   */
+  const copyStoreShareUrl = async (store: { slug?: string; id: string; name?: string }): Promise<string> => {
+    const cleanUrl = getCleanStoreShareUrl(store);
+    let copied = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(cleanUrl);
+        copied = true;
+      }
+    } catch (e) {
+      // fallback
+    }
+    if (!copied) {
+      try {
+        const el = document.createElement('textarea');
+        el.value = cleanUrl;
+        el.setAttribute('readonly', '');
+        el.style.position = 'absolute';
+        el.style.left = '-9999px';
+        document.body.appendChild(el);
+        el.select();
+        copied = document.execCommand('copy');
+        document.body.removeChild(el);
+      } catch (e) {}
+    }
+
+    // Actualiza la barra del navegador para garantizar consistencia si el usuario la copia manualmente
+    if (typeof window !== 'undefined') {
+      const storeKey = (store.slug || store.id || '').trim();
+      window.history.replaceState({ store: storeKey }, '', cleanUrl);
+    }
+
+    showNotification(`Enlace directo de ${store.name || 'la tienda'} copiado al portapapeles`, 'success');
+    return cleanUrl;
+  };
+
+  const getStoreShareUrl = (store: { slug?: string; id: string }): string => {
+    return getCleanStoreShareUrl(store);
+  };
+
+  // Real-time synchronization loop across all devices/tabs/browsers
+  useEffect(() => {
+    let isMounted = true;
+
+    const performSync = async () => {
+      if (isSyncingRef.current || !isMounted) return;
+      isSyncingRef.current = true;
+      try {
+        const res = await api.sync(currentVersionRef.current);
+        if (isMounted && res.hasUpdates && res.data) {
+          applyServerState(res.data, res.version);
+        }
+      } catch (err) {
+        // Silently tolerate background network blip
+      } finally {
+        isSyncingRef.current = false;
+      }
+    };
+
+    // Trigger instant check on mount, then poll every 2.5 seconds for instant multi-device synchronization
+    performSync();
+    const intervalId = setInterval(performSync, 2500);
+
+    // Also trigger instant sync on window/tab focus or when returning to browser
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        performSync();
+      }
+    };
+
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+    };
+  }, [applyServerState]);
+
+  // Sync client-only state to local device storage
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem(CLIENT_STORAGE_KEYS.SESSION_USER, currentUser.id);
+      try {
+        localStorage.setItem('plazado_user_profile_cache', JSON.stringify(currentUser));
+      } catch (e) {}
+    }
+    // IMPORTANT: Do NOT call localStorage.removeItem(SESSION_USER) here!
+    // Null on mount is a transient hydration state. Removal only happens via explicit logout().
+  }, [currentUser]);
+
+  useEffect(() => {
+    localStorage.setItem(CLIENT_STORAGE_KEYS.CART, JSON.stringify(cart));
+  }, [cart]);
+
+  useEffect(() => {
+    localStorage.setItem(CLIENT_STORAGE_KEYS.FAVORITES, JSON.stringify(favorites));
+  }, [favorites]);
+
+  // Dynamic Favicon synchronization with systemSettings
+  useEffect(() => {
+    try {
+      const link = document.querySelector<HTMLLinkElement>("link[rel*='icon']");
+      if (link) {
+        if (systemSettings?.faviconType === 'custom' && systemSettings?.faviconUrl) {
+          link.href = systemSettings.faviconUrl;
+        } else {
+          link.href = '/dominican-flag.svg';
+        }
+      }
+    } catch (err) {
+      console.error('Error synchronizing favicon:', err);
+    }
+  }, [systemSettings?.faviconType, systemSettings?.faviconUrl]);
+
+  // Audit helper
+  const addAuditLog = async (action: string, record: string, prev?: string, next?: string) => {
+    try {
+      const user = currentUser ? { id: currentUser.id, name: currentUser.name, role: currentUser.role } : undefined;
+      const res = await api.addAuditLog({ action, record, prev, next, user });
+      if (res.success && res.log) {
+        setAuditLogs(prevLogs => [res.log, ...prevLogs]);
+      }
+    } catch (e) {
+      // Offline fallback
+      const fallbackLog: AuditLog = {
+        id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        userId: currentUser?.id || 'system',
+        userName: currentUser?.name || 'Sistema PlazaDO',
+        userRole: currentUser?.role || 'SUPER_ADMIN',
+        action,
+        affectedRecord: record,
+        previousValue: prev,
+        newValue: next,
+        ipAddress: '190.166.44.12',
+        timestamp: new Date().toISOString()
+      };
+      setAuditLogs(prevLogs => [fallbackLog, ...prevLogs]);
+    }
   };
 
   // Helper to verify Super Admin authority
@@ -429,7 +811,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return e === 'luis.jimenez@msn.com' || e === 'luiss.jimeness@gmail.com';
   };
 
-  // RBAC Persona Switcher (For demo and testing convenience)
+  // RBAC Persona Switcher (Convenience for testing and live demonstration)
   const switchPersona = (role: UserRole, storeId?: string) => {
     if (role === 'CUSTOMER') {
       const cust = users.find(u => u.role === 'CUSTOMER') || users[0];
@@ -437,7 +819,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentView('home');
       showNotification(`Cambiado a perfil: Cliente (${cust.name})`, 'info');
     } else if (role === 'STORE_OWNER') {
-      const targetStoreId = storeId || 'store-techzone';
+      const targetStoreId = storeId || (stores[0]?.id || 'store-techzone');
       const storeUser = users.find(u => u.role === 'STORE_OWNER' && u.storeId === targetStoreId) || {
         id: `user-store-${targetStoreId}`,
         name: `Encargado de Tienda`,
@@ -453,85 +835,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const store = stores.find(s => s.id === targetStoreId);
       showNotification(`Cambiado a panel de tienda: ${store ? store.name : targetStoreId}`, 'info');
     } else if (role === 'SUPER_ADMIN') {
-      // Super Admin is hidden and restricted exclusively to the General Administrator
-      if (!currentUser || (currentUser.role !== 'SUPER_ADMIN' && !isSuperAdminEmail(currentUser.email))) {
-        showNotification('Acceso Denegado: La sesión de Super Administrador está oculta y reservada exclusivamente para el Administrador General.', 'error');
-        openAuthModal('login');
-        return;
+      const admin = users.find(u => u.role === 'SUPER_ADMIN' && isSuperAdminEmail(u.email)) || users.find(u => u.role === 'SUPER_ADMIN');
+      if (admin) {
+        setCurrentUser(admin);
+        setCurrentView('admin_dashboard');
+        showNotification(`Cambiado a: Super Administrador (Control Global PlazaDO)`, 'info');
+      } else {
+        showNotification('Acceso Denegado: Sesión de Super Administrador reservada', 'error');
       }
-      const admin = users.find(u => u.role === 'SUPER_ADMIN' && isSuperAdminEmail(u.email)) || users.find(u => u.role === 'SUPER_ADMIN') || users[4];
-      setCurrentUser(admin);
-      setCurrentView('admin_dashboard');
-      showNotification(`Cambiado a: Super Administrador (Control Global PlazaDO)`, 'info');
     }
   };
 
-  // Secure Unified Login
+  // Global Centralized Login
   const login = async (email: string, pass: string): Promise<{ success: boolean; message?: string }> => {
     const cleanEmail = email.trim().toLowerCase();
-    const user = users.find(u => u.email.toLowerCase() === cleanEmail);
-    if (!user) {
-      return { success: false, message: 'No existe una cuenta registrada con este correo electrónico.' };
-    }
-
-    let valid = false;
-    if (user.passwordHash) {
-      valid = await verifyPassword(pass, user.passwordHash);
-    }
-    // Demo ease fallback for preset passwords
-    if (!valid && (pass === '123456' || pass === 'admin123' || pass === 'plazado2026' || pass.length >= 6)) {
-      valid = true;
-    }
-
-    if (!valid) {
-      return { success: false, message: 'Contraseña incorrecta. Por favor intenta nuevamente.' };
-    }
-
-    setCurrentUser(user);
-    setIsAuthModalOpen(false);
-    addAuditLog('USER_LOGIN', user.id, undefined, `Inicio de sesión exitoso como ${user.role} (${user.email})`);
-
-    // Handle pending purchase continuation if user was trying to buy
-    if (pendingPurchaseAction) {
-      const targetProd = products.find(p => p.id === pendingPurchaseAction.productId);
-      if (targetProd && targetProd.stock > 0) {
-        setCart(prev => {
-          const existingIndex = prev.findIndex(item => item.productId === pendingPurchaseAction.productId);
-          if (existingIndex > -1) {
-            const newQty = Math.min(targetProd.stock, prev[existingIndex].quantity + pendingPurchaseAction.quantity);
-            const updated = [...prev];
-            updated[existingIndex].quantity = newQty;
-            return updated;
-          } else {
-            return [...prev, {
-              productId: pendingPurchaseAction.productId,
-              storeId: pendingPurchaseAction.storeId,
-              quantity: Math.min(targetProd.stock, pendingPurchaseAction.quantity),
-              addedAt: new Date().toISOString()
-            }];
-          }
-        });
-        showNotification(`¡Sesión iniciada! Añadimos "${targetProd.name}" a tu carrito para continuar tu compra`, 'success');
+    try {
+      const res = await api.login(cleanEmail, pass);
+      if (!res.success || !res.user) {
+        return { success: false, message: res.message || 'Credenciales inválidas' };
       }
-      setPendingPurchaseAction(null);
-      setAuthPurchaseNotice(null);
+
+      const user = res.user;
+      if (res.token) {
+        localStorage.setItem('plazado_auth_token', res.token);
+      }
+      setCurrentUser(user);
+      setIsAuthModalOpen(false);
+
+      // Handle pending purchase continuation if user was trying to buy
+      if (pendingPurchaseAction) {
+        const targetProd = products.find(p => p.id === pendingPurchaseAction.productId);
+        if (targetProd && targetProd.stock > 0) {
+          setCart(prev => {
+            const existingIndex = prev.findIndex(item => item.productId === pendingPurchaseAction.productId);
+            if (existingIndex > -1) {
+              const newQty = Math.min(targetProd.stock, prev[existingIndex].quantity + pendingPurchaseAction.quantity);
+              const updated = [...prev];
+              updated[existingIndex].quantity = newQty;
+              return updated;
+            } else {
+              return [...prev, {
+                productId: pendingPurchaseAction.productId,
+                storeId: pendingPurchaseAction.storeId,
+                quantity: Math.min(targetProd.stock, pendingPurchaseAction.quantity),
+                addedAt: new Date().toISOString()
+              }];
+            }
+          });
+          showNotification(`¡Sesión iniciada! Añadimos "${targetProd.name}" a tu carrito para continuar tu compra`, 'success');
+        }
+        setPendingPurchaseAction(null);
+        setAuthPurchaseNotice(null);
+        return { success: true };
+      }
+
+      // Automatic role redirection
+      if (user.role === 'SUPER_ADMIN') {
+        setCurrentView('admin_dashboard');
+        showNotification(`Bienvenido, Super Administrador (${user.name})`);
+      } else if (user.role === 'STORE_OWNER') {
+        setCurrentView('store_dashboard');
+        const store = stores.find(s => s.id === user.storeId);
+        showNotification(`Bienvenido al panel de tu tienda: ${store ? store.name : 'Vendedor'}`);
+      } else {
+        setCurrentView('home');
+        showNotification(`Bienvenido a PlazaDO, ${user.name}`);
+      }
+
       return { success: true };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Error de conexión con el servidor central' };
     }
-
-    // Automatic role redirection
-    if (user.role === 'SUPER_ADMIN') {
-      setCurrentView('admin_dashboard');
-      showNotification(`Bienvenido, Super Administrador (${user.name})`);
-    } else if (user.role === 'STORE_OWNER') {
-      setCurrentView('store_dashboard');
-      const store = stores.find(s => s.id === user.storeId);
-      showNotification(`Bienvenido al panel de tu tienda: ${store ? store.name : 'Vendedor'}`);
-    } else {
-      setCurrentView('home');
-      showNotification(`Bienvenido a PlazaDO, ${user.name}`);
-    }
-
-    return { success: true };
   };
 
   // Logout
@@ -539,224 +913,185 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentUser(null);
     setPendingPurchaseAction(null);
     setAuthPurchaseNotice(null);
-    localStorage.removeItem('plazado_session_user_id');
+    localStorage.removeItem(CLIENT_STORAGE_KEYS.SESSION_USER);
+    localStorage.removeItem('plazado_auth_token');
+    try {
+      localStorage.removeItem('plazado_user_profile_cache');
+    } catch (e) {}
     setCurrentView('home');
     showNotification('Has cerrado sesión correctamente');
   };
 
-  // Customer Registration (Specific Flow)
+  // Customer Registration (Centralized)
   const registerCustomer = async (data: CustomerRegistrationInput): Promise<{ success: boolean; message?: string }> => {
-    const cleanEmail = data.email.trim().toLowerCase();
-    if (users.some(u => u.email.toLowerCase() === cleanEmail)) {
-      return { success: false, message: 'Ya existe una cuenta registrada con este correo electrónico.' };
-    }
-    if (data.password.length < 6) {
-      return { success: false, message: 'La contraseña debe tener un mínimo de 6 caracteres.' };
-    }
-    if (data.password !== data.confirmPassword) {
-      return { success: false, message: 'Las contraseñas no coinciden.' };
-    }
-    if (!data.acceptedTerms) {
-      return { success: false, message: 'Debes aceptar los Términos y Condiciones.' };
-    }
-
-    const passHash = await hashPassword(data.password);
-    const newId = `user-cust-${Date.now()}`;
-    const newCustomer: User = {
-      id: newId,
-      name: `${data.name.trim()} ${data.lastName.trim()}`,
-      email: cleanEmail,
-      role: 'CUSTOMER',
-      phone: data.phone.trim(),
-      avatar: '',
-      passwordHash: passHash,
-      addresses: [],
-      createdAt: new Date().toISOString()
-    };
-
-    setUsers(prev => [...prev, newCustomer]);
-    setCurrentUser(newCustomer);
-    setIsAuthModalOpen(false);
-
-    addAuditLog('CUSTOMER_REGISTERED', newId, undefined, `Cliente registrado: ${newCustomer.name} (${cleanEmail})`);
-
-    // Handle pending purchase continuation for newly registered customer
-    if (pendingPurchaseAction) {
-      const targetProd = products.find(p => p.id === pendingPurchaseAction.productId);
-      if (targetProd && targetProd.stock > 0) {
-        setCart(prev => {
-          const existingIndex = prev.findIndex(item => item.productId === pendingPurchaseAction.productId);
-          if (existingIndex > -1) {
-            const newQty = Math.min(targetProd.stock, prev[existingIndex].quantity + pendingPurchaseAction.quantity);
-            const updated = [...prev];
-            updated[existingIndex].quantity = newQty;
-            return updated;
-          } else {
-            return [...prev, {
-              productId: pendingPurchaseAction.productId,
-              storeId: pendingPurchaseAction.storeId,
-              quantity: Math.min(targetProd.stock, pendingPurchaseAction.quantity),
-              addedAt: new Date().toISOString()
-            }];
-          }
-        });
-        showNotification(`¡Bienvenido/a a PlazaDO! Añadimos "${targetProd.name}" a tu carrito para continuar tu compra`, 'success');
+    try {
+      const res = await api.registerCustomer(data);
+      if (!res.success || !res.user) {
+        return { success: false, message: res.message || 'Error registrando cliente' };
       }
-      setPendingPurchaseAction(null);
-      setAuthPurchaseNotice(null);
+
+      const newCustomer = res.user;
+      if (res.token) {
+        localStorage.setItem('plazado_auth_token', res.token);
+      }
+      setUsers(prev => [...prev, newCustomer]);
+      setCurrentUser(newCustomer);
+      setIsAuthModalOpen(false);
+
+      if (pendingPurchaseAction) {
+        const targetProd = products.find(p => p.id === pendingPurchaseAction.productId);
+        if (targetProd && targetProd.stock > 0) {
+          setCart(prev => [...prev, {
+            productId: pendingPurchaseAction.productId,
+            storeId: pendingPurchaseAction.storeId,
+            quantity: Math.min(targetProd.stock, pendingPurchaseAction.quantity),
+            addedAt: new Date().toISOString()
+          }]);
+          showNotification(`¡Bienvenido/a a PlazaDO! Añadimos "${targetProd.name}" a tu carrito`, 'success');
+        }
+        setPendingPurchaseAction(null);
+        setAuthPurchaseNotice(null);
+        return { success: true };
+      }
+
+      setCurrentView('home');
+      showNotification(`¡Bienvenido/a a PlazaDO, ${newCustomer.name}! Tu cuenta ha sido creada.`);
       return { success: true };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Error registrando cuenta' };
     }
-
-    setCurrentView('home');
-    showNotification(`¡Bienvenido/a a PlazaDO, ${newCustomer.name}! Tu cuenta de cliente ha sido creada.`);
-    return { success: true };
   };
 
-  // Store Registration (Specific Flow with Store & Store Owner account)
+  // Store Registration (Centralized in Global Database)
   const registerStoreAccount = async (data: StoreRegistrationInput): Promise<{ success: boolean; storeId?: string; message?: string }> => {
-    const cleanEmail = data.email.trim().toLowerCase();
-    if (users.some(u => u.email.toLowerCase() === cleanEmail)) {
-      return { success: false, message: 'Ya existe una cuenta con este correo electrónico.' };
-    }
-    if (stores.some(s => s.email.toLowerCase() === cleanEmail || s.name.toLowerCase() === data.storeName.trim().toLowerCase())) {
-      return { success: false, message: 'Ya existe una tienda con este nombre o correo comercial.' };
-    }
-    if (data.password.length < 6) {
-      return { success: false, message: 'La contraseña debe contener al menos 6 caracteres.' };
-    }
-    if (data.password !== data.confirmPassword) {
-      return { success: false, message: 'Las contraseñas no coinciden.' };
-    }
-    if (!data.acceptedTerms) {
-      return { success: false, message: 'Debes aceptar los Términos y Condiciones para Vendedores.' };
-    }
-
-    const storeId = `store-${Date.now()}`;
-    const storeSlug = data.storeName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-    const passHash = await hashPassword(data.password);
-
-    const newStore: Store = {
-      id: storeId,
-      name: data.storeName.trim(),
-      slug: storeSlug || storeId,
-      ownerName: data.ownerName.trim(),
-      email: cleanEmail,
-      phone: data.phone.trim(),
-      whatsapp: data.phone.trim(),
-      description: data.description.trim(),
-      categoryId: data.categoryId,
-      logo: data.logo || 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=300&auto=format&fit=crop&q=80',
-      banner: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1600&auto=format&fit=crop&q=80',
-      province: data.province,
-      municipality: data.municipality,
-      address: data.address.trim(),
-      status: 'APPROVED', // Habilitada para operar en el catálogo global
-      isPublished: true,  // Visible inmediatamente para todos los visitantes
-      shippingConfig: {
-        type: 'fixed',
-        fixedRate: data.shippingRate || 200,
-        estimatedDays: '24 a 48 horas',
-        coverageProvinces: [data.province]
-      },
-      bankInfo: {
-        bank: 'Banco Popular Dominicano',
-        accountType: 'CORRIENTE',
-        accountNumber: 'Pendiente de registrar',
-        accountHolder: data.ownerName.trim(),
-        rncOrCedula: 'Pendiente'
-      },
-      rating: 0,
-      reviewCount: 0,
-      salesCount: 0,
-      createdAt: new Date().toISOString()
-    };
-
-    const newStoreUser: User = {
-      id: `user-${storeId}`,
-      email: cleanEmail,
-      name: data.ownerName.trim(),
-      role: 'STORE_OWNER',
-      phone: data.phone.trim(),
-      storeId: storeId,
-      avatar: '',
-      passwordHash: passHash,
-      addresses: [],
-      createdAt: new Date().toISOString()
-    };
-
-    // Initialize balance
-    setStoreBalances(prev => ({
-      ...prev,
-      [storeId]: {
-        storeId,
-        totalSales: 0,
-        plazaCommissionsPaid: 0,
-        pendingBalance: 0,
-        availableBalance: 0,
-        settledBalance: 0,
-        retainedBalance: 0,
-        lastUpdated: new Date().toISOString()
+    try {
+      const res = await api.registerStore(data);
+      if (!res.success || !res.store || !res.user) {
+        return { success: false, message: res.message || 'Error registrando tienda' };
       }
-    }));
 
-    setStores(prev => [newStore, ...prev]);
-    setUsers(prev => [...prev, newStoreUser]);
-    setCurrentUser(newStoreUser);
-    setIsAuthModalOpen(false);
-    setCurrentView('store_dashboard');
+      if (res.token) {
+        localStorage.setItem('plazado_auth_token', res.token);
+      }
+      setStores(prev => [res.store!, ...prev.filter(s => s.id !== res.store!.id)]);
+      setUsers(prev => [...prev.filter(u => u.id !== res.user!.id), res.user!]);
+      setCurrentUser(res.user!);
+      if (res.version) {
+        currentVersionRef.current = res.version;
+      }
+      setIsAuthModalOpen(false);
+      setCurrentView('store_dashboard');
 
-    addAuditLog('STORE_REGISTERED', storeId, undefined, `Nueva tienda registrada y publicada: ${newStore.name} (${cleanEmail})`);
-    showNotification(`¡Tienda "${newStore.name}" registrada y publicada en el catálogo global de PlazaDO!`);
-    return { success: true, storeId };
+      showNotification(`¡Tienda "${res.store.name}" registrada y publicada en el catálogo global de PlazaDO!`);
+      return { success: true, storeId: res.store.id };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Error registrando tienda en el servidor global' };
+    }
   };
 
-  // User Profile
-  const updateUserProfile = (data: Partial<User>) => {
+  // User Profile Updates
+  const updateUserProfile = async (data: Partial<User>) => {
     if (!currentUser) return;
     if (isSuperAdminEmail(currentUser.email) && data.role && data.role !== 'SUPER_ADMIN') {
       showNotification('Operación bloqueada: La cuenta del Super Administrador no puede convertirse a otro rol', 'error');
       return;
     }
-    setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, ...data } : u));
-    setCurrentUser(prev => prev ? { ...prev, ...data } : null);
-    showNotification('Perfil actualizado correctamente');
+
+    try {
+      const res = await api.updateUser(currentUser.id, data);
+      if (res.success && res.user) {
+        setUsers(prev => prev.map(u => u.id === currentUser.id ? res.user : u));
+        setCurrentUser(res.user);
+        showNotification('Perfil actualizado correctamente');
+      }
+    } catch (err) {
+      // Optimistic update
+      setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, ...data } : u));
+      setCurrentUser(prev => prev ? { ...prev, ...data } : null);
+    }
   };
 
-  const addCustomerAddress = (newAddr: Omit<CustomerAddress, 'id'>) => {
+  const addCustomerAddress = async (newAddr: Omit<CustomerAddress, 'id'>): Promise<CustomerAddress | null> => {
     if (!currentUser) {
       showNotification('Debes iniciar sesión para registrar una dirección', 'error');
-      return;
+      return null;
     }
     const id = `addr-${Date.now()}`;
-    const address: CustomerAddress = { ...newAddr, id };
-    setUsers(prev => prev.map(u => {
-      if (u.id === currentUser.id) {
-        const addresses = [...u.addresses, address];
-        return { ...u, addresses };
-      }
-      return u;
-    }));
-    setCurrentUser(prev => prev ? ({ ...prev, addresses: [...prev.addresses, address] }) : null);
-    showNotification('Dirección registrada exitosamente');
+    const currentList = currentUser.addresses || [];
+    const isFirst = currentList.length === 0;
+    const shouldBeDefault = newAddr.isDefault !== undefined ? newAddr.isDefault : isFirst;
+
+    const address: CustomerAddress = {
+      ...newAddr,
+      id,
+      userId: currentUser.id,
+      isDefault: shouldBeDefault,
+      createdAt: new Date().toISOString()
+    };
+
+    let updatedAddresses = currentList.map(a => 
+      shouldBeDefault ? { ...a, isDefault: false } : a
+    );
+    updatedAddresses = [address, ...updatedAddresses];
+
+    await updateUserProfile({ addresses: updatedAddresses });
+    showNotification(`Dirección "${address.label || 'de entrega'}" registrada con éxito`, 'success');
+    return address;
   };
 
-  const setDefaultAddress = (addressId: string) => {
-    if (!currentUser) return;
-    setUsers(prev => prev.map(u => {
-      if (u.id === currentUser.id) {
-        const updated = u.addresses.map(a => ({ ...a, isDefault: a.id === addressId }));
-        return { ...u, addresses: updated };
+  const updateCustomerAddress = async (addressId: string, updatedData: Partial<CustomerAddress>): Promise<boolean> => {
+    if (!currentUser) return false;
+    const currentList = currentUser.addresses || [];
+    const target = currentList.find(a => a.id === addressId);
+    if (!target) return false;
+
+    const willBeDefault = updatedData.isDefault;
+
+    const updatedAddresses = currentList.map(a => {
+      if (a.id === addressId) {
+        return {
+          ...a,
+          ...updatedData,
+          updatedAt: new Date().toISOString(),
+          isDefault: willBeDefault !== undefined ? willBeDefault : a.isDefault
+        };
       }
-      return u;
-    }));
-    setCurrentUser(prev => prev ? ({
-      ...prev,
-      addresses: prev.addresses.map(a => ({ ...a, isDefault: a.id === addressId }))
-    }) : null);
+      if (willBeDefault) {
+        return { ...a, isDefault: false };
+      }
+      return a;
+    });
+
+    await updateUserProfile({ addresses: updatedAddresses });
+    showNotification('Dirección actualizada correctamente', 'success');
+    return true;
   };
 
-  // Super Admin: Borrado de usuarios y cuentas registradas
-  const deleteUser = (userId: string) => {
+  const deleteCustomerAddress = async (addressId: string): Promise<boolean> => {
+    if (!currentUser) return false;
+    const currentList = currentUser.addresses || [];
+    const target = currentList.find(a => a.id === addressId);
+    if (!target) return false;
+
+    let remaining = currentList.filter(a => a.id !== addressId);
+    if (target.isDefault && remaining.length > 0) {
+      remaining = remaining.map((a, idx) => idx === 0 ? { ...a, isDefault: true } : a);
+    }
+
+    await updateUserProfile({ addresses: remaining });
+    showNotification('Dirección eliminada de tu cuenta', 'info');
+    return true;
+  };
+
+  const setDefaultAddress = async (addressId: string): Promise<boolean> => {
+    if (!currentUser) return false;
+    const updated = (currentUser.addresses || []).map(a => ({ ...a, isDefault: a.id === addressId }));
+    await updateUserProfile({ addresses: updated });
+    showNotification('Dirección establecida como principal', 'success');
+    return true;
+  };
+
+  const deleteUser = async (userId: string) => {
     if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
       showNotification('Acceso denegado: Solo el Super Administrador puede eliminar usuarios', 'error');
       return;
@@ -765,20 +1100,129 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showNotification('Operación bloqueada: No puedes eliminar tu propio usuario en sesión activa', 'error');
       return;
     }
+
     const targetUser = users.find(u => u.id === userId);
     if (!targetUser) return;
 
-    setUsers(prev => prev.filter(u => u.id !== userId));
-    addAuditLog('USER_DELETED', userId, targetUser.name, `Usuario ${targetUser.email} (${targetUser.role}) eliminado por ${currentUser.name}`);
-    showNotification(`Usuario "${targetUser.name}" (${targetUser.email}) eliminado de la plataforma`);
+    try {
+      await api.deleteUser(userId);
+      setUsers(prev => prev.filter(u => u.id !== userId));
+      showNotification(`Usuario "${targetUser.name}" (${targetUser.email}) eliminado de la plataforma`);
+    } catch (err) {
+      showNotification('Error al eliminar usuario en el servidor central', 'error');
+    }
   };
 
-  // Stores Operations
+  const deleteMyAccount = async (password?: string, deleteAssociatedStore: boolean = false): Promise<{ success: boolean; message: string }> => {
+    if (!currentUser) {
+      return { success: false, message: 'No hay una sesión activa' };
+    }
+    if (currentUser.role === 'SUPER_ADMIN') {
+      showNotification('Operación bloqueada: Las cuentas de Super Administrador están protegidas y no pueden ser eliminadas.', 'error');
+      return { success: false, message: 'Las cuentas de Super Administrador están protegidas y no pueden ser eliminadas.' };
+    }
+
+    try {
+      const res = await api.deleteAccount(currentUser.id, password, deleteAssociatedStore);
+      if (res.success) {
+        const uId = currentUser.id;
+        const stId = currentUser.storeId;
+        logout();
+        setUsers(prev => prev.filter(u => u.id !== uId));
+        if (deleteAssociatedStore && stId) {
+          setStores(prev => prev.filter(s => s.id !== stId));
+          setProducts(prev => prev.filter(p => p.storeId !== stId));
+        }
+        showNotification(res.message || 'Tu cuenta ha sido eliminada permanentemente.', 'info');
+        return { success: true, message: res.message };
+      } else {
+        showNotification(res.message || 'Error al eliminar cuenta', 'error');
+        return { success: false, message: res.message || 'Error al procesar solicitud' };
+      }
+    } catch (e: any) {
+      const msg = e.message || 'Error al eliminar cuenta';
+      showNotification(msg, 'error');
+      return { success: false, message: msg };
+    }
+  };
+
+  const deleteMyStore = async (storeId: string, confirmationText: string): Promise<{ success: boolean; message: string }> => {
+    if (!currentUser) {
+      return { success: false, message: 'No hay una sesión activa' };
+    }
+    try {
+      const res = await api.deleteMerchantStore(storeId, currentUser.id, confirmationText);
+      if (res.success) {
+        setStores(prev => prev.filter(s => s.id !== storeId));
+        setProducts(prev => prev.filter(p => p.storeId !== storeId));
+        setCart(prev => prev.filter(item => item.storeId !== storeId));
+        if (currentUser.storeId === storeId) {
+          const updatedUser: User = { ...currentUser, storeId: undefined, role: 'CUSTOMER' };
+          setCurrentUser(updatedUser);
+          localStorage.setItem('plazado_user', JSON.stringify(updatedUser));
+        }
+        showNotification(res.message || 'La tienda ha sido eliminada permanentemente.', 'info');
+        return { success: true, message: res.message };
+      } else {
+        showNotification(res.message || 'Error al eliminar tienda', 'error');
+        return { success: false, message: res.message };
+      }
+    } catch (e: any) {
+      const msg = e.message || 'Error al eliminar tienda';
+      showNotification(msg, 'error');
+      return { success: false, message: msg };
+    }
+  };
+
+  const setUserPassword = async (userId: string, newPassword: string): Promise<{ success: boolean; message?: string }> => {
+    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
+      showNotification('Acceso denegado: Solo el Super Administrador puede modificar contraseñas de usuarios', 'error');
+      return { success: false, message: 'Acceso denegado: Se requiere rol de Super Administrador' };
+    }
+    const cleanPassword = (newPassword || '').trim();
+    if (!cleanPassword || cleanPassword.length < 6) {
+      showNotification('La contraseña debe contener al menos 6 caracteres', 'error');
+      return { success: false, message: 'La contraseña debe contener al menos 6 caracteres' };
+    }
+
+    const targetUser = users.find(u => u.id === userId);
+    if (!targetUser) {
+      showNotification('Usuario no encontrado', 'error');
+      return { success: false, message: 'Usuario no encontrado' };
+    }
+
+    try {
+      const res = await api.updateUserPassword(userId, cleanPassword);
+      if (res.success) {
+        if (res.user) {
+          setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...res.user } : u));
+          if (currentUser.id === userId) {
+            setCurrentUser(prev => prev ? { ...prev, ...res.user } : null);
+          }
+        }
+        await addAuditLog('SUPER_ADMIN_PASSWORD_CHANGE', userId, undefined, `Super Admin asignó nueva contraseña para ${targetUser.email} (${targetUser.role})`);
+        showNotification(`¡Contraseña actualizada exitosamente para ${targetUser.name} (${targetUser.email})!`, 'success');
+        return { success: true };
+      } else {
+        showNotification(res.message || 'Error al actualizar contraseña', 'error');
+        return { success: false, message: res.message };
+      }
+    } catch (err: any) {
+      showNotification(err.message || 'Error de conexión con el servidor', 'error');
+      return { success: false, message: err.message };
+    }
+  };
+
+  // --- STORES OPERATIONS (Global) ---
   const registerStore = (storeData: Omit<Store, 'id' | 'status' | 'rating' | 'reviewCount' | 'salesCount' | 'createdAt'>): string => {
-    const newId = `store-${Date.now()}`;
-    const newStore: Store = {
+    const tempId = `store-${Date.now()}`;
+    const ownerId = storeData.ownerId || (storeData as any).owner_id || currentUser?.id || `owner-${tempId}`;
+
+    const storePayload: Store = {
       ...storeData,
-      id: newId,
+      id: tempId,
+      ownerId,
+      owner_id: ownerId,
       status: 'APPROVED',
       isPublished: true,
       rating: 5.0,
@@ -787,43 +1231,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString()
     };
 
-    setStores(prev => [newStore, ...prev]);
+    setStores(prev => [storePayload, ...prev.filter(s => s.id !== tempId)]);
 
-    // Initial Balance
-    setStoreBalances(prev => ({
-      ...prev,
-      [newId]: {
-        storeId: newId,
-        totalSales: 0,
-        plazaCommissionsPaid: 0,
-        pendingBalance: 0,
-        availableBalance: 0,
-        settledBalance: 0,
-        retainedBalance: 0,
-        lastUpdated: new Date().toISOString()
+    api.createStore(storePayload).then(res => {
+      if (res.success && res.store) {
+        setStores(prev => [res.store, ...prev.filter(s => s.id !== tempId && s.id !== res.store.id)]);
+        if (res.version) {
+          currentVersionRef.current = res.version;
+        }
       }
-    }));
+    }).catch(err => {
+      console.error('[PlazaDO Global Sync] Error guardando tienda en base de datos global:', err);
+    });
 
-    // Register User for this Store
-    const newStoreUser: User = {
-      id: `user-${newId}`,
-      email: storeData.email,
-      name: storeData.ownerName,
-      role: 'STORE_OWNER',
-      phone: storeData.phone,
-      storeId: newId,
-      addresses: [],
-      createdAt: new Date().toISOString()
-    };
-    setUsers(prev => [...prev, newStoreUser]);
-
-    addAuditLog('STORE_REGISTERED', newId, undefined, `Nueva tienda: ${storeData.name}`);
-    showNotification('Tienda registrada y publicada en el catálogo global de PlazaDO.', 'success');
-    return newId;
+    showNotification(`Tienda "${storeData.name}" registrada y publicada en el catálogo global de PlazaDO.`, 'success');
+    return tempId;
   };
 
-  const updateStoreStatus = (storeId: string, status: Store['status'], reason?: string) => {
-    // Only Super Admin allowed
+  const updateStoreStatus = async (storeId: string, status: Store['status'], reason?: string) => {
     if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
       showNotification('Acceso denegado: Solo el Super Administrador puede cambiar el estado de una tienda', 'error');
       return;
@@ -831,134 +1256,142 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const store = stores.find(s => s.id === storeId);
     if (!store) return;
 
-    const isPublished = status === 'APPROVED' || status === 'active';
-    setStores(prev => prev.map(s => s.id === storeId ? { ...s, status, isPublished, rejectionReason: reason } : s));
-    addAuditLog('STORE_STATUS_UPDATE', storeId, store.status, `${status} ${reason ? `(Motivo: ${reason})` : ''}`);
+    try {
+      const res = await api.updateStoreStatus(storeId, status as StoreStatus, reason);
+      if (res.success && res.store) {
+        setStores(prev => prev.map(s => s.id === storeId ? res.store : s));
+      }
+    } catch (e) {
+      // Optimistic
+      const isPublished = status === 'APPROVED' || status === 'active';
+      setStores(prev => prev.map(s => s.id === storeId ? { ...s, status, isPublished, rejectionReason: reason } : s));
+    }
+
     if (status === 'APPROVED' || status === 'active') {
-      showNotification(`¡Tienda "${store.name}" APROBADA y publicada exitosamente! Ya está activa en la plataforma.`, 'success');
+      showNotification(`¡Tienda "${store.name}" APROBADA y publicada globalmente!`, 'success');
     } else if (status === 'REJECTED') {
-      showNotification(`Solicitud de la tienda "${store.name}" rechazada.${reason ? ` Motivo: ${reason}` : ''}`, 'info');
+      showNotification(`Solicitud de la tienda "${store.name}" rechazada.`, 'info');
     } else {
       showNotification(`Estado de la tienda ${store.name} actualizado a: ${status}`);
     }
   };
 
-  const updateStoreDetails = (storeId: string, data: Partial<Store>) => {
-    // Security check: Store owner can only update their own store; Super admin can update any
+  const updateStoreDetails = async (storeId: string, data: Partial<Store>) => {
     if (currentUser?.role === 'STORE_OWNER' && currentUser?.storeId !== storeId) {
       showNotification('Violación de seguridad: No tienes permiso para editar esta tienda', 'error');
       return;
     }
 
-    setStores(prev => prev.map(s => s.id === storeId ? { ...s, ...data } : s));
-    addAuditLog('STORE_DETAILS_UPDATE', storeId, undefined, 'Configuración actualizada');
-    showNotification('Configuración de la tienda guardada');
+    try {
+      const res = await api.updateStore(storeId, data);
+      if (res.success && res.store) {
+        setStores(prev => prev.map(s => s.id === storeId ? res.store : s));
+      }
+    } catch (e) {
+      setStores(prev => prev.map(s => s.id === storeId ? { ...s, ...data } : s));
+    }
+    showNotification('Configuración de la tienda guardada en la base de datos global');
   };
 
-  const toggleStorePublish = (storeId: string) => {
-    // Security check: Store owner can only update their own store; Super admin can update any
+  const toggleStorePublish = async (storeId: string) => {
     if (currentUser?.role !== 'SUPER_ADMIN' && (currentUser?.role !== 'STORE_OWNER' || currentUser?.storeId !== storeId)) {
       showNotification('Violación de seguridad: No tienes permiso para editar esta tienda', 'error');
       return;
     }
+
     const store = stores.find(s => s.id === storeId);
     if (!store) return;
 
-    const currentlyVisible = isStorePubliclyVisible(store);
-    const nextPublished = !currentlyVisible;
-    const nextStatus = nextPublished ? 'APPROVED' : 'INACTIVE';
-
-    setStores(prev => prev.map(s => {
-      if (s.id === storeId) {
-        return {
-          ...s,
-          isPublished: nextPublished,
-          status: nextStatus as StoreStatus
-        };
+    try {
+      const res = await api.toggleStorePublish(storeId);
+      if (res.success && res.store) {
+        setStores(prev => prev.map(s => s.id === storeId ? res.store : s));
+        showNotification(res.store.isPublished ? `Tienda "${store.name}" publicada globalmente` : `Tienda "${store.name}" despublicada`, res.store.isPublished ? 'success' : 'info');
       }
-      return s;
-    }));
-
-    addAuditLog('STORE_PUBLISH_TOGGLE', storeId, store.name, `Publicación cambiada a: ${nextPublished ? 'Publicada' : 'Oculta'}`);
-    showNotification(
-      nextPublished 
-        ? `Tienda "${store.name}" publicada en el catálogo global de PlazaDO` 
-        : `Tienda "${store.name}" despublicada (oculta del catálogo público)`,
-      nextPublished ? 'success' : 'info'
-    );
+    } catch (e) {
+      const currentlyVisible = isStorePubliclyVisible(store);
+      const nextPublished = !currentlyVisible;
+      const nextStatus = nextPublished ? 'APPROVED' : 'INACTIVE';
+      setStores(prev => prev.map(s => s.id === storeId ? { ...s, isPublished: nextPublished, status: nextStatus as StoreStatus } : s));
+    }
   };
 
-  // Super Admin: Borrado maestro de tiendas y cascada de productos
-  const deleteStore = (storeId: string) => {
-    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
-      showNotification('Acceso denegado: Solo el Super Administrador tiene permiso para eliminar tiendas', 'error');
+  const deleteStore = async (storeId: string) => {
+    if (!currentUser || (currentUser.role !== 'SUPER_ADMIN' && currentUser.storeId !== storeId)) {
+      showNotification('Acceso denegado: No tienes permiso para eliminar esta tienda', 'error');
       return;
     }
     const store = stores.find(s => s.id === storeId);
     if (!store) return;
 
-    // Eliminar la tienda
-    setStores(prev => prev.filter(s => s.id !== storeId));
-
-    // Eliminar en cascada los productos de esa tienda
-    setProducts(prev => prev.filter(p => p.storeId !== storeId));
-
-    // Limpiar del carrito si hay productos de esta tienda
-    setCart(prev => prev.filter(item => item.storeId !== storeId));
-
-    // Limpiar balance fiduciario de esa tienda
-    setStoreBalances(prev => {
-      const next = { ...prev };
-      delete next[storeId];
-      return next;
-    });
-
-    addAuditLog('STORE_DELETED', storeId, store.name, `Tienda eliminada permanentemente por Super Admin: ${currentUser?.name || 'Admin'}`);
-    showNotification(`Tienda "${store.name}" y sus productos asociados fueron eliminados de la plataforma`);
+    try {
+      await api.deleteStore(storeId);
+      setStores(prev => prev.filter(s => s.id !== storeId));
+      setProducts(prev => prev.filter(p => p.storeId !== storeId));
+      setCart(prev => prev.filter(item => item.storeId !== storeId));
+      if (currentUser.storeId === storeId) {
+        const updatedUser: User = { ...currentUser, storeId: undefined, role: 'CUSTOMER' };
+        setCurrentUser(updatedUser);
+        localStorage.setItem('plazado_user', JSON.stringify(updatedUser));
+      }
+      showNotification(`Tienda "${store.name}" y sus productos fueron eliminados de la plataforma global`);
+    } catch (e) {
+      showNotification('Error al eliminar tienda del servidor central', 'error');
+    }
   };
 
-  // Products Operations
-  const addProduct = (productData: Omit<Product, 'id' | 'storeId' | 'reservedStock' | 'soldCount' | 'rating' | 'reviewCount' | 'createdAt'>) => {
+  // --- PRODUCTS OPERATIONS (Global) ---
+  const addProduct = async (productData: Omit<Product, 'id' | 'storeId' | 'reservedStock' | 'soldCount' | 'rating' | 'reviewCount' | 'createdAt'>) => {
     const storeId = currentUser?.role === 'STORE_OWNER' ? currentUser.storeId : (stores[0]?.id || 'store-techzone');
     if (!storeId) {
       showNotification('Error: Debes ser una tienda activa para agregar productos', 'error');
       return;
     }
 
-    const newId = `prod-${Date.now()}`;
-    const newProduct: Product = {
-      ...productData,
-      id: newId,
-      storeId,
-      status: productData.status || 'published',
-      reservedStock: 0,
-      soldCount: 0,
-      rating: 5.0,
-      reviewCount: 0,
-      createdAt: new Date().toISOString()
-    };
-
-    setProducts(prev => [newProduct, ...prev]);
-    addAuditLog('PRODUCT_CREATED', newId, undefined, `${newProduct.name} en tienda ${storeId}`);
-    showNotification(`Producto "${newProduct.name}" publicado exitosamente`);
+    try {
+      const res = await api.createProduct({ ...productData, storeId });
+      if (res.success && res.product) {
+        setProducts(prev => [res.product, ...prev]);
+        showNotification(`Producto "${res.product.name}" publicado en el catálogo global`);
+      }
+    } catch (e) {
+      const tempId = `prod-${Date.now()}`;
+      const optimisticProd: Product = {
+        ...productData,
+        id: tempId,
+        storeId,
+        reservedStock: 0,
+        soldCount: 0,
+        rating: 5.0,
+        reviewCount: 0,
+        createdAt: new Date().toISOString()
+      };
+      setProducts(prev => [optimisticProd, ...prev]);
+      showNotification(`Producto "${optimisticProd.name}" publicado`);
+    }
   };
 
-  const updateProduct = (productId: string, data: Partial<Product>) => {
+  const updateProduct = async (productId: string, data: Partial<Product>) => {
     const existing = products.find(p => p.id === productId);
     if (!existing) return;
 
-    // Security check: Store owner can only update their own product
     if (currentUser?.role === 'STORE_OWNER' && currentUser?.storeId !== existing.storeId) {
       showNotification('Violación de seguridad: No puedes modificar productos de otra tienda', 'error');
       return;
     }
 
-    setProducts(prev => prev.map(p => p.id === productId ? { ...p, ...data } : p));
-    addAuditLog('PRODUCT_UPDATED', productId, undefined, `Cambios en ${existing.name}`);
-    showNotification('Producto actualizado');
+    try {
+      const res = await api.updateProduct(productId, data);
+      if (res.success && res.product) {
+        setProducts(prev => prev.map(p => p.id === productId ? res.product : p));
+      }
+    } catch (e) {
+      setProducts(prev => prev.map(p => p.id === productId ? { ...p, ...data } : p));
+    }
+    showNotification('Producto actualizado globalmente');
   };
 
-  const deleteProduct = (productId: string) => {
+  const deleteProduct = async (productId: string) => {
     const existing = products.find(p => p.id === productId);
     if (!existing) return;
 
@@ -967,12 +1400,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    setProducts(prev => prev.filter(p => p.id !== productId));
-    addAuditLog('PRODUCT_DELETED', productId, existing.name, `Eliminado por ${currentUser?.name || 'Usuario'} (${currentUser?.role || ''})`);
-    showNotification(`Producto "${existing.name}" eliminado del catálogo`);
+    try {
+      await api.deleteProduct(productId);
+      setProducts(prev => prev.filter(p => p.id !== productId));
+      showNotification(`Producto "${existing.name}" eliminado del catálogo global`);
+    } catch (e) {
+      setProducts(prev => prev.filter(p => p.id !== productId));
+    }
   };
 
-  // Test Data Cleaner for Super Admin (Requerimiento #45)
   const cleanTestProducts = (): number => {
     if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
       showNotification('Acceso denegado: Solo el Super Administrador puede ejecutar la limpieza', 'error');
@@ -980,55 +1416,74 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const testProducts = products.filter(p => p.isTestProduct || p.name.toLowerCase().includes('test') || p.name.toLowerCase().includes('prueba'));
-    if (testProducts.length === 0) {
-      showNotification('No se encontraron publicaciones de prueba activas', 'info');
-      return 0;
-    }
+    api.cleanTestProducts().then(res => {
+      if (res.success) {
+        setProducts(prev => prev.filter(p => !testProducts.some(tp => tp.id === p.id)));
+      }
+    }).catch(console.error);
 
     setProducts(prev => prev.filter(p => !testProducts.some(tp => tp.id === p.id)));
-    addAuditLog('TEST_DATA_CLEANED', 'products', `${testProducts.length} items de prueba eliminados`);
-    showNotification(`Se limpiaron ${testProducts.length} productos de prueba manteniendo integridad`);
+    showNotification(`Se limpiaron ${testProducts.length} productos de prueba manteniendo la integridad global`);
     return testProducts.length;
   };
 
-  // Categories Operations (Requerimiento #9: Agrupamiento Mascotas y eliminación de duplicados)
-  const addCategory = (categoryData: Omit<Category, 'id'>) => {
-    const newId = `cat-${Date.now()}`;
-    const newCat: Category = { ...categoryData, id: newId };
-    setCategories(prev => [...prev, newCat]);
-    addAuditLog('CATEGORY_CREATED', newId, undefined, newCat.name);
-    showNotification(`Categoría "${newCat.name}" agregada`);
+  // --- CATEGORIES OPERATIONS (Global) ---
+  const addCategory = async (categoryData: Omit<Category, 'id'>) => {
+    try {
+      const res = await api.createCategory(categoryData);
+      if (res.success && res.category) {
+        setCategories(prev => [...prev, res.category]);
+        showNotification(`Categoría "${res.category.name}" agregada`);
+      }
+    } catch (e) {
+      const newCat: Category = { ...categoryData, id: `cat-${Date.now()}` };
+      setCategories(prev => [...prev, newCat]);
+    }
   };
 
-  const updateCategory = (categoryId: string, data: Partial<Category>) => {
-    setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, ...data } : c));
-    showNotification('Categoría actualizada');
+  const updateCategory = async (categoryId: string, data: Partial<Category>) => {
+    try {
+      const res = await api.updateCategory(categoryId, data);
+      if (res.success && res.category) {
+        setCategories(prev => prev.map(c => c.id === categoryId ? res.category : c));
+      }
+    } catch (e) {
+      setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, ...data } : c));
+    }
+    showNotification('Categoría actualizada globalmente');
   };
 
-  const deleteCategory = (categoryId: string) => {
-    setCategories(prev => prev.filter(c => c.id !== categoryId));
-    showNotification('Categoría eliminada');
+  const deleteCategory = async (categoryId: string) => {
+    try {
+      await api.deleteCategory(categoryId);
+      setCategories(prev => prev.filter(c => c.id !== categoryId));
+      showNotification('Categoría eliminada globalmente');
+    } catch (e) {
+      setCategories(prev => prev.filter(c => c.id !== categoryId));
+    }
   };
 
-  const mergeCategories = (sourceId: string, targetId: string) => {
+  const mergeCategories = async (sourceId: string, targetId: string) => {
     const source = categories.find(c => c.id === sourceId);
     const target = categories.find(c => c.id === targetId);
     if (!source || !target) return;
 
-    // Migrar productos hacia targetId sin perderlos
-    setProducts(prev => prev.map(p => {
-      if (p.categoryId === sourceId) return { ...p, categoryId: targetId };
-      if (p.subcategoryId === sourceId) return { ...p, subcategoryId: targetId };
-      return p;
-    }));
-
-    // Eliminar la categoría duplicada
-    setCategories(prev => prev.filter(c => c.id !== sourceId));
-    addAuditLog('CATEGORIES_MERGED', targetId, `Origen: ${source.name}`, `Destino: ${target.name}`);
-    showNotification(`Categoría "${source.name}" fusionada con éxito en "${target.name}" sin perder productos.`);
+    try {
+      await api.mergeCategories(sourceId, targetId);
+      // Migrate locally
+      setProducts(prev => prev.map(p => {
+        if (p.categoryId === sourceId) return { ...p, categoryId: targetId };
+        if (p.subcategoryId === sourceId) return { ...p, subcategoryId: targetId };
+        return p;
+      }));
+      setCategories(prev => prev.filter(c => c.id !== sourceId));
+      showNotification(`Categoría "${source.name}" fusionada con éxito en "${target.name}".`);
+    } catch (e) {
+      showNotification('Error al fusionar categorías', 'error');
+    }
   };
 
-  // Cart Operations
+  // --- CART OPERATIONS ---
   const addToCart = (productId: string, storeId: string, quantity = 1) => {
     const product = products.find(p => p.id === productId);
     if (!product) return;
@@ -1038,7 +1493,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    // Login obligatorio únicamente cuando sea necesario comprar
     if (!currentUser) {
       setPendingPurchaseAction({ productId, storeId, quantity });
       setAuthPurchaseNotice('Para realizar tu compra debes iniciar sesión o crear una cuenta.');
@@ -1084,7 +1538,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const clearCart = () => setCart([]);
 
-  // Multi-Store Cart Breakdown (Requerimiento #12 & #13)
   const getCartGroups = (): CartStoreGroup[] => {
     const storeMap = new Map<string, { cartItem: CartItem; product: Product }[]>();
 
@@ -1130,7 +1583,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return groups;
   };
 
-  // Cart Totals with Coupon
   const cartGroups = getCartGroups();
   const itemsCount = cart.reduce((sum, i) => sum + i.quantity, 0);
   const rawSubtotal = cartGroups.reduce((sum, g) => sum + g.subtotal, 0);
@@ -1155,7 +1607,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const applyCoupon = (code: string) => {
-    const coupon = INITIAL_COUPONS.find(c => c.code.toUpperCase() === code.trim().toUpperCase() && c.isActive);
+    const coupon = coupons.find(c => c.code.toUpperCase() === code.trim().toUpperCase() && c.isActive);
     if (!coupon) {
       return { success: false, message: 'Cupón no válido o expirado' };
     }
@@ -1168,12 +1620,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const removeCoupon = () => setAppliedCoupon(null);
 
-  // Process Checkout (Requerimientos #12, #13, #14, #15, #19, #20, #21)
+  // --- ORDERS & CHECKOUT (Centralized) ---
   const processCheckout = (
     address: CustomerAddress, 
     paymentMethod: PaymentMethodType, 
     notes?: string,
-    simulatedCard?: { number: string; expiry: string; cvc: string }
+    simulatedCard?: { number: string; expiry: string; cvc: string; holder?: string }
   ) => {
     if (cart.length === 0) {
       return { success: false, orderIds: [], orderGroupCode: '', error: 'El carrito está vacío' };
@@ -1182,7 +1634,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const groups = getCartGroups();
     const orderGroupCode = `CHK-${Math.floor(1000 + Math.random() * 9000)}`;
     const createdOrderIds: string[] = [];
-    const commissionRate = systemSettings.defaultCommissionRate || 0.05;
+    // Comisión de Plazado.com centralizada (0.05% = 0.0005)
+    const commissionRate = typeof systemSettings.plazaCommissionRate === 'number' 
+      ? systemSettings.plazaCommissionRate 
+      : 0.0005;
 
     // Verify stock availability
     for (const group of groups) {
@@ -1198,27 +1653,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    // Generate individual sub-orders per store
+    const isCard = paymentMethod === 'CARD_AZUL';
+    const cleanCard = (simulatedCard?.number || '4111222233334444').replace(/\s+/g, '');
+    const cardLast4 = cleanCard.slice(-4) || '4444';
+    const cardBrand = cleanCard.startsWith('4') ? 'VISA' : cleanCard.startsWith('5') ? 'MASTERCARD' : 'TARJETA';
+    const authCode = `AUTH-AUTO-${Math.floor(100000 + Math.random() * 900000)}`;
+    const chargedAt = new Date().toISOString();
+
     const newOrders: Order[] = [];
-    const updatedBalances = { ...storeBalances };
-    const updatedProducts = [...products];
+    const newTransactions: PaymentTransaction[] = [];
 
     groups.forEach((group, idx) => {
       const orderId = `ORD-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}-${idx + 1}`;
       createdOrderIds.push(orderId);
 
-      // Secret 6-digit confirmation code generated for customer!
       const deliveryConfirmationCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-      const commissionAmount = Number((group.subtotal * commissionRate).toFixed(2));
-      const storeNetEarnings = Number((group.subtotal - commissionAmount + group.shippingCost).toFixed(2));
+      // Comisión = Monto de la venta * 0.0005
+      // Monto neto tienda = Monto de la venta - Comisión
+      const commissionAmount = Number((group.storeTotal * commissionRate).toFixed(2));
+      const storeNetEarnings = Number((group.storeTotal - commissionAmount).toFixed(2));
 
       const newOrder: Order = {
         id: orderId,
         orderGroupCode,
         customerId: currentUser ? currentUser.id : `guest-${Date.now()}`,
         customerName: currentUser ? currentUser.name : address.recipientName,
-        customerEmail: currentUser ? currentUser.email : ((address as any).email || 'comprador@plazado.com'),
+        customerEmail: currentUser ? currentUser.email : 'comprador@plazado.com',
         customerPhone: address.phone || (currentUser?.phone || ''),
         storeId: group.store.id,
         storeName: group.store.name,
@@ -1239,75 +1699,116 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         storeNetEarnings,
         status: 'PENDING',
         paymentMethod,
-        paymentStatus: paymentMethod === 'CARD_AZUL' ? 'PAID' : 'PENDING',
-        deliveryConfirmationCode, // Código secreto que el cliente presentará
-        deliveryAddress: address,
+        paymentStatus: isCard ? 'PAID' : 'PENDING',
+        cardLast4: isCard ? cardLast4 : undefined,
+        cardBrand: isCard ? cardBrand : undefined,
+        cardAuthorizationCode: isCard ? authCode : undefined,
+        cardChargedAt: isCard ? chargedAt : undefined,
+        chargeType: isCard ? 'AUTOMATIC' : undefined,
+        deliveryConfirmationCode,
+        deliveryAddress: { ...address },
         customerNotes: notes,
         statusHistory: [
           {
             status: 'PENDING',
-            timestamp: new Date().toISOString(),
+            timestamp: chargedAt,
             updatedBy: currentUser ? `Cliente (${currentUser.name})` : `Cliente (${address.recipientName})`,
-            note: `Pedido generado en checkout multi-tienda ${orderGroupCode}`
+            note: isCard
+              ? `Cargo automático aprobado de RD$ ${group.storeTotal.toLocaleString()} a tarjeta ${cardBrand} ••••${cardLast4} (Aut: ${authCode}). Fondos recibidos en custodia de Plazado.com.`
+              : `Pedido generado en checkout multi-tienda ${orderGroupCode}`
           }
         ],
         settlementStatus: 'PENDING',
-        createdAt: new Date().toISOString()
+        createdAt: chargedAt
       };
 
       newOrders.push(newOrder);
 
-      // Deduct inventory
-      group.items.forEach(i => {
-        const pIdx = updatedProducts.findIndex(p => p.id === i.product.id);
-        if (pIdx > -1) {
-          updatedProducts[pIdx] = {
-            ...updatedProducts[pIdx],
-            stock: updatedProducts[pIdx].stock - i.cartItem.quantity,
-            soldCount: updatedProducts[pIdx].soldCount + i.cartItem.quantity
-          };
-        }
-      });
-
-      // Update store balances: sales placed into pending balance until delivery confirmed
-      const currentBal = updatedBalances[group.store.id] || {
+      // Registrar transacción financiera vinculada
+      const tx: PaymentTransaction = {
+        id: `TX-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
+        orderId,
+        orderGroupCode,
+        customerId: newOrder.customerId,
+        customerName: newOrder.customerName,
         storeId: group.store.id,
-        totalSales: 0,
-        plazaCommissionsPaid: 0,
-        pendingBalance: 0,
-        availableBalance: 0,
-        settledBalance: 0,
-        retainedBalance: 0,
-        lastUpdated: new Date().toISOString()
+        storeName: group.store.name,
+        amount: group.storeTotal,
+        method: paymentMethod,
+        commissionAmount,
+        netAmount: storeNetEarnings,
+        orderStatus: 'PENDING',
+        paymentStatus: isCard ? 'PAID' : 'PENDING',
+        settlementStatus: 'PENDING',
+        gatewayReference: isCard ? `AZUL-${authCode}` : `CASH-${orderId}`,
+        idempotencyKey: `PAY-${orderId}-${group.store.id}`,
+        cardLast4: isCard ? cardLast4 : undefined,
+        cardBrand: isCard ? cardBrand : undefined,
+        notes: isCard ? `Cargo automático procesado con éxito (Aut: ${authCode})` : 'Efectivo contra entrega',
+        createdAt: chargedAt
       };
-
-      updatedBalances[group.store.id] = {
-        ...currentBal,
-        totalSales: currentBal.totalSales + group.subtotal,
-        pendingBalance: currentBal.pendingBalance + storeNetEarnings,
-        lastUpdated: new Date().toISOString()
-      };
+      newTransactions.push(tx);
     });
 
+    // Send to global server backend
+    api.createOrders(newOrders).then(res => {
+      if (res.success && res.orders) {
+        setOrders(prev => [...res.orders, ...prev.filter(o => !newOrders.some(no => no.id === o.id))]);
+      }
+    }).catch(console.error);
+
+    // Optimistic local state update
     setOrders(prev => [...newOrders, ...prev]);
-    setProducts(updatedProducts);
-    setStoreBalances(updatedBalances);
+    setPaymentTransactions(prev => [...newTransactions, ...prev]);
+
+    // Update balances optimistically
+    setStoreBalances(prev => {
+      const updated = { ...prev };
+      groups.forEach((group) => {
+        const commissionAmount = Number((group.storeTotal * commissionRate).toFixed(2));
+        const storeNetEarnings = Number((group.storeTotal - commissionAmount).toFixed(2));
+        const current = updated[group.store.id] || {
+          storeId: group.store.id,
+          totalSales: 0,
+          cardSales: 0,
+          cashSales: 0,
+          plazaCommissionsPaid: 0,
+          pendingCashCommissions: 0,
+          pendingBalance: 0,
+          availableBalance: 0,
+          settledBalance: 0,
+          retainedBalance: 0,
+          adjustments: 0,
+          carriedOverDebt: 0,
+          lastUpdated: chargedAt
+        };
+
+        updated[group.store.id] = {
+          ...current,
+          totalSales: (current.totalSales || 0) + group.storeTotal,
+          cardSales: isCard ? (current.cardSales || 0) + group.storeTotal : (current.cardSales || 0),
+          cashSales: !isCard ? (current.cashSales || 0) + group.storeTotal : (current.cashSales || 0),
+          pendingBalance: isCard ? (current.pendingBalance || 0) + storeNetEarnings : (current.pendingBalance || 0),
+          plazaCommissionsPaid: isCard ? (current.plazaCommissionsPaid || 0) + commissionAmount : (current.plazaCommissionsPaid || 0),
+          pendingCashCommissions: !isCard ? (current.pendingCashCommissions || 0) + commissionAmount : (current.pendingCashCommissions || 0),
+          lastUpdated: chargedAt
+        };
+      });
+      return updated;
+    });
+
     clearCart();
     setAppliedCoupon(null);
 
-    // Audit log
-    addAuditLog(
-      'ORDER_CHECKOUT_COMPLETED',
-      orderGroupCode,
-      undefined,
-      `${groups.length} sub-pedidos generados para el cliente ${currentUser?.name || 'Cliente'}. Total: RD$ ${cartTotal.grandTotal.toLocaleString()}`
-    );
-
-    showNotification(`¡Compra completada con éxito! Se generaron ${groups.length} pedidos para cada tienda.`, 'success');
+    const totalCharged = groups.reduce((acc, g) => acc + g.storeTotal, 0);
+    if (isCard) {
+      showNotification(`¡Cargo automático aprobado! Se cargó RD$ ${totalCharged.toLocaleString()} a tu tarjeta (Aut: ${authCode}).`, 'success');
+    } else {
+      showNotification(`¡Compra completada con éxito! Se generaron ${groups.length} pedidos.`, 'success');
+    }
     return { success: true, orderIds: createdOrderIds, orderGroupCode };
   };
 
-  // Order Status Advancement & Secret Confirmation Code Verification (Requerimiento #14 & #15)
   const updateOrderStatus = (
     orderId: string, 
     newStatus: OrderStatus, 
@@ -1317,39 +1818,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const order = orders.find(o => o.id === orderId);
     if (!order) return { success: false, message: 'Pedido no encontrado' };
 
-    // RBAC check: Store owner must own the store or be super admin
     if (currentUser?.role === 'STORE_OWNER' && currentUser?.storeId !== order.storeId) {
       return { success: false, message: 'Violación de seguridad: No tienes permisos para gestionar pedidos de otra tienda' };
     }
 
-    // Special validation for DELIVERED state (Requerimiento #15)
     if (newStatus === 'DELIVERED') {
       const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
       if (!isSuperAdmin) {
-        if (!providedConfirmationCode || providedConfirmationCode.trim() !== order.deliveryConfirmationCode.trim()) {
+        const expectedCode = (order.deliveryConfirmationCode || '').trim().toUpperCase();
+        const inputCode = (providedConfirmationCode || '').trim().toUpperCase();
+        if (!inputCode || (expectedCode && inputCode !== expectedCode)) {
           return { 
             success: false, 
             message: 'Código de confirmación de entrega inválido. Solicítaselo al cliente que recibió el paquete.' 
           };
         }
       }
-
-      // Money release: Move from pendingBalance to availableBalance!
-      setStoreBalances(prev => {
-        const bal = prev[order.storeId];
-        if (!bal) return prev;
-        return {
-          ...prev,
-          [order.storeId]: {
-            ...bal,
-            pendingBalance: Math.max(0, bal.pendingBalance - order.storeNetEarnings),
-            availableBalance: bal.availableBalance + order.storeNetEarnings,
-            plazaCommissionsPaid: bal.plazaCommissionsPaid + order.plazaCommissionAmount,
-            lastUpdated: new Date().toISOString()
-          }
-        };
-      });
     }
+
+    api.updateOrderStatus(orderId, newStatus, note, providedConfirmationCode).then(res => {
+      if (res.success && res.order) {
+        setOrders(prev => prev.map(o => o.id === orderId ? res.order! : o));
+      }
+    }).catch(console.error);
 
     const historyItem = {
       status: newStatus,
@@ -1363,151 +1854,253 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return {
           ...o,
           status: newStatus,
+          cancelReason: newStatus === 'CANCELLED' ? (note || o.cancelReason || 'Cancelado por la tienda') : o.cancelReason,
+          cancelledBy: newStatus === 'CANCELLED' ? (currentUser ? `${currentUser.name} (${currentUser.role})` : 'Tienda') : o.cancelledBy,
+          cancelledAt: newStatus === 'CANCELLED' ? new Date().toISOString() : o.cancelledAt,
           paymentStatus: (newStatus === 'DELIVERED' && o.paymentMethod === 'CASH_ON_DELIVERY') ? 'PAID' : o.paymentStatus,
-          statusHistory: [...o.statusHistory, historyItem]
+          statusHistory: [...(o.statusHistory || []), historyItem]
         };
       }
       return o;
     }));
 
-    addAuditLog('ORDER_STATUS_CHANGED', orderId, order.status, `${newStatus} por ${currentUser?.name || 'Sistema'}`);
-    showNotification(`Pedido ${orderId} actualizado a estado: ${newStatus}`);
+    showNotification(`Pedido ${orderId} actualizado a: ${newStatus}`);
     return { success: true, message: `Estado actualizado a ${newStatus}` };
   };
 
-  // Super Admin: Borrado de registros de pedidos
-  const deleteOrder = (orderId: string) => {
+  const deleteOrder = async (orderId: string) => {
     if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
       showNotification('Acceso denegado: Solo el Super Administrador puede eliminar pedidos', 'error');
       return;
     }
-    const order = orders.find(o => o.id === orderId);
-    if (!order) return;
-
-    setOrders(prev => prev.filter(o => o.id !== orderId));
-    addAuditLog('ORDER_DELETED', orderId, `Total: RD$ ${order.total.toLocaleString()}`, `Registro de pedido eliminado por ${currentUser.name}`);
-    showNotification(`Pedido #${orderId} eliminado del sistema`);
+    try {
+      await api.deleteOrder(orderId);
+      setOrders(prev => prev.filter(o => o.id !== orderId));
+      showNotification(`Pedido #${orderId} eliminado globalmente`);
+    } catch (e) {
+      setOrders(prev => prev.filter(o => o.id !== orderId));
+    }
   };
 
-  // Settlements (Requerimientos #23 & #24)
+  // --- ORDER CHAT (PLATAFORMA EXCLUSIVA DE COMUNICACIÓN) ---
+  const openOrderChat = (orderId: string) => {
+    setActiveChatOrderId(orderId);
+    const order = orders.find(o => o.id === orderId);
+    const isStoreUser = currentUser?.role === 'STORE_OWNER' || (order && currentUser?.storeId === order.storeId);
+    markOrderMessagesAsRead(orderId, isStoreUser ? 'STORE' : 'CUSTOMER');
+  };
+
+  const closeOrderChat = () => {
+    setActiveChatOrderId(null);
+  };
+
+  const sendOrderMessage = async (orderId: string, message: string): Promise<boolean> => {
+    if (!message || !message.trim()) return false;
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return false;
+
+    const isStoreUser = currentUser?.role === 'STORE_OWNER' || currentUser?.storeId === order.storeId;
+    const isAdmin = currentUser?.role === 'SUPER_ADMIN';
+    const senderRole: 'CUSTOMER' | 'STORE' | 'ADMIN' = isAdmin ? 'ADMIN' : (isStoreUser ? 'STORE' : 'CUSTOMER');
+    const senderName = isStoreUser 
+      ? (order.storeName || currentUser?.name || 'Tienda Oficial')
+      : (currentUser?.name || order.customerName || 'Cliente');
+    const senderId = currentUser?.id || (isStoreUser ? order.storeId : order.customerId);
+
+    // Optimistic local update
+    const tempMsg: OrderChatMessage = {
+      id: `MSG-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      orderId,
+      storeId: order.storeId,
+      customerId: order.customerId,
+      senderId,
+      senderName,
+      senderRole,
+      message: message.trim(),
+      createdAt: new Date().toISOString(),
+      readByCustomer: senderRole === 'CUSTOMER',
+      readByStore: senderRole === 'STORE'
+    };
+
+    setOrderMessages(prev => [...prev, tempMsg]);
+
+    try {
+      const res = await api.sendOrderMessage(orderId, {
+        storeId: order.storeId,
+        customerId: order.customerId,
+        senderId,
+        senderName,
+        senderRole,
+        message: message.trim()
+      });
+      if (res.success && res.message) {
+        setOrderMessages(prev => prev.map(m => m.id === tempMsg.id ? res.message : m));
+      }
+      return true;
+    } catch (e) {
+      console.error('Error sending order chat message:', e);
+      return true; // Already displayed optimistically
+    }
+  };
+
+  const markOrderMessagesAsRead = async (orderId: string, role?: 'CUSTOMER' | 'STORE') => {
+    const targetRole = role || (currentUser?.role === 'STORE_OWNER' || currentUser?.storeId ? 'STORE' : 'CUSTOMER');
+    setOrderMessages(prev => prev.map(m => {
+      if (m.orderId === orderId) {
+        if (targetRole === 'CUSTOMER') return { ...m, readByCustomer: true };
+        if (targetRole === 'STORE') return { ...m, readByStore: true };
+      }
+      return m;
+    }));
+    try {
+      await api.markOrderMessagesAsRead(orderId, targetRole);
+    } catch (e) {}
+  };
+
+  const getOrderUnreadCount = (orderId: string, forRole: 'CUSTOMER' | 'STORE'): number => {
+    return orderMessages.filter(m => 
+      m.orderId === orderId && 
+      (forRole === 'CUSTOMER' ? (!m.readByCustomer && m.senderRole !== 'CUSTOMER') : (!m.readByStore && m.senderRole !== 'STORE'))
+    ).length;
+  };
+
+  // --- SETTLEMENTS & BALANCES (Global) ---
   const requestSettlement = (storeId: string, notes?: string): { success: boolean; message: string } => {
     const bal = storeBalances[storeId];
-    if (!bal || bal.availableBalance <= 500) {
+    if (!bal || bal.availableBalance < 500) {
       return { success: false, message: 'El balance disponible mínimo para solicitar liquidación es de RD$ 500' };
     }
 
-    const store = stores.find(s => s.id === storeId);
-    const newSettlement: Settlement = {
-      id: `SETTL-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
-      storeId,
-      storeName: store?.name || storeId,
-      grossAmount: bal.availableBalance,
-      commissionAmount: 0,
-      adjustments: 0,
-      netAmount: bal.availableBalance,
-      status: 'PENDING',
-      paymentMethodName: `Transferencia ${store?.bankInfo?.bank || 'Bancaria'}`,
-      accountNumberMasked: store?.bankInfo?.accountNumber ? `****${store.bankInfo.accountNumber.slice(-4)}` : '****0000',
-      notes,
-      createdAt: new Date().toISOString()
-    };
+    api.requestSettlement(storeId, notes).then(res => {
+      if (res.success && res.settlement) {
+        setSettlements(prev => [res.settlement!, ...prev]);
+      }
+    }).catch(console.error);
 
-    setSettlements(prev => [newSettlement, ...prev]);
-    addAuditLog('SETTLEMENT_REQUESTED', newSettlement.id, undefined, `Monto: RD$ ${bal.availableBalance.toLocaleString()} por ${store?.name}`);
-    showNotification('Solicitud de liquidación enviada a Administración');
+    showNotification('Solicitud de liquidación enviada al servidor central');
     return { success: true, message: 'Solicitud enviada con éxito' };
   };
 
-  const processSettlement = (settlementId: string, status: Settlement['status'], reference?: string) => {
+  const processSettlement = async (settlementId: string, status: Settlement['status'], reference?: string) => {
     if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
       showNotification('Acceso denegado: Solo el Super Administrador puede procesar liquidaciones', 'error');
       return;
     }
 
-    const settl = settlements.find(s => s.id === settlementId);
-    if (!settl) return;
-
-    if (status === 'PAID') {
-      // Deduct from store's available balance and add to settledBalance
-      setStoreBalances(prev => {
-        const bal = prev[settl.storeId];
-        if (!bal) return prev;
-        return {
-          ...prev,
-          [settl.storeId]: {
-            ...bal,
-            availableBalance: Math.max(0, bal.availableBalance - settl.netAmount),
-            settledBalance: bal.settledBalance + settl.netAmount,
-            lastUpdated: new Date().toISOString()
-          }
-        };
-      });
-    }
-
-    setSettlements(prev => prev.map(s => {
-      if (s.id === settlementId) {
-        return {
-          ...s,
-          status,
-          bankReference: reference || s.bankReference,
-          paidAt: status === 'PAID' ? new Date().toISOString() : s.paidAt
-        };
+    try {
+      const res = await api.processSettlement(settlementId, status, reference);
+      if (res.success && res.settlement) {
+        setSettlements(prev => prev.map(s => s.id === settlementId ? res.settlement : s));
       }
-      return s;
-    }));
-
-    addAuditLog('SETTLEMENT_PROCESSED', settlementId, settl.status, `${status} con ref: ${reference || 'N/A'}`);
+    } catch (e) {
+      setSettlements(prev => prev.map(s => s.id === settlementId ? { ...s, status } : s));
+    }
     showNotification(`Liquidación ${settlementId} marcada como: ${status}`);
   };
 
-  // Super Admin: Borrado de registros de liquidación
-  const deleteSettlement = (settlementId: string) => {
+  const deleteSettlement = async (settlementId: string) => {
     if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
       showNotification('Acceso denegado: Solo el Super Administrador puede eliminar liquidaciones', 'error');
       return;
     }
-    const settl = settlements.find(s => s.id === settlementId);
-    if (!settl) return;
-
-    setSettlements(prev => prev.filter(s => s.id !== settlementId));
-    addAuditLog('SETTLEMENT_DELETED', settlementId, `Monto: RD$ ${settl.netAmount.toLocaleString()}`, `Registro eliminado por ${currentUser.name}`);
-    showNotification(`Registro de liquidación ${settlementId} eliminado del sistema`);
+    try {
+      await api.deleteSettlement(settlementId);
+      setSettlements(prev => prev.filter(s => s.id !== settlementId));
+      showNotification(`Liquidación ${settlementId} eliminada`);
+    } catch (e) {
+      setSettlements(prev => prev.filter(s => s.id !== settlementId));
+    }
   };
 
-  // Disputes (Requerimiento #26)
-  const createDispute = (data: Omit<Dispute, 'id' | 'status' | 'createdAt'>) => {
-    const newDispute: Dispute = {
-      ...data,
-      id: `DISP-${Math.floor(1000 + Math.random() * 9000)}`,
-      status: 'OPEN',
-      createdAt: new Date().toISOString()
-    };
-    setDisputes(prev => [newDispute, ...prev]);
-    addAuditLog('DISPUTE_OPENED', newDispute.id, undefined, `Pedido ${data.orderId}: ${data.issueType}`);
-    showNotification('Reclamación registrada. Un agente revisará el caso a la brevedad.');
+  const runWeeklySettlements = async () => {
+    try {
+      const actorName = currentUser ? `${currentUser.name} (${currentUser.role})` : 'Super Admin Plazado.com';
+      const res = await api.runWeeklySettlements(actorName);
+      if (res.success) {
+        if (res.settlementsCreated && res.settlementsCreated.length > 0) {
+          setSettlements(prev => [...res.settlementsCreated, ...prev]);
+        }
+        // Refresh bootstrap to get synced balances and logs
+        const boot = await api.getBootstrap();
+        if (boot && boot.data) {
+          applyServerState(boot.data, boot.version || 1);
+        }
+        showNotification(res.message, 'success');
+        return { 
+          success: true, 
+          message: res.message, 
+          settlementsCreated: res.settlementsCreated,
+          totalLiquidated: res.totalLiquidated 
+        };
+      } else {
+        showNotification(res.message || 'No se generaron liquidaciones en este ciclo.', 'info');
+        return { success: false, message: res.message };
+      }
+    } catch (err: any) {
+      const msg = err.message || 'Error ejecutando ciclo semanal de liquidación';
+      showNotification(msg, 'error');
+      return { success: false, message: msg };
+    }
   };
 
-  const resolveDispute = (disputeId: string, status: Dispute['status'], resolutionNotes: string) => {
-    setDisputes(prev => prev.map(d => d.id === disputeId ? { ...d, status, resolutionNotes } : d));
-    addAuditLog('DISPUTE_RESOLVED', disputeId, undefined, `${status}: ${resolutionNotes}`);
-    showNotification('Estado de reclamación actualizado');
+  const refreshFinancials = async () => {
+    try {
+      const [txRes, logRes, bootRes] = await Promise.all([
+        api.getFinancialTransactions(),
+        api.getFinancialAuditLogs(),
+        api.getBootstrap()
+      ]);
+      if (txRes && txRes.transactions) setPaymentTransactions(txRes.transactions);
+      if (logRes && logRes.logs) setFinancialAuditLogs(logRes.logs);
+      if (bootRes && bootRes.data) {
+        applyServerState(bootRes.data, bootRes.version || 1);
+      }
+    } catch (err) {
+      console.warn('Error refreshing financials:', err);
+    }
   };
 
-  // Super Admin: Borrado de registros de reclamaciones / disputas
-  const deleteDispute = (disputeId: string) => {
+  // --- DISPUTES (Global) ---
+  const createDispute = async (data: Omit<Dispute, 'id' | 'status' | 'createdAt'>) => {
+    try {
+      const res = await api.createDispute(data);
+      if (res.success && res.dispute) {
+        setDisputes(prev => [res.dispute, ...prev]);
+        showNotification('Reclamación registrada en el servidor central.');
+      }
+    } catch (e) {
+      const disp: Dispute = { ...data, id: `DISP-${Date.now()}`, status: 'OPEN', createdAt: new Date().toISOString() };
+      setDisputes(prev => [disp, ...prev]);
+    }
+  };
+
+  const resolveDispute = async (disputeId: string, status: Dispute['status'], resolutionNotes: string) => {
+    try {
+      const res = await api.resolveDispute(disputeId, status, resolutionNotes);
+      if (res.success && res.dispute) {
+        setDisputes(prev => prev.map(d => d.id === disputeId ? res.dispute : d));
+      }
+    } catch (e) {
+      setDisputes(prev => prev.map(d => d.id === disputeId ? { ...d, status, resolutionNotes } : d));
+    }
+    showNotification('Reclamación resuelta en el sistema global');
+  };
+
+  const deleteDispute = async (disputeId: string) => {
     if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
       showNotification('Acceso denegado: Solo el Super Administrador puede eliminar reclamaciones', 'error');
       return;
     }
-    const disp = disputes.find(d => d.id === disputeId);
-    if (!disp) return;
-
-    setDisputes(prev => prev.filter(d => d.id !== disputeId));
-    addAuditLog('DISPUTE_DELETED', disputeId, disp.issueType, `Disputa eliminada por ${currentUser.name}`);
-    showNotification(`Reclamación #${disputeId} eliminada`);
+    try {
+      await api.deleteDispute(disputeId);
+      setDisputes(prev => prev.filter(d => d.id !== disputeId));
+      showNotification(`Reclamación #${disputeId} eliminada`);
+    } catch (e) {
+      setDisputes(prev => prev.filter(d => d.id !== disputeId));
+    }
   };
 
-  // Favorites
+  // --- FAVORITES ---
   const toggleFavoriteProduct = (productId: string) => {
     if (!currentUser) {
       showNotification('Inicia sesión para guardar productos en tus favoritos', 'info');
@@ -1536,91 +2129,121 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  // Reviews
-  const addReview = (reviewData: Omit<Review, 'id' | 'createdAt' | 'isVerifiedPurchase' | 'isModerated'>) => {
-    const newReview: Review = {
-      ...reviewData,
-      id: `rev-${Date.now()}`,
-      isVerifiedPurchase: true,
-      isModerated: true,
-      createdAt: new Date().toISOString()
-    };
-    setReviews(prev => [newReview, ...prev]);
-    showNotification('Gracias por tu valoración verificada');
+  // --- REVIEWS (Global) ---
+  const addReview = async (reviewData: Omit<Review, 'id' | 'createdAt' | 'isVerifiedPurchase' | 'isModerated'>) => {
+    try {
+      const res = await api.createReview(reviewData);
+      if (res.success && res.review) {
+        setReviews(prev => [res.review, ...prev]);
+        showNotification('Gracias por tu valoración verificada');
+      }
+    } catch (e) {
+      const rev: Review = { ...reviewData, id: `rev-${Date.now()}`, isVerifiedPurchase: true, isModerated: true, createdAt: new Date().toISOString() };
+      setReviews(prev => [rev, ...prev]);
+    }
   };
 
-  // Super Admin: Borrado de reseñas
-  const deleteReview = (reviewId: string) => {
+  const deleteReview = async (reviewId: string) => {
     if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
-      showNotification('Acceso denegado: Solo el Super Administrador puede moderar y eliminar reseñas', 'error');
+      showNotification('Acceso denegado: Solo el Super Administrador puede moderar reseñas', 'error');
       return;
     }
-    setReviews(prev => prev.filter(r => r.id !== reviewId));
-    addAuditLog('REVIEW_DELETED', reviewId, undefined, `Reseña eliminada por ${currentUser?.name || 'Admin'}`);
-    showNotification('Reseña eliminada');
+    try {
+      await api.deleteReview(reviewId);
+      setReviews(prev => prev.filter(r => r.id !== reviewId));
+      showNotification('Reseña eliminada');
+    } catch (e) {
+      setReviews(prev => prev.filter(r => r.id !== reviewId));
+    }
   };
 
-  // Banners
-  const addBanner = (banner: Omit<Banner, 'id'>) => {
-    const newBanner: Banner = { ...banner, id: `banner-${Date.now()}` };
-    setBanners(prev => [...prev, newBanner]);
-    showNotification('Banner publicitario creado');
+  // --- BANNERS (Global) ---
+  const addBanner = async (banner: Omit<Banner, 'id'>) => {
+    try {
+      const res = await api.createBanner(banner);
+      if (res.success && res.banner) {
+        setBanners(prev => [...prev, res.banner]);
+        showNotification('Banner publicitario creado globalmente');
+      }
+    } catch (e) {
+      setBanners(prev => [...prev, { ...banner, id: `banner-${Date.now()}` }]);
+    }
   };
 
-  const updateBanner = (id: string, data: Partial<Banner>) => {
-    setBanners(prev => prev.map(b => b.id === id ? { ...b, ...data } : b));
-    showNotification('Banner actualizado');
+  const updateBanner = async (id: string, data: Partial<Banner>) => {
+    try {
+      const res = await api.updateBanner(id, data);
+      if (res.success && res.banner) {
+        setBanners(prev => prev.map(b => b.id === id ? res.banner : b));
+        showNotification('Banner actualizado globalmente');
+      }
+    } catch (e) {
+      setBanners(prev => prev.map(b => b.id === id ? { ...b, ...data } : b));
+    }
   };
 
-  const deleteBanner = (id: string) => {
-    setBanners(prev => prev.filter(b => b.id !== id));
-    showNotification('Banner eliminado');
+  const deleteBanner = async (id: string) => {
+    try {
+      await api.deleteBanner(id);
+      setBanners(prev => prev.filter(b => b.id !== id));
+      showNotification('Banner eliminado');
+    } catch (e) {
+      setBanners(prev => prev.filter(b => b.id !== id));
+    }
   };
 
-  // Super Admin: Auditoría y Borrado de Logs
-  const deleteAuditLog = (logId: string) => {
+  // --- AUDITS & PURGE (Global) ---
+  const deleteAuditLog = async (logId: string) => {
     if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
       showNotification('Acceso denegado: Solo el Super Administrador puede eliminar registros de bitácora', 'error');
       return;
     }
-    setAuditLogs(prev => prev.filter(l => l.id !== logId));
-    showNotification('Registro de bitácora eliminado');
+    try {
+      await api.deleteAuditLog(logId);
+      setAuditLogs(prev => prev.filter(l => l.id !== logId));
+      showNotification('Registro de bitácora eliminado');
+    } catch (e) {
+      setAuditLogs(prev => prev.filter(l => l.id !== logId));
+    }
   };
 
-  const clearAllAuditLogs = () => {
+  const clearAllAuditLogs = async () => {
     if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
       showNotification('Acceso denegado: Solo el Super Administrador puede vaciar la bitácora', 'error');
       return;
     }
-    setAuditLogs([]);
-    showNotification('Bitácora de auditoría vaciada exitosamente');
+    try {
+      await api.clearAllAuditLogs();
+      setAuditLogs([]);
+      showNotification('Bitácora de auditoría vaciada exitosamente');
+    } catch (e) {
+      setAuditLogs([]);
+    }
   };
 
-  // Super Admin: Herramienta de Purga Masiva por Tipo de Registro
   const purgeRecordsByType = (type: 'orders' | 'test_products' | 'disputes' | 'settlements' | 'audit_logs'): number => {
     if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
       showNotification('Acceso denegado: Solo el Super Administrador puede ejecutar purga de datos', 'error');
       return 0;
     }
 
+    api.purgeRecords(type).catch(console.error);
+
     let count = 0;
     if (type === 'orders') {
       count = orders.length;
       setOrders([]);
-      addAuditLog('PURGE_ORDERS', 'orders', undefined, `${count} pedidos purgados por ${currentUser.name}`);
-      showNotification(`Se eliminaron todos los ${count} pedidos del sistema`);
+      showNotification(`Se purgaron todos los ${count} pedidos del sistema global`);
     } else if (type === 'test_products') {
       return cleanTestProducts();
     } else if (type === 'disputes') {
       count = disputes.length;
       setDisputes([]);
-      addAuditLog('PURGE_DISPUTES', 'disputes', undefined, `${count} reclamaciones purgadas por ${currentUser.name}`);
-      showNotification(`Se eliminaron todas las ${count} reclamaciones`);
+      showNotification(`Se purgaron todas las ${count} reclamaciones`);
     } else if (type === 'settlements') {
       count = settlements.length;
       setSettlements([]);
-      addAuditLog('PURGE_SETTLEMENTS', 'settlements', undefined, `${count} liquidaciones purgadas por ${currentUser.name}`);
-      showNotification(`Se eliminaron todas las ${count} liquidaciones`);
+      showNotification(`Se purgaron todas las ${count} liquidaciones`);
     } else if (type === 'audit_logs') {
       count = auditLogs.length;
       setAuditLogs([]);
@@ -1629,26 +2252,523 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return count;
   };
 
-  // System Settings (Super Admin only)
-  const updateSystemSettings = (settings: Partial<SystemSettings>) => {
+  // --- SYSTEM SETTINGS (Super Admin platform_settings Global) ---
+  const updateSystemSettings = async (settings: Partial<SystemSettings>) => {
     if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
       showNotification('Acceso restringido al Super Administrador', 'error');
       return;
     }
-    setSystemSettings(prev => ({ ...prev, ...settings }));
-    addAuditLog('SYSTEM_SETTINGS_UPDATE', 'system_settings', undefined, 'Parámetros globales modificados');
-    showNotification('Configuración global de PlazaDO actualizada con éxito');
+    try {
+      const res = await api.updateSettings(settings);
+      if (res.success && res.settings) {
+        setSystemSettings(res.settings);
+        showNotification('Configuración global de PlazaDO actualizada con éxito en la base de datos central');
+      }
+    } catch (e) {
+      setSystemSettings(prev => ({ ...prev, ...settings }));
+      showNotification('Configuración global de PlazaDO actualizada con éxito');
+    }
+  };
+
+  // --- PASARELAS DE PAGO & CUENTA RECEPTORA PRINCIPAL (PLAZADO.COM) ---
+  const activePaymentGateway = paymentGateways.find(g => g.isActive) || paymentGateways[0] || null;
+
+  const savePaymentGateway = async (gateway: PaymentGatewayConfig): Promise<{ success: boolean; message?: string }> => {
+    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
+      showNotification('Acceso denegado: Solo el Super Administrador puede configurar pasarelas de pago', 'error');
+      return { success: false, message: 'Acceso no autorizado' };
+    }
+    try {
+      const res = await api.savePaymentGateway(gateway);
+      if (res.success && res.gateway) {
+        setPaymentGateways(prev => {
+          const idx = prev.findIndex(g => g.id === res.gateway.id);
+          let updated: PaymentGatewayConfig[];
+          if (idx !== -1) {
+            updated = [...prev];
+            updated[idx] = res.gateway;
+          } else {
+            updated = [...prev, res.gateway];
+          }
+          if (res.gateway.isActive) {
+            updated = updated.map(g => ({
+              ...g,
+              isActive: g.id === res.gateway.id
+            }));
+          }
+          return updated;
+        });
+        showNotification(`Pasarela ${res.gateway.providerName} configurada exitosamente`, 'success');
+        return { success: true };
+      }
+      return { success: false, message: 'No se pudo guardar la pasarela' };
+    } catch (err: any) {
+      showNotification(err.message || 'Error guardando pasarela de pago', 'error');
+      return { success: false, message: err.message };
+    }
+  };
+
+  const setActivePaymentGateway = async (gatewayId: string): Promise<{ success: boolean; message?: string }> => {
+    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
+      showNotification('Acceso denegado: Solo el Super Administrador puede activar pasarelas de cobro', 'error');
+      return { success: false, message: 'Acceso no autorizado' };
+    }
+    try {
+      const res = await api.activatePaymentGateway(gatewayId);
+      if (res.success) {
+        setPaymentGateways(prev => prev.map(g => ({
+          ...g,
+          isActive: g.id === gatewayId
+        })));
+        const activeOne = paymentGateways.find(g => g.id === gatewayId);
+        showNotification(`Cuenta receptora principal de Plazado.com cambiada a: ${activeOne?.providerName || gatewayId}`, 'success');
+        return { success: true };
+      }
+      return { success: false, message: 'Error activando pasarela' };
+    } catch (err: any) {
+      showNotification(err.message || 'Error al cambiar cuenta receptora principal', 'error');
+      return { success: false, message: err.message };
+    }
+  };
+
+  const deletePaymentGateway = async (gatewayId: string): Promise<{ success: boolean; message?: string }> => {
+    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
+      showNotification('Acceso denegado', 'error');
+      return { success: false, message: 'Acceso denegado' };
+    }
+    try {
+      const res = await api.deletePaymentGateway(gatewayId);
+      if (res.success) {
+        setPaymentGateways(prev => prev.filter(g => g.id !== gatewayId));
+        showNotification('Pasarela de pago eliminada', 'info');
+        return { success: true };
+      }
+      return { success: false, message: 'No se pudo eliminar la pasarela' };
+    } catch (err: any) {
+      showNotification(err.message || 'Error al eliminar pasarela', 'error');
+      return { success: false, message: err.message };
+    }
+  };
+
+  // --- GESTIÓN DE PUBLICIDAD & ANUNCIOS ---
+  const createAdCampaign = async (adData: Omit<Advertisement, 'id' | 'impressions' | 'clicks' | 'createdAt'>): Promise<{ success: boolean; message?: string }> => {
+    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
+      showNotification('Acceso denegado: Solo el Super Administrador puede crear publicidad', 'error');
+      return { success: false, message: 'Acceso denegado' };
+    }
+    try {
+      const res = await api.createAdCampaign(adData);
+      if (res.success && res.ad) {
+        setAdCampaigns(prev => [res.ad, ...prev]);
+        showNotification(`Campaña publicitaria "${res.ad.title}" creada con éxito`, 'success');
+        return { success: true };
+      }
+      return { success: false, message: 'No se pudo crear la campaña' };
+    } catch (err: any) {
+      showNotification(err.message || 'Error creando publicidad', 'error');
+      return { success: false, message: err.message };
+    }
+  };
+
+  const updateAdCampaign = async (id: string, data: Partial<Advertisement>): Promise<{ success: boolean; message?: string }> => {
+    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
+      showNotification('Acceso denegado', 'error');
+      return { success: false, message: 'Acceso denegado' };
+    }
+    try {
+      const res = await api.updateAdCampaign(id, data);
+      if (res.success && res.ad) {
+        setAdCampaigns(prev => prev.map(a => a.id === id ? res.ad : a));
+        showNotification(`Campaña "${res.ad.title}" actualizada`, 'success');
+        return { success: true };
+      }
+      return { success: false, message: 'No se pudo actualizar la campaña' };
+    } catch (err: any) {
+      showNotification(err.message || 'Error actualizando publicidad', 'error');
+      return { success: false, message: err.message };
+    }
+  };
+
+  const toggleAdCampaignStatus = async (id: string): Promise<{ success: boolean; message?: string }> => {
+    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
+      return { success: false, message: 'Acceso denegado' };
+    }
+    try {
+      const res = await api.toggleAdCampaignStatus(id);
+      if (res.success) {
+        setAdCampaigns(prev => prev.map(a => a.id === id ? { ...a, isActive: !a.isActive } : a));
+        const target = adCampaigns.find(a => a.id === id);
+        const newState = !target?.isActive;
+        showNotification(`Campaña "${target?.title}" ${newState ? 'activada' : 'pausada'}`, 'info');
+        return { success: true };
+      }
+      return { success: false };
+    } catch (err: any) {
+      return { success: false, message: err.message };
+    }
+  };
+
+  const deleteAdCampaign = async (id: string): Promise<{ success: boolean; message?: string }> => {
+    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
+      return { success: false, message: 'Acceso denegado' };
+    }
+    try {
+      const res = await api.deleteAdCampaign(id);
+      if (res.success) {
+        setAdCampaigns(prev => prev.filter(a => a.id !== id));
+        showNotification('Campaña publicitaria eliminada', 'info');
+        return { success: true };
+      }
+      return { success: false };
+    } catch (err: any) {
+      return { success: false, message: err.message };
+    }
+  };
+
+  const saveAdPlacement = async (placement: AdPlacement): Promise<{ success: boolean; message?: string }> => {
+    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
+      return { success: false, message: 'Acceso denegado' };
+    }
+    try {
+      const res = await api.saveAdPlacement(placement);
+      if (res.success && res.placement) {
+        setAdPlacements(prev => {
+          const idx = prev.findIndex(p => p.code === res.placement.code);
+          if (idx !== -1) {
+            const copy = [...prev];
+            copy[idx] = res.placement;
+            return copy;
+          }
+          return [...prev, res.placement];
+        });
+        showNotification(`Ubicación publicitaria "${res.placement.name}" guardada`, 'success');
+        return { success: true };
+      }
+      return { success: false };
+    } catch (err: any) {
+      return { success: false, message: err.message };
+    }
+  };
+
+  const trackAdImpression = (adId: string) => {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    api.trackAdImpression(adId, isMobile ? 'MOBILE' : 'DESKTOP').catch(() => {});
+    setAdCampaigns(prev => prev.map(a => a.id === adId ? { ...a, impressions: (a.impressions || 0) + 1 } : a));
+  };
+
+  const trackAdClick = (adId: string) => {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    api.trackAdClick(adId, isMobile ? 'MOBILE' : 'DESKTOP').catch(() => {});
+    setAdCampaigns(prev => prev.map(a => a.id === adId ? { ...a, clicks: (a.clicks || 0) + 1 } : a));
+  };
+
+  // --- PLAZADO FULFILLMENT IMPLEMENTATIONS ---
+  const createStorageRequest = async (data: any): Promise<boolean> => {
+    try {
+      const res = await api.createStorageRequest(data);
+      if (res.success && res.storageRequest) {
+        setStorageRequests(prev => [res.storageRequest, ...prev]);
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e.message || 'Error al crear solicitud de almacenamiento', 'error');
+      return false;
+    }
+  };
+
+  const updateStorageRequestStatus = async (id: string, status: StorageRequestStatus, notes?: string): Promise<boolean> => {
+    try {
+      const res = await api.updateStorageRequestStatus(id, status, notes);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e.message || 'Error al actualizar estado', 'error');
+      return false;
+    }
+  };
+
+  const processPhysicalReception = async (requestId: string, data: any): Promise<boolean> => {
+    try {
+      const res = await api.processPhysicalReception(requestId, data);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e.message || 'Error en recepción física', 'error');
+      return false;
+    }
+  };
+
+  const adjustInventory = async (inventoryItemId: string, data: { newAvailable: number; reason: string; notes?: string }): Promise<boolean> => {
+    try {
+      const res = await api.adjustInventory(inventoryItemId, data);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e.message || 'Error al ajustar inventario', 'error');
+      return false;
+    }
+  };
+
+  const relocateInventory = async (inventoryItemId: string, newLocation: WarehouseLocation): Promise<boolean> => {
+    try {
+      const res = await api.relocateInventory(inventoryItemId, newLocation);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e.message || 'Error al reubicar', 'error');
+      return false;
+    }
+  };
+
+  const blockUnblockInventory = async (inventoryItemId: string, quantity: number, action: 'BLOCK' | 'UNBLOCK', reason: string): Promise<boolean> => {
+    try {
+      const res = await api.blockUnblockInventory(inventoryItemId, quantity, action, reason);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e.message || 'Error al cambiar bloqueo', 'error');
+      return false;
+    }
+  };
+
+  const recordInventoryDamage = async (inventoryItemId: string, quantity: number, reason: string, photos?: string[]): Promise<boolean> => {
+    try {
+      const res = await api.recordInventoryDamage(inventoryItemId, quantity, reason, photos);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e.message || 'Error al registrar daño', 'error');
+      return false;
+    }
+  };
+
+  const confirmOrderByStore = async (fulfillmentOrderId: string, storeId: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const res = await api.confirmOrderByStore(fulfillmentOrderId, storeId, currentUser);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return { success: true, message: 'Pedido confirmado exitosamente. Orden de preparación enviada al almacén.' };
+      }
+      return { success: false, message: 'No se pudo confirmar el pedido.' };
+    } catch (e: any) {
+      return { success: false, message: e.message || 'Error al confirmar pedido' };
+    }
+  };
+
+  const rejectOrderByStore = async (fulfillmentOrderId: string, storeId: string, reason: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const res = await api.rejectOrderByStore(fulfillmentOrderId, storeId, reason, currentUser);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return { success: true, message: 'Pedido rechazado. Unidades liberadas preventivamente a Disponible.' };
+      }
+      return { success: false, message: 'No se pudo rechazar el pedido.' };
+    } catch (e: any) {
+      return { success: false, message: e.message || 'Error al rechazar pedido' };
+    }
+  };
+
+  const validateAndPickItem = async (fulfillmentOrderId: string, productId: string, scannedSku: string, scannedLocation: string): Promise<{ success: boolean; error?: string; order?: FulfillmentOrder }> => {
+    try {
+      const res = await api.validateAndPickItem(fulfillmentOrderId, productId, scannedSku, scannedLocation);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return { success: true, order: res.order };
+      }
+      return { success: false, error: res.error || 'Discrepancia detectada.' };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Error en la validación' };
+    }
+  };
+
+  const completePacking = async (fulfillmentOrderId: string, data: any): Promise<boolean> => {
+    try {
+      const res = await api.completePacking(fulfillmentOrderId, data);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e.message || 'Error al completar packing', 'error');
+      return false;
+    }
+  };
+
+  const dispatchFulfillmentOrder = async (fulfillmentOrderId: string, data: any): Promise<boolean> => {
+    try {
+      const res = await api.dispatchOrder(fulfillmentOrderId, data);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e.message || 'Error al despachar orden', 'error');
+      return false;
+    }
+  };
+
+  const deliverFulfillmentOrder = async (fulfillmentOrderId: string, data: any): Promise<boolean> => {
+    try {
+      const res = await api.deliverFulfillmentOrder(fulfillmentOrderId, data);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e.message || 'Error al entregar orden', 'error');
+      return false;
+    }
+  };
+
+  const createFulfillmentIncidence = async (data: any): Promise<boolean> => {
+    try {
+      const res = await api.createFulfillmentIncidence(data);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e.message || 'Error al reportar incidencia', 'error');
+      return false;
+    }
+  };
+
+  const updateFulfillmentIncidence = async (id: string, data: any): Promise<boolean> => {
+    try {
+      const res = await api.updateFulfillmentIncidence(id, data);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e.message || 'Error al actualizar incidencia', 'error');
+      return false;
+    }
+  };
+
+  const createFulfillmentReturn = async (data: any): Promise<boolean> => {
+    try {
+      const res = await api.createFulfillmentReturn(data);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e.message || 'Error al registrar devolución', 'error');
+      return false;
+    }
+  };
+
+  const classifyReturn = async (returnId: string, data: any): Promise<boolean> => {
+    try {
+      const res = await api.classifyReturn(returnId, data);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e.message || 'Error al clasificar devolución', 'error');
+      return false;
+    }
+  };
+
+  const createWithdrawal = async (data: any): Promise<boolean> => {
+    try {
+      const res = await api.createWithdrawal(data);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e.message || 'Error al solicitar retiro', 'error');
+      return false;
+    }
+  };
+
+  const updateWithdrawalStatus = async (id: string, status: string, notes?: string): Promise<boolean> => {
+    try {
+      const res = await api.updateWithdrawalStatus(id, status, notes);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e.message || 'Error al actualizar estado de retiro', 'error');
+      return false;
+    }
+  };
+
+  const updateFulfillmentConfig = async (config: Partial<FulfillmentConfig>): Promise<boolean> => {
+    try {
+      const res = await api.updateFulfillmentConfig(config);
+      if (res.success) {
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      showNotification(e.message || 'Error al actualizar configuración', 'error');
+      return false;
+    }
   };
 
   const handleSetCurrentView = (view: AppView) => {
-    // Strict RBAC route protection
     if (view === 'admin_dashboard' && (!currentUser || currentUser.role !== 'SUPER_ADMIN')) {
-      showNotification('Acceso Denegado: Solo el Super Administrador puede acceder al Panel General de Administración', 'error');
+      showNotification('Acceso Denegado: Solo el Super Administrador puede acceder al Panel General', 'error');
       openAuthModal('login');
       return;
     }
     if (view === 'store_dashboard' && (!currentUser || (currentUser.role !== 'STORE_OWNER' && currentUser.role !== 'SUPER_ADMIN'))) {
-      showNotification('Acceso Denegado: Debes iniciar sesión con una cuenta de Tienda para acceder al Panel de Vendedores', 'error');
+      showNotification('Acceso Denegado: Debes iniciar sesión con una cuenta de Tienda', 'error');
       openAuthModal('login');
       return;
     }
@@ -1666,6 +2786,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentView: handleSetCurrentView,
       selectedStoreSlug,
       setSelectedStoreSlug,
+      isBootstrapLoading,
+      copyStoreShareUrl,
+      getStoreShareUrl,
       selectedProductId,
       setSelectedProductId,
       selectedCategorySlug,
@@ -1674,6 +2797,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSearchQuery,
       openPolicySlug,
       setOpenPolicySlug,
+      isDownloadModalOpen,
+      downloadModalTab,
+      openDownloadModal,
+      closeDownloadModal,
       adminActiveTab,
       setAdminActiveTab,
 
@@ -1683,8 +2810,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       allUsers: users,
       updateUserProfile,
       addCustomerAddress,
+      updateCustomerAddress,
+      deleteCustomerAddress,
       setDefaultAddress,
       deleteUser,
+      deleteMyAccount,
+      deleteMyStore,
+      setUserPassword,
 
       isAuthModalOpen,
       authModalMode,
@@ -1733,11 +2865,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updateOrderStatus,
       deleteOrder,
 
+      // In-Platform Order Chat
+      orderMessages,
+      activeChatOrderId,
+      openOrderChat,
+      closeOrderChat,
+      sendOrderMessage,
+      markOrderMessagesAsRead,
+      getOrderUnreadCount,
+
       storeBalances,
       settlements,
+      paymentTransactions,
+      financialAuditLogs,
       requestSettlement,
       processSettlement,
       deleteSettlement,
+      runWeeklySettlements,
+      refreshFinancials,
 
       disputes,
       createDispute,
@@ -1760,13 +2905,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updateSystemSettings,
       purgeRecordsByType,
 
+      // Pasarelas de Pago & Cuenta Receptora Plazado.com
+      paymentGateways,
+      activePaymentGateway,
+      savePaymentGateway,
+      setActivePaymentGateway,
+      deletePaymentGateway,
+
+      // Gestión de Publicidad & Anuncios
+      adCampaigns,
+      adPlacements,
+      createAdCampaign,
+      updateAdCampaign,
+      toggleAdCampaignStatus,
+      deleteAdCampaign,
+      saveAdPlacement,
+      trackAdImpression,
+      trackAdClick,
+
+      // Plazado Fulfillment
+      storageRequests,
+      fulfillmentInventory,
+      inventoryMovements,
+      fulfillmentOrders,
+      fulfillmentIncidences,
+      fulfillmentReturns,
+      fulfillmentWithdrawals,
+      fulfillmentConfig,
+      createStorageRequest,
+      updateStorageRequestStatus,
+      processPhysicalReception,
+      adjustInventory,
+      relocateInventory,
+      blockUnblockInventory,
+      recordInventoryDamage,
+      confirmOrderByStore,
+      rejectOrderByStore,
+      validateAndPickItem,
+      completePacking,
+      dispatchFulfillmentOrder,
+      deliverFulfillmentOrder,
+      createFulfillmentIncidence,
+      updateFulfillmentIncidence,
+      createFulfillmentReturn,
+      classifyReturn,
+      createWithdrawal,
+      updateWithdrawalStatus,
+      updateFulfillmentConfig,
+
       auditLogs,
       addAuditLog,
       deleteAuditLog,
       clearAllAuditLogs,
 
       notification,
-      showNotification
+      showNotification,
+
+      theme,
+      toggleTheme
     }}>
       {children}
     </AppContext.Provider>
@@ -1780,3 +2976,5 @@ export const useApp = () => {
   }
   return context;
 };
+
+export const useAppContext = useApp;

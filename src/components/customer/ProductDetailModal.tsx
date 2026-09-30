@@ -64,7 +64,7 @@ export const ProductDetailModal: React.FC = () => {
 
   const handleVisitStore = () => {
     if (store) {
-      setSelectedStoreSlug(store.slug);
+      setSelectedStoreSlug(store.slug || store.id);
       setCurrentView('store_public');
       setSelectedProductId(null);
     }
@@ -257,6 +257,9 @@ export const ProductDetailModal: React.FC = () => {
                   </div>
                   <span>{store.shippingConfig?.estimatedDays || '24-48 horas'}</span>
                 </div>
+                <p className="text-[10px] text-stone-500 italic mt-1">
+                  * Los precios de envío pueden variar dependiendo de la distancia.
+                </p>
               </div>
             )}
 

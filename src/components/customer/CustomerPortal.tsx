@@ -19,10 +19,15 @@ import {
   X,
   User,
   Edit3,
-  Lock
+  Lock,
+  EyeOff,
+  Shield,
+  KeyRound
 } from 'lucide-react';
 import { OrderStatus, Dispute } from '../../types';
 import { UserProfileModal } from '../common/UserProfileModal';
+import { CustomerAddressesManager } from './CustomerAddressesManager';
+import { api } from '../../services/api';
 
 export const CustomerPortal: React.FC = () => {
   const { 
@@ -38,12 +43,61 @@ export const CustomerPortal: React.FC = () => {
     disputes,
     addCustomerAddress,
     setDefaultAddress,
-    openAuthModal
+    openAuthModal,
+    openOrderChat,
+    getOrderUnreadCount,
+    showNotification
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'orders' | 'favorites' | 'addresses' | 'disputes'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'favorites' | 'addresses' | 'disputes' | 'security'>('orders');
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<string | null>(null);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+
+  // Password change states
+  const [currentPass, setCurrentPass] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [confirmPass, setConfirmPass] = useState('');
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
+  const [passLoading, setPassLoading] = useState(false);
+  const [passError, setPassError] = useState<string | null>(null);
+  const [passSuccess, setPassSuccess] = useState<string | null>(null);
+
+  const handleCustomerPasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPassError(null);
+    setPassSuccess(null);
+
+    const target = newPass.trim();
+    if (target.length < 6) {
+      setPassError('La nueva contraseña debe contener al menos 6 caracteres.');
+      return;
+    }
+    if (target !== confirmPass.trim()) {
+      setPassError('Las contraseñas no coinciden. Verifica e intenta nuevamente.');
+      return;
+    }
+    if (!currentUser) return;
+
+    setPassLoading(true);
+    try {
+      const res = await api.updateUserPassword(currentUser.id, target, currentPass.trim() || undefined);
+      if (res.success) {
+        setPassSuccess('¡Tu contraseña ha sido actualizada con éxito!');
+        showNotification('Contraseña actualizada correctamente', 'success');
+        setCurrentPass('');
+        setNewPass('');
+        setConfirmPass('');
+      } else {
+        setPassError(res.message || 'No se pudo actualizar la contraseña.');
+      }
+    } catch (err: any) {
+      setPassError(err.message || 'Error de conexión al cambiar la contraseña.');
+    } finally {
+      setPassLoading(false);
+    }
+  };
 
   // Dispute creation modal state
   const [disputeModalOpen, setDisputeModalOpen] = useState(false);
@@ -139,93 +193,180 @@ export const CustomerPortal: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       
-      {/* Profile Header */}
-      <div className="bg-white rounded-2xl border border-stone-200 p-6 mb-6 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="relative group">
-            <img 
-              src={currentUser.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"} 
-              alt={currentUser.name}
-              className="w-16 h-16 rounded-full object-cover border-2 border-red-500 shadow-xs"
-            />
-            <button
-              onClick={() => setIsEditProfileOpen(true)}
-              className="absolute -bottom-1 -right-1 bg-stone-900 hover:bg-red-600 text-white p-1 rounded-full shadow-xs transition-colors"
-              title="Cambiar foto de perfil"
-            >
-              <Edit3 className="w-3 h-3" />
-            </button>
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-bold text-stone-900">{currentUser.name}</h1>
-              <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+      {/* Customer Layout: Left Sidebar + Right Content Area */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        
+        {/* LEFT SIDEBAR: OPCIONES DEL CLIENTE */}
+        <aside className="w-full lg:w-72 lg:shrink-0 space-y-4">
+          
+          {/* User Profile Card */}
+          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs text-center relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-14 bg-gradient-to-r from-red-600 to-red-500" />
+            
+            <div className="relative pt-4 flex flex-col items-center">
+              <div className="relative group mb-3">
+                <img 
+                  src={currentUser.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"} 
+                  alt={currentUser.name}
+                  className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-md"
+                />
+                <button
+                  onClick={() => setIsEditProfileOpen(true)}
+                  className="absolute bottom-0 right-0 bg-stone-900 hover:bg-red-600 text-white p-1.5 rounded-full shadow-xs transition-colors"
+                  title="Cambiar foto de perfil"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <h2 className="text-base font-black text-stone-900">{currentUser.name}</h2>
+              <span className="inline-block mt-1 bg-red-50 text-red-700 text-[10px] font-black px-2.5 py-0.5 rounded-full border border-red-200">
                 Cliente Comprador
               </span>
+              <p className="text-xs text-stone-500 mt-2 break-all">{currentUser.email}</p>
+              {currentUser.phone && (
+                <p className="text-xs text-stone-400 mt-0.5">{currentUser.phone}</p>
+              )}
+
               <button
                 id="edit-profile-btn"
                 onClick={() => setIsEditProfileOpen(true)}
-                className="text-xs font-semibold text-red-600 hover:text-red-800 hover:underline flex items-center gap-1 ml-1"
+                className="mt-3.5 w-full py-2 px-3 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 border border-stone-200"
               >
-                <Edit3 className="w-3 h-3" />
+                <Edit3 className="w-3.5 h-3.5 text-stone-500" />
                 <span>Editar Perfil & Foto</span>
               </button>
             </div>
-            <p className="text-xs text-stone-500">{currentUser.email} • {currentUser.phone}</p>
           </div>
-        </div>
 
-        {/* Quick Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1">
-          <button
-            onClick={() => setActiveTab('orders')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'orders' 
-                ? 'bg-red-600 text-white shadow-xs' 
-                : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-            }`}
-          >
-            <Package className="w-4 h-4" />
-            <span>Mis Pedidos ({customerOrders.length})</span>
-          </button>
+          {/* Lateral Navigation Menu */}
+          <nav className="bg-white rounded-2xl border border-stone-200 p-2 shadow-xs space-y-1">
+            <div className="px-3 py-2 text-[10px] font-extrabold uppercase tracking-wider text-stone-400">
+              Menú de Cliente
+            </div>
 
-          <button
-            onClick={() => setActiveTab('favorites')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'favorites' 
-                ? 'bg-red-600 text-white shadow-xs' 
-                : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-            }`}
-          >
-            <Heart className="w-4 h-4" />
-            <span>Favoritos</span>
-          </button>
+            <button
+              onClick={() => setActiveTab('orders')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'orders'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'text-stone-700 hover:bg-stone-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Package className="w-4 h-4" />
+                <span>Mis Pedidos</span>
+              </div>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                activeTab === 'orders' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+              }`}>
+                {customerOrders.length}
+              </span>
+            </button>
 
-          <button
-            onClick={() => setActiveTab('addresses')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'addresses' 
-                ? 'bg-red-600 text-white shadow-xs' 
-                : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-            }`}
-          >
-            <MapPin className="w-4 h-4" />
-            <span>Direcciones</span>
-          </button>
+            <button
+              onClick={() => setActiveTab('favorites')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'favorites'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'text-stone-700 hover:bg-stone-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Heart className="w-4 h-4" />
+                <span>Mis Favoritos</span>
+              </div>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                activeTab === 'favorites' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+              }`}>
+                {favProducts.length + favStores.length}
+              </span>
+            </button>
 
-          <button
-            onClick={() => setActiveTab('disputes')}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'disputes' 
-                ? 'bg-red-600 text-white shadow-xs' 
-                : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-            }`}
-          >
-            <AlertTriangle className="w-4 h-4" />
-            <span>Reclamaciones ({disputes.filter(d => d.customerId === currentUser.id).length})</span>
-          </button>
-        </div>
-      </div>
+            <button
+              onClick={() => setActiveTab('addresses')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'addresses'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'text-stone-700 hover:bg-stone-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <MapPin className="w-4 h-4" />
+                <span>Mis direcciones de entrega</span>
+              </div>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                activeTab === 'addresses' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+              }`}>
+                {currentUser.addresses?.length || 0}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('disputes')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'disputes'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'text-stone-700 hover:bg-stone-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <AlertTriangle className="w-4 h-4" />
+                <span>Reclamaciones</span>
+              </div>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                activeTab === 'disputes' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+              }`}>
+                {disputes.filter(d => d.customerId === currentUser.id).length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('security')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'security'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'text-stone-700 hover:bg-stone-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Lock className="w-4 h-4" />
+                <span>Seguridad & Contraseña</span>
+              </div>
+            </button>
+          </nav>
+
+          {/* Quick Shortcuts & Protection */}
+          <div className="bg-stone-50 rounded-2xl border border-stone-200 p-4 space-y-3">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-stone-400 block">
+              Exploración Rápida
+            </span>
+
+            <button
+              onClick={() => setCurrentView('home')}
+              className="w-full py-2 px-3 bg-white hover:bg-stone-100 text-stone-800 text-xs font-bold rounded-xl transition-colors flex items-center gap-2 border border-stone-200"
+            >
+              <Package className="w-3.5 h-3.5 text-red-600" />
+              <span>Ir al Catálogo de Productos</span>
+            </button>
+
+            <button
+              onClick={() => setCurrentView('stores')}
+              className="w-full py-2 px-3 bg-white hover:bg-stone-100 text-stone-800 text-xs font-bold rounded-xl transition-colors flex items-center gap-2 border border-stone-200"
+            >
+              <Store className="w-3.5 h-3.5 text-stone-600" />
+              <span>Ver Directorio de Tiendas</span>
+            </button>
+
+            <div className="pt-2 border-t border-stone-200 flex items-start gap-2 text-[11px] text-stone-500">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span>Compras protegidas con código secreto de entrega en República Dominicana.</span>
+            </div>
+          </div>
+        </aside>
+
+        {/* RIGHT CONTENT AREA */}
+        <main className="flex-1 min-w-0 w-full">
 
       {/* TAB: MIS PEDIDOS */}
       {activeTab === 'orders' && (
@@ -283,30 +424,68 @@ export const CustomerPortal: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Delivery Secret Code & Actions Box (Requerimiento #15) */}
+                    {/* Delivery Secret Code & Actions Box */}
                     <div className="bg-stone-50 rounded-xl p-4 border border-stone-200 w-full md:w-80 flex flex-col justify-between text-xs space-y-3">
                       <div>
-                        <div className="flex items-center justify-between text-stone-600 mb-1">
-                          <span>Código Secreto de Entrega:</span>
-                          <Key className="w-4 h-4 text-amber-600" />
-                        </div>
-                        
-                        {/* 6-Digit Code Highlight */}
-                        <div className="bg-white border-2 border-amber-300 rounded-lg py-2 px-3 text-center">
-                          <span className="font-mono text-xl font-black tracking-widest text-amber-900">
-                            {order.deliveryConfirmationCode}
-                          </span>
-                        </div>
+                        {order.status === 'CANCELLED' ? (
+                          <div className="space-y-2">
+                            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-950">
+                              <div className="flex items-center gap-1.5 font-extrabold text-xs text-rose-800">
+                                <X className="w-4 h-4 text-rose-600" />
+                                <span>Pedido Cancelado</span>
+                              </div>
+                              {(order.cancelReason || order.statusHistory?.find(h => h.status === 'CANCELLED')?.note) && (
+                                <div className="mt-2 p-2 bg-white/90 rounded-lg border border-rose-100 text-[11px] text-rose-900 leading-relaxed">
+                                  <span className="font-bold block text-rose-950">Motivo indicado por la tienda:</span>
+                                  <span>{order.cancelReason || order.statusHistory?.find(h => h.status === 'CANCELLED')?.note}</span>
+                                </div>
+                              )}
+                              <p className="text-[10px] text-rose-600 mt-1.5 font-medium">
+                                Este pedido fue anulado por la tienda y no generará cobros pendientes.
+                              </p>
+                            </div>
+                          </div>
+                        ) : order.status === 'DELIVERED' ? (
+                          <div className="space-y-2.5">
+                            {/* Cuadro del código cerrado: colocado texto de Entregado */}
+                            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950">
+                              <div className="flex items-center gap-1.5 font-extrabold text-xs text-emerald-800">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                <span>Entregado</span>
+                              </div>
+                              <p className="text-[11px] text-emerald-700 mt-1">
+                                Código de recepción validado exitosamente. Pedido completado.
+                              </p>
+                            </div>
 
-                        <p className="text-[10px] text-stone-500 leading-snug mt-1.5">
-                          {order.status === 'DELIVERED' ? (
-                            <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3" /> Entrega validada con este código
-                            </span>
-                          ) : (
-                            <span>Muestra este código al repartidor únicamente cuando recibas y revises tu paquete.</span>
-                          )}
-                        </p>
+                            {/* Debajo: opción para generar una reclamación */}
+                            <button
+                              onClick={() => handleOpenDispute(order)}
+                              className="w-full py-2 bg-white hover:bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-2xs"
+                            >
+                              <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                              <span>Generar una Reclamación</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center justify-between text-stone-600 mb-1">
+                              <span>Código Secreto de Entrega:</span>
+                              <Key className="w-4 h-4 text-amber-600" />
+                            </div>
+                            
+                            {/* 6-Digit Code Highlight */}
+                            <div className="bg-white border-2 border-amber-300 rounded-lg py-2 px-3 text-center">
+                              <span className="font-mono text-xl font-black tracking-widest text-amber-900">
+                                {order.deliveryConfirmationCode}
+                              </span>
+                            </div>
+
+                            <p className="text-[10px] text-stone-500 leading-snug mt-1.5">
+                              Muestra este código al repartidor únicamente cuando recibas y revises tu paquete.
+                            </p>
+                          </>
+                        )}
                       </div>
 
                       <div className="pt-2 border-t border-stone-200 space-y-1">
@@ -324,16 +503,64 @@ export const CustomerPortal: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 pt-2">
+                      {/* In-Platform Official Store Chat */}
+                      <div className="pt-2 space-y-2">
                         <button
-                          onClick={() => handleOpenDispute(order)}
-                          className="flex-1 py-1.5 bg-white hover:bg-stone-100 border border-stone-300 text-stone-700 rounded-lg text-xs font-semibold"
+                          onClick={() => openOrderChat(order.id)}
+                          className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-xs"
                         >
-                          Abrir Reclamación
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span>Chat con la Tienda</span>
+                          {getOrderUnreadCount(order.id, 'CUSTOMER') > 0 && (
+                            <span className="w-4 h-4 rounded-full bg-white text-red-600 text-[10px] font-black flex items-center justify-center ml-1">
+                              {getOrderUnreadCount(order.id, 'CUSTOMER')}
+                            </span>
+                          )}
                         </button>
+
+                        {order.status !== 'DELIVERED' && (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleOpenDispute(order)}
+                              className="w-full py-1.5 bg-white hover:bg-stone-100 border border-stone-300 text-stone-700 rounded-lg text-xs font-semibold"
+                            >
+                              Abrir Reclamación
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
+
+                  {/* Delivery Address Snapshot */}
+                  {order.deliveryAddress && (
+                    <div className="bg-stone-50 rounded-xl p-3 border border-stone-200 text-xs flex items-start gap-2 text-stone-700">
+                      <MapPin className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-stone-900">
+                            Dirección de entrega ({order.deliveryAddress.label || 'Entrega'}):
+                          </span>
+                          <span className="text-stone-600 font-medium">
+                            {order.deliveryAddress.recipientName} ({order.deliveryAddress.phone})
+                          </span>
+                        </div>
+                        <p className="text-stone-600">
+                          {order.deliveryAddress.street}{order.deliveryAddress.buildingNumber ? ` #${order.deliveryAddress.buildingNumber}` : ''}, {order.deliveryAddress.sector}, {order.deliveryAddress.municipality}, {order.deliveryAddress.province}
+                        </p>
+                        {order.deliveryAddress.reference && (
+                          <p className="text-[11px] text-stone-500 italic">
+                            Referencia: {order.deliveryAddress.reference}
+                          </p>
+                        )}
+                        {order.deliveryAddress.deliveryNotes && (
+                          <p className="text-[11px] text-blue-900 bg-blue-50/70 p-1.5 rounded border border-blue-100 mt-1">
+                            Indicaciones: {order.deliveryAddress.deliveryNotes}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Status Timeline Dropdown */}
                   <div className="bg-stone-50/70 rounded-lg p-3 text-xs text-stone-600 border border-stone-100">
@@ -414,28 +641,8 @@ export const CustomerPortal: React.FC = () => {
 
       {/* TAB: DIRECCIONES */}
       {activeTab === 'addresses' && (
-        <div className="space-y-4">
-          <h3 className="text-sm font-bold text-stone-900">Mis Direcciones de Entrega</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {currentUser.addresses.map(a => (
-              <div key={a.id} className="p-4 bg-white rounded-xl border border-stone-200 shadow-2xs text-xs space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-stone-900">{a.label}</span>
-                  {a.isDefault ? (
-                    <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">Principal</span>
-                  ) : (
-                    <button onClick={() => setDefaultAddress(a.id)} className="text-[11px] text-red-600 font-semibold hover:underline">
-                      Hacer principal
-                    </button>
-                  )}
-                </div>
-                <p className="text-stone-700 font-medium">{a.recipientName} • {a.phone}</p>
-                <p className="text-stone-600">{a.street}, {a.sector}</p>
-                <p className="text-stone-500">{a.municipality}, {a.province}</p>
-                {a.reference && <p className="text-stone-400 italic">Ref: {a.reference}</p>}
-              </div>
-            ))}
-          </div>
+        <div className="bg-white rounded-2xl border border-stone-200 p-5 sm:p-6 shadow-2xs">
+          <CustomerAddressesManager />
         </div>
       )}
 
@@ -470,6 +677,137 @@ export const CustomerPortal: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* TAB: SEGURIDAD & CONTRASEÑA */}
+      {activeTab === 'security' && (
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-base font-black text-stone-900">Seguridad & Contraseña</h2>
+            <p className="text-xs text-stone-500 mt-0.5">
+              Administra tu contraseña de acceso para mantener protegida tu cuenta de cliente en Plazado.com.
+            </p>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-xs max-w-xl space-y-5 text-xs">
+            <div className="flex items-center gap-3 p-3.5 bg-red-50 border border-red-100 rounded-xl">
+              <div className="p-2 bg-red-600 text-white rounded-lg">
+                <Shield className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="font-bold text-stone-900 text-xs">Protección de Cuenta</h4>
+                <p className="text-[11px] text-stone-600">
+                  Usa una clave de al menos 6 caracteres que no uses en otros servicios.
+                </p>
+              </div>
+            </div>
+
+            {passError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 font-medium flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{passError}</span>
+              </div>
+            )}
+
+            {passSuccess && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 font-bold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                <span>{passSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCustomerPasswordChange} className="space-y-4">
+              <div>
+                <label className="block font-bold text-stone-700 mb-1">
+                  Contraseña Actual
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-stone-400 absolute left-3 top-2.5" />
+                  <input
+                    type={showCurrentPass ? 'text' : 'password'}
+                    value={currentPass}
+                    onChange={(e) => setCurrentPass(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-9 pr-10 py-2.5 bg-stone-50 border border-stone-300 rounded-xl outline-none focus:border-red-500 font-medium"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPass(!showCurrentPass)}
+                    className="absolute right-3 top-2.5 text-stone-400 hover:text-stone-700"
+                  >
+                    {showCurrentPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <span className="text-[10px] text-stone-400 mt-1 block">
+                  Ingresa tu clave anterior o habitual.
+                </span>
+              </div>
+
+              <div>
+                <label className="block font-bold text-stone-700 mb-1">
+                  Nueva Contraseña <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-stone-400 absolute left-3 top-2.5" />
+                  <input
+                    type={showNewPass ? 'text' : 'password'}
+                    required
+                    minLength={6}
+                    value={newPass}
+                    onChange={(e) => setNewPass(e.target.value)}
+                    placeholder="Mínimo 6 caracteres"
+                    className="w-full pl-9 pr-10 py-2.5 bg-stone-50 border border-stone-300 rounded-xl outline-none focus:border-red-500 font-medium"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPass(!showNewPass)}
+                    className="absolute right-3 top-2.5 text-stone-400 hover:text-stone-700"
+                  >
+                    {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-stone-700 mb-1">
+                  Confirmar Nueva Contraseña <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-stone-400 absolute left-3 top-2.5" />
+                  <input
+                    type={showConfirmPass ? 'text' : 'password'}
+                    required
+                    minLength={6}
+                    value={confirmPass}
+                    onChange={(e) => setConfirmPass(e.target.value)}
+                    placeholder="Repite tu nueva contraseña"
+                    className="w-full pl-9 pr-10 py-2.5 bg-stone-50 border border-stone-300 rounded-xl outline-none focus:border-red-500 font-medium"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPass(!showConfirmPass)}
+                    className="absolute right-3 top-2.5 text-stone-400 hover:text-stone-700"
+                  >
+                    {showConfirmPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={passLoading || newPass.length < 6 || newPass !== confirmPass}
+                  className="w-full py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-xs transition-colors"
+                >
+                  <KeyRound className="w-4 h-4" />
+                  <span>{passLoading ? 'Actualizando...' : 'Guardar Nueva Contraseña'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+        </main>
+      </div>
 
       {/* Dispute Modal */}
       {disputeModalOpen && disputeOrder && (
