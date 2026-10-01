@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import path from 'path';
 import crypto from 'crypto';
@@ -243,6 +244,23 @@ async function startServer() {
 
   app.put('/api/settings', (req: Request, res: Response) => {
     const updated = db.updateSystemSettings(req.body);
+    if (req.body.mailConfig) {
+      if (req.body.mailConfig.smtpPass) {
+        process.env.SMTP_PASS = req.body.mailConfig.smtpPass;
+      }
+      if (req.body.mailConfig.smtpHost) {
+        process.env.SMTP_HOST = req.body.mailConfig.smtpHost;
+      }
+      if (req.body.mailConfig.smtpPort) {
+        process.env.SMTP_PORT = String(req.body.mailConfig.smtpPort);
+      }
+      if (req.body.mailConfig.senderEmail) {
+        process.env.MAIL_SENDER_EMAIL = req.body.mailConfig.senderEmail;
+      }
+      if (req.body.mailConfig.smtpUser) {
+        process.env.SMTP_USER = req.body.mailConfig.smtpUser;
+      }
+    }
     res.json({ success: true, settings: updated, version: db.getVersion() });
   });
 
@@ -657,10 +675,23 @@ async function startServer() {
     }
   });
 
-  // Active email verification OTP memory cache
+  // Helper to authenticate Super Admin via Bearer token
+  function getAuthenticatedSuperAdmin(req: Request): User | null {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+    const token = authHeader.slice(7).trim();
+    const session = verifySessionToken(token);
+    if (!session) return null;
+    const users = db.getUsers();
+    const user = users.find(u => u.id === session.userId);
+    if (!user || user.role !== 'SUPER_ADMIN') return null;
+    return user;
+  }
+
+  // Active email verification OTP memory cache for non-registered users (guest / pre-register)
   const activeVerificationCodes = new Map<string, { code: string; expiresAt: number; name?: string; type: string }>();
 
-  // Send email confirmation code
+  // Send email confirmation code (pre-register or generic)
   app.post('/api/auth/send-verification-code', async (req: Request, res: Response) => {
     try {
       const { email, name, type = 'CUSTOMER' } = req.body;
@@ -669,50 +700,244 @@ async function startServer() {
         return res.status(400).json({ success: false, message: 'Correo electrónico inválido.' });
       }
 
-      // Generate secure 6-digit numeric OTP code
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      // Generate cryptographically secure 6-digit numeric OTP code
+      const code = crypto.randomInt(100000, 1000000).toString();
       const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes validity
 
       activeVerificationCodes.set(cleanEmail, { code, expiresAt, name, type });
 
+      // If user already exists in db, update their verification record
+      const existingUser = db.getUserByEmail(cleanEmail);
+      if (existingUser) {
+        db.setUserVerification(existingUser.id, {
+          code,
+          codeExpiresAt: expiresAt,
+          attempts: 0,
+          lastSentAt: Date.now(),
+          isVerified: false,
+          resendCount: (existingUser.verification?.resendCount || 0) + 1,
+          accountType: type as any,
+          storeName: existingUser.verification?.storeName
+        });
+      }
+
       const sysSettings = db.getSystemSettings();
       const mailConfig = sysSettings.mailConfig || {
-        senderEmail: 'Luiss.jimeness@gmail.com',
-        senderName: 'PlazaDO Marketplace Dominicano'
+        senderEmail: 'contacto@plazado.com',
+        senderName: 'PlazaDO.com - Marketplace Dominicano'
       };
 
-      // Dispatch real email from Luiss.jimeness@gmail.com
+      // Dispatch real email from official contacto@plazado.com
       const mailResult = await sendRegistrationOtpEmail(cleanEmail, name || 'Usuario', code, mailConfig);
 
       db.addAuditLog(
         'VERIFICATION_EMAIL_DISPATCHED',
         cleanEmail,
-        mailConfig.senderEmail || 'Luiss.jimeness@gmail.com',
-        `Código de verificación de 6 dígitos generado. Entregado por SMTP: ${mailResult.delivered ? 'SÍ' : 'NO (Modo Directo)'}`
+        mailConfig.senderEmail || 'contacto@plazado.com',
+        `Código de verificación generado y enviado desde contacto@plazado.com. Entregado por SMTP: ${mailResult.delivered ? 'SÍ' : 'NO (Registro en servidor)'}`
       );
 
-      if (mailResult.delivered) {
-        res.json({
-          success: true,
-          delivered: true,
-          message: `Código de confirmación enviado exitosamente desde ${mailConfig.senderEmail || 'Luiss.jimeness@gmail.com'} a tu correo ${cleanEmail}. Por favor revisa tu bandeja de entrada o spam.`,
-          senderEmail: mailConfig.senderEmail || 'Luiss.jimeness@gmail.com',
-          expiresInSeconds: 900
-        });
-      } else {
-        // Fallback: return the code so users and merchants are never blocked while Google App Password is setup
-        res.json({
-          success: true,
-          delivered: false,
-          code: code,
-          message: `Código de verificación generado: ${code}. Ingrésalo directamente en la pantalla de registro para continuar.`,
-          warning: mailResult.warning || 'Para recibir el correo en tu bandeja Gmail, ingresa la Contraseña de Aplicación en Super Admin > Configuración.',
-          senderEmail: mailConfig.senderEmail || 'Luiss.jimeness@gmail.com',
-          expiresInSeconds: 900
-        });
-      }
+      res.json({
+        success: true,
+        delivered: mailResult.delivered,
+        message: `Código de confirmación enviado exitosamente desde ${mailConfig.senderEmail || 'contacto@plazado.com'} a tu correo ${cleanEmail}. Revisa tu bandeja de entrada o spam.`,
+        senderEmail: mailConfig.senderEmail || 'contacto@plazado.com',
+        expiresInSeconds: 900
+      });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error enviando código de verificación' });
+    }
+  });
+
+  // Resend verification code (with 60-second cooldown protection against spam)
+  app.post('/api/auth/resend-verification-code', async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+      const cleanEmail = (email || '').trim().toLowerCase();
+      if (!cleanEmail || !cleanEmail.includes('@')) {
+        return res.status(400).json({ success: false, message: 'Correo electrónico inválido.' });
+      }
+
+      const existingUser = db.getUserByEmail(cleanEmail);
+      const preRecord = activeVerificationCodes.get(cleanEmail);
+
+      const lastSentAt = existingUser?.verification?.lastSentAt || 0;
+      const elapsedSeconds = Math.floor((Date.now() - lastSentAt) / 1000);
+      const COOLDOWN_SECONDS = 60;
+
+      if (lastSentAt > 0 && elapsedSeconds < COOLDOWN_SECONDS) {
+        const remaining = COOLDOWN_SECONDS - elapsedSeconds;
+        return res.status(429).json({
+          success: false,
+          message: `Por favor espera ${remaining} segundo${remaining > 1 ? 's' : ''} antes de solicitar otro reenvío.`,
+          remainingSeconds: remaining
+        });
+      }
+
+      // Generate new cryptographically secure 6-digit code (invalidating the previous one)
+      const newCode = crypto.randomInt(100000, 1000000).toString();
+      const expiresAt = Date.now() + 15 * 60 * 1000;
+
+      activeVerificationCodes.set(cleanEmail, {
+        code: newCode,
+        expiresAt,
+        name: existingUser?.name || preRecord?.name,
+        type: existingUser?.role === 'STORE_OWNER' ? 'STORE' : 'CUSTOMER'
+      });
+
+      if (existingUser) {
+        db.setUserVerification(existingUser.id, {
+          code: newCode,
+          codeExpiresAt: expiresAt,
+          attempts: 0,
+          lastSentAt: Date.now(),
+          isVerified: false,
+          resendCount: (existingUser.verification?.resendCount || 0) + 1,
+          accountType: existingUser.role === 'STORE_OWNER' ? 'STORE' : 'CUSTOMER',
+          storeName: existingUser.verification?.storeName
+        });
+      }
+
+      const sysSettings = db.getSystemSettings();
+      const mailConfig = sysSettings.mailConfig || {
+        senderEmail: 'contacto@plazado.com',
+        senderName: 'PlazaDO.com - Marketplace Dominicano'
+      };
+
+      const mailResult = await sendRegistrationOtpEmail(cleanEmail, existingUser?.name || 'Usuario', newCode, mailConfig);
+
+      db.addAuditLog(
+        'VERIFICATION_CODE_RESENT',
+        cleanEmail,
+        mailConfig.senderEmail || 'contacto@plazado.com',
+        `Código de verificación reenviado a ${cleanEmail} desde contacto@plazado.com. Entregado por SMTP: ${mailResult.delivered ? 'SÍ' : 'NO'}`
+      );
+
+      res.json({
+        success: true,
+        delivered: mailResult.delivered,
+        message: `Nuevo código de verificación enviado a ${cleanEmail} desde contacto@plazado.com. Por favor revisa tu bandeja de entrada o spam.`,
+        cooldownSeconds: COOLDOWN_SECONDS,
+        expiresInSeconds: 900
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Error reenviando código' });
+    }
+  });
+
+  // Verify email confirmation code
+  app.post('/api/auth/verify-code', (req: Request, res: Response) => {
+    try {
+      const { email, code } = req.body;
+      const cleanEmail = (email || '').trim().toLowerCase();
+      const cleanCode = (code || '').trim();
+
+      if (!cleanEmail || !cleanCode) {
+        return res.status(400).json({ success: false, message: 'Correo y código de verificación son requeridos.' });
+      }
+
+      const user = db.getUserByEmail(cleanEmail);
+      const preRecord = activeVerificationCodes.get(cleanEmail);
+
+      // Check if user is already verified
+      if (user && user.isEmailVerified === true) {
+        const token = createSessionToken(user);
+        return res.json({
+          success: true,
+          verified: true,
+          user,
+          token,
+          message: 'Tu cuenta ya está verificada.'
+        });
+      }
+
+      const activeCode = user?.verification?.code || preRecord?.code;
+      const expiresAt = user?.verification?.codeExpiresAt || preRecord?.expiresAt || 0;
+      let attempts = user?.verification?.attempts || 0;
+
+      if (!activeCode) {
+        return res.status(400).json({
+          success: false,
+          message: 'No hay un código activo para este correo. Por favor solicita el reenvío de un nuevo código.'
+        });
+      }
+
+      if (attempts >= 5) {
+        return res.status(429).json({
+          success: false,
+          message: 'Has alcanzado el límite de 5 intentos fallidos. Por favor solicita un nuevo código o contacta a contacto@plazado.com.'
+        });
+      }
+
+      if (Date.now() > expiresAt) {
+        activeVerificationCodes.delete(cleanEmail);
+        return res.status(400).json({
+          success: false,
+          expired: true,
+          message: 'El código de verificación ha expirado. Por favor solicita un nuevo código.'
+        });
+      }
+
+      if (activeCode !== cleanCode) {
+        attempts += 1;
+        if (user && user.verification) {
+          user.verification.attempts = attempts;
+          db.setUserVerification(user.id, user.verification);
+        }
+        const remaining = Math.max(0, 5 - attempts);
+        return res.status(400).json({
+          success: false,
+          message: `El código ingresado es incorrecto. Te quedan ${remaining} intento${remaining === 1 ? '' : 's'}.`
+        });
+      }
+
+      // CODE IS CORRECT! Mark user account verified
+      activeVerificationCodes.delete(cleanEmail);
+
+      if (user) {
+        user.isEmailVerified = true;
+        if (user.verification) {
+          user.verification.isVerified = true;
+          user.verification.verifiedAt = new Date().toISOString();
+          db.setUserVerification(user.id, user.verification);
+        } else {
+          db.setUserVerification(user.id, {
+            code: cleanCode,
+            codeExpiresAt: expiresAt,
+            attempts,
+            lastSentAt: Date.now(),
+            isVerified: true,
+            verifiedAt: new Date().toISOString(),
+            resendCount: 0,
+            accountType: user.role === 'STORE_OWNER' ? 'STORE' : 'CUSTOMER'
+          });
+        }
+
+        if (user.storeId) {
+          const st = db.getStores().find(s => s.id === user.storeId);
+          if (st) {
+            st.isEmailVerified = true;
+          }
+        }
+
+        db.addAuditLog('USER_EMAIL_VERIFIED', user.id, undefined, `Usuario ${user.name} (${user.email}) validó su código de correo exitosamente.`);
+        const token = createSessionToken(user);
+        return res.json({
+          success: true,
+          verified: true,
+          user,
+          token,
+          message: '¡Tu cuenta y correo electrónico han sido verificados exitosamente!'
+        });
+      }
+
+      res.json({
+        success: true,
+        verified: true,
+        message: 'Código de confirmación verificado con éxito'
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Error verificando código' });
     }
   });
 
@@ -720,13 +945,13 @@ async function startServer() {
   app.post('/api/admin/mail/test', async (req: Request, res: Response) => {
     try {
       const { testEmail, senderEmail, senderName, smtpHost, smtpPort, smtpUser, smtpPass } = req.body;
-      const targetEmail = (testEmail || '').trim().toLowerCase() || 'luiss.jimeness@gmail.com';
+      const targetEmail = (testEmail || '').trim().toLowerCase() || 'contacto@plazado.com';
       const config = {
-        senderEmail: senderEmail || 'Luiss.jimeness@gmail.com',
-        senderName: senderName || 'PlazaDO Marketplace Dominicano',
+        senderEmail: senderEmail || 'contacto@plazado.com',
+        senderName: senderName || 'PlazaDO.com - Marketplace Dominicano',
         smtpHost: smtpHost || 'smtp.gmail.com',
         smtpPort: Number(smtpPort) || 465,
-        smtpUser: smtpUser || senderEmail || 'Luiss.jimeness@gmail.com',
+        smtpUser: smtpUser || senderEmail || 'contacto@plazado.com',
         smtpPass: smtpPass || ''
       };
 
@@ -735,7 +960,7 @@ async function startServer() {
         return res.status(400).json({ success: false, message: connCheck.message });
       }
 
-      const testCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const testCode = crypto.randomInt(100000, 1000000).toString();
       const sendRes = await sendRegistrationOtpEmail(targetEmail, 'Administrador PlazaDO', testCode, config);
 
       if (sendRes.delivered) {
@@ -754,41 +979,192 @@ async function startServer() {
     }
   });
 
-  // Verify email confirmation code
-  app.post('/api/auth/verify-code', (req: Request, res: Response) => {
+  // --- SUPER ADMIN VERIFICATION MANAGEMENT ROUTES ---
+  // List all users and stores with their email verification status
+  app.get('/api/admin/verifications', (req: Request, res: Response) => {
     try {
-      const { email, code } = req.body;
-      const cleanEmail = (email || '').trim().toLowerCase();
-      const cleanCode = (code || '').trim();
-
-      const record = activeVerificationCodes.get(cleanEmail);
-      if (!record) {
-        return res.status(400).json({ success: false, message: 'No hay un código activo para este correo. Por favor solicita uno nuevo.' });
+      const admin = getAuthenticatedSuperAdmin(req);
+      if (!admin) {
+        return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
       }
 
-      if (Date.now() > record.expiresAt) {
-        activeVerificationCodes.delete(cleanEmail);
-        return res.status(400).json({ success: false, message: 'El código ha expirado. Por favor solicita uno nuevo.' });
-      }
-
-      if (record.code !== cleanCode) {
-        return res.status(400).json({ success: false, message: 'El código ingresado es incorrecto. Verifica el correo recibido.' });
-      }
-
-      res.json({ success: true, message: 'Código de confirmación verificado con éxito' });
+      const list = db.getVerificationsList();
+      res.json({ success: true, verifications: list });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err.message || 'Error verificando código' });
+      res.status(500).json({ success: false, message: err.message || 'Error consultando verificaciones' });
     }
   });
 
+  // Super Admin: Consult active verification code for support assistance
+  app.post('/api/admin/verifications/consult-code', (req: Request, res: Response) => {
+    try {
+      const admin = getAuthenticatedSuperAdmin(req);
+      if (!admin) {
+        return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+      }
+
+      const { email } = req.body;
+      const cleanEmail = (email || '').trim().toLowerCase();
+      const user = db.getUserByEmail(cleanEmail);
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'Usuario no encontrado.' });
+      }
+
+      const code = user.verification?.code;
+      const codeExpiresAt = user.verification?.codeExpiresAt || 0;
+      const isExpired = Date.now() > codeExpiresAt;
+
+      // Register strictly in AuditLog
+      db.addAuditLog(
+        'ADMIN_CONSULT_VERIFICATION_CODE',
+        user.id,
+        user.email,
+        `Super Admin (${admin.email}) consultó el código de verificación de ${user.name} (${user.email}). Código activo: ${code || 'N/A'}.`,
+        { id: admin.id, name: admin.email, role: 'SUPER_ADMIN' }
+      );
+
+      res.json({
+        success: true,
+        email: user.email,
+        name: user.name,
+        code,
+        codeExpiresAt,
+        isExpired,
+        attempts: user.verification?.attempts || 0,
+        isEmailVerified: user.isEmailVerified === true
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Error consultando código' });
+    }
+  });
+
+  // Super Admin: Generate a new code for the user, invalidating the previous one, and dispatching via email
+  app.post('/api/admin/verifications/generate-new-code', async (req: Request, res: Response) => {
+    try {
+      const admin = getAuthenticatedSuperAdmin(req);
+      if (!admin) {
+        return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+      }
+
+      const { email } = req.body;
+      const cleanEmail = (email || '').trim().toLowerCase();
+      const regenRes = db.regenerateUserVerificationCode(cleanEmail, admin.email);
+      if (!regenRes.success || !regenRes.code) {
+        return res.status(400).json({ success: false, message: regenRes.message });
+      }
+
+      // Automatically dispatch new code from contacto@plazado.com to the user
+      const sysSettings = db.getSystemSettings();
+      const mailConfig = sysSettings.mailConfig || {
+        senderEmail: 'contacto@plazado.com',
+        senderName: 'PlazaDO.com - Marketplace Dominicano'
+      };
+
+      const mailResult = await sendRegistrationOtpEmail(
+        cleanEmail,
+        regenRes.user?.name || 'Usuario',
+        regenRes.code,
+        mailConfig
+      );
+
+      res.json({
+        success: true,
+        newCode: regenRes.code,
+        expiresAt: regenRes.expiresAt,
+        delivered: mailResult.delivered,
+        message: `Nuevo código generado (${regenRes.code}) y enviado a ${cleanEmail} desde contacto@plazado.com.`
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Error generando nuevo código' });
+    }
+  });
+
+  // Super Admin: Manually approve verification for an account (e.g. validated via phone/support)
+  app.post('/api/admin/verifications/manual-verify', (req: Request, res: Response) => {
+    try {
+      const admin = getAuthenticatedSuperAdmin(req);
+      if (!admin) {
+        return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+      }
+
+      const { email, reason } = req.body;
+      const cleanEmail = (email || '').trim().toLowerCase();
+      const manualRes = db.manualVerifyUser(cleanEmail, admin.email, reason);
+      if (!manualRes.success) {
+        return res.status(400).json({ success: false, message: manualRes.message });
+      }
+
+      res.json({ success: true, message: manualRes.message });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Error en verificación manual' });
+    }
+  });
+
+  // Super Admin: Resend the active code email to user
+  app.post('/api/admin/verifications/resend-email', async (req: Request, res: Response) => {
+    try {
+      const admin = getAuthenticatedSuperAdmin(req);
+      if (!admin) {
+        return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+      }
+
+      const { email } = req.body;
+      const cleanEmail = (email || '').trim().toLowerCase();
+      const user = db.getUserByEmail(cleanEmail);
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'Usuario no encontrado.' });
+      }
+
+      let code = user.verification?.code;
+      // If code expired or missing, regenerate fresh
+      if (!code || Date.now() > (user.verification?.codeExpiresAt || 0)) {
+        const regen = db.regenerateUserVerificationCode(cleanEmail, admin.email);
+        code = regen.code;
+      }
+
+      const sysSettings = db.getSystemSettings();
+      const mailConfig = sysSettings.mailConfig || {
+        senderEmail: 'contacto@plazado.com',
+        senderName: 'PlazaDO.com - Marketplace Dominicano'
+      };
+
+      const mailResult = await sendRegistrationOtpEmail(cleanEmail, user.name, code || '000000', mailConfig);
+
+      db.addAuditLog(
+        'ADMIN_RESENT_VERIFICATION_EMAIL',
+        user.id,
+        user.email,
+        `Super Admin (${admin.email}) reenvió el correo de confirmación a ${user.email} desde contacto@plazado.com.`,
+        { id: admin.id, name: admin.email, role: 'SUPER_ADMIN' }
+      );
+
+      res.json({
+        success: true,
+        delivered: mailResult.delivered,
+        message: `Correo reenviado exitosamente a ${cleanEmail} desde contacto@plazado.com.`
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Error reenviando correo' });
+    }
+  });
+
+  // Register Customer (Creates account, generates code, dispatches email from contacto@plazado.com automatically)
   app.post('/api/auth/register-customer', async (req: Request, res: Response) => {
     try {
       const data: CustomerRegistrationInput = req.body;
       const cleanEmail = (data.email || '').trim().toLowerCase();
       const users = db.getUsers();
 
-      if (users.some(u => u.email.toLowerCase() === cleanEmail)) {
-        return res.status(400).json({ success: false, message: 'Ya existe una cuenta registrada con este correo electrónico.' });
+      const existingUser = users.find(u => u.email.toLowerCase() === cleanEmail);
+      if (existingUser && existingUser.isEmailVerified === true) {
+        return res.status(400).json({
+          success: false,
+          message: 'Ya existe una cuenta verificada con este correo electrónico. Por favor inicia sesión.'
+        });
+      }
+
+      if (!data.name?.trim()) {
+        return res.status(400).json({ success: false, message: 'Por favor ingresa tu nombre.' });
       }
       if (!data.password || data.password.length < 6) {
         return res.status(400).json({ success: false, message: 'La contraseña debe tener un mínimo de 6 caracteres.' });
@@ -797,60 +1173,99 @@ async function startServer() {
         return res.status(400).json({ success: false, message: 'Las contraseñas no coinciden.' });
       }
 
-      // Check KYC documents
-      if (!data.cedulaFrontUrl || !data.selfieUrl) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Se requiere subir la foto de la cédula y la selfie para la validación biométrica obligatoria.' 
-        });
-      }
-
-      // Check email verification code if provided or present in active codes
-      if (data.verificationCode) {
-        const record = activeVerificationCodes.get(cleanEmail);
-        if (record && record.code !== data.verificationCode.trim()) {
-          return res.status(400).json({ success: false, message: 'El código de confirmación de correo es incorrecto. Revisa tu correo e intenta de nuevo.' });
-        }
-        activeVerificationCodes.delete(cleanEmail);
-      }
-
+      // Generate cryptographically secure 6-digit verification code
+      const code = crypto.randomInt(100000, 1000000).toString();
+      const codeExpiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
       const passHash = await hashPassword(data.password);
-      const newId = `user-cust-${Date.now()}`;
-      const newCustomer: User = {
-        id: newId,
-        name: `${(data.name || '').trim()} ${(data.lastName || '').trim()}`.trim(),
-        email: cleanEmail,
-        role: 'CUSTOMER',
-        phone: (data.phone || '').trim(),
-        avatar: data.selfieUrl || '',
-        passwordHash: passHash,
-        addresses: [],
-        cedulaNumber: data.cedulaNumber || undefined,
-        kycData: {
+
+      let customerUser: User;
+
+      if (existingUser && !existingUser.isEmailVerified) {
+        // Update pending unverified account
+        existingUser.name = `${(data.name || '').trim()} ${(data.lastName || '').trim()}`.trim();
+        existingUser.phone = (data.phone || existingUser.phone || '').trim();
+        existingUser.passwordHash = passHash;
+        existingUser.verification = {
+          code,
+          codeExpiresAt,
+          attempts: 0,
+          lastSentAt: Date.now(),
+          isVerified: false,
+          resendCount: (existingUser.verification?.resendCount || 0) + 1,
+          accountType: 'CUSTOMER'
+        };
+        db.setUserVerification(existingUser.id, existingUser.verification);
+        customerUser = existingUser;
+      } else {
+        const newId = `user-cust-${Date.now()}`;
+        customerUser = {
+          id: newId,
+          name: `${(data.name || '').trim()} ${(data.lastName || '').trim()}`.trim(),
+          email: cleanEmail,
+          role: 'CUSTOMER',
+          phone: (data.phone || '').trim(),
+          avatar: data.selfieUrl || '',
+          passwordHash: passHash,
+          addresses: [],
           cedulaNumber: data.cedulaNumber || undefined,
-          cedulaFrontUrl: data.cedulaFrontUrl,
-          selfieUrl: data.selfieUrl,
-          biometricScore: data.biometricScore || 98.6,
-          biometricStatus: 'VERIFIED',
-          verifiedAt: new Date().toISOString(),
-          livenessPassed: true,
-          facialMatchPassed: true,
-        },
-        isKycVerified: true,
-        isEmailVerified: true,
-        createdAt: new Date().toISOString()
+          kycData: data.cedulaFrontUrl ? {
+            cedulaNumber: data.cedulaNumber || undefined,
+            cedulaFrontUrl: data.cedulaFrontUrl,
+            selfieUrl: data.selfieUrl || '',
+            biometricScore: data.biometricScore || 98.6,
+            biometricStatus: 'VERIFIED',
+            verifiedAt: new Date().toISOString(),
+            livenessPassed: true,
+            facialMatchPassed: true,
+          } : undefined,
+          isKycVerified: !!data.cedulaFrontUrl,
+          isEmailVerified: false,
+          verification: {
+            code,
+            codeExpiresAt,
+            attempts: 0,
+            lastSentAt: Date.now(),
+            isVerified: false,
+            resendCount: 0,
+            accountType: 'CUSTOMER'
+          },
+          createdAt: new Date().toISOString()
+        };
+        db.addUser(customerUser);
+      }
+
+      // Automatically dispatch email from contacto@plazado.com
+      const sysSettings = db.getSystemSettings();
+      const mailConfig = sysSettings.mailConfig || {
+        senderEmail: 'contacto@plazado.com',
+        senderName: 'PlazaDO.com - Marketplace Dominicano'
       };
 
-      db.addUser(newCustomer);
-      activeVerificationCodes.delete(cleanEmail);
-      db.addAuditLog('USER_REGISTER_KYC', newId, undefined, `Cliente ${newCustomer.name} (${newCustomer.email}) completó validación biométrica y confirmación por correo.`);
-      const token = createSessionToken(newCustomer);
-      res.json({ success: true, user: newCustomer, token, version: db.getVersion() });
+      const mailResult = await sendRegistrationOtpEmail(cleanEmail, customerUser.name, code, mailConfig);
+
+      db.addAuditLog(
+        'USER_REGISTER_PENDING',
+        customerUser.id,
+        undefined,
+        `Cliente ${customerUser.name} (${customerUser.email}) registrado. Código de verificación enviado automáticamente desde contacto@plazado.com. Entregado por SMTP: ${mailResult.delivered ? 'SÍ' : 'NO'}`
+      );
+
+      res.json({
+        success: true,
+        pendingVerification: true,
+        email: cleanEmail,
+        name: customerUser.name,
+        accountType: 'CUSTOMER',
+        delivered: mailResult.delivered,
+        message: `Código de verificación enviado automáticamente a ${cleanEmail} desde contacto@plazado.com. Introduce el código de 6 dígitos recibido para activar tu cuenta.`,
+        expiresInSeconds: 900
+      });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error registering customer' });
     }
   });
 
+  // Register Store (Creates account and store, generates code, dispatches email from contacto@plazado.com automatically)
   app.post('/api/auth/register-store', async (req: Request, res: Response) => {
     try {
       const data: StoreRegistrationInput = req.body;
@@ -858,11 +1273,22 @@ async function startServer() {
       const users = db.getUsers();
       const stores = db.getStores();
 
-      if (users.some(u => u.email.toLowerCase() === cleanEmail)) {
-        return res.status(400).json({ success: false, message: 'Ya existe una cuenta con este correo electrónico.' });
+      const existingUser = users.find(u => u.email.toLowerCase() === cleanEmail);
+      if (existingUser && existingUser.isEmailVerified === true) {
+        return res.status(400).json({
+          success: false,
+          message: 'Ya existe una cuenta verificada con este correo electrónico. Por favor inicia sesión.'
+        });
       }
-      if (stores.some(s => s.email.toLowerCase() === cleanEmail || s.name.toLowerCase() === data.storeName.trim().toLowerCase())) {
-        return res.status(400).json({ success: false, message: 'Ya existe una tienda con este nombre o correo comercial.' });
+
+      if (stores.some(s => s.name.toLowerCase() === data.storeName.trim().toLowerCase() && s.email.toLowerCase() !== cleanEmail)) {
+        return res.status(400).json({ success: false, message: 'Ya existe una tienda registrada con este nombre comercial.' });
+      }
+      if (!data.storeName?.trim()) {
+        return res.status(400).json({ success: false, message: 'Por favor ingresa el nombre de la tienda.' });
+      }
+      if (!data.ownerName?.trim()) {
+        return res.status(400).json({ success: false, message: 'Por favor ingresa el nombre del responsable de la tienda.' });
       }
       if (!data.password || data.password.length < 6) {
         return res.status(400).json({ success: false, message: 'La contraseña debe contener al menos 6 caracteres.' });
@@ -871,38 +1297,25 @@ async function startServer() {
         return res.status(400).json({ success: false, message: 'Las contraseñas no coinciden.' });
       }
 
-      // Check KYC documents
-      if (!data.cedulaFrontUrl || !data.selfieUrl) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Se requiere subir la foto de la cédula del responsable y la selfie para la validación biométrica obligatoria de la tienda.' 
-        });
-      }
-
-      // Check email verification code if provided
-      if (data.verificationCode) {
-        const record = activeVerificationCodes.get(cleanEmail);
-        if (record && record.code !== data.verificationCode.trim()) {
-          return res.status(400).json({ success: false, message: 'El código de confirmación de correo es incorrecto. Revisa tu correo e intenta de nuevo.' });
-        }
-        activeVerificationCodes.delete(cleanEmail);
-      }
-
-      const userId = `user-store-${Date.now()}`;
-      const storeId = `store-${Date.now()}`;
-      const storeSlug = data.storeName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      // Generate cryptographically secure 6-digit verification code
+      const code = crypto.randomInt(100000, 1000000).toString();
+      const codeExpiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
       const passHash = await hashPassword(data.password);
 
-      const kycInfo = {
+      const userId = existingUser ? existingUser.id : `user-store-${Date.now()}`;
+      const storeId = existingUser?.storeId || `store-${Date.now()}`;
+      const storeSlug = data.storeName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+      const kycInfo = data.cedulaFrontUrl ? {
         cedulaNumber: data.cedulaNumber || undefined,
         cedulaFrontUrl: data.cedulaFrontUrl,
-        selfieUrl: data.selfieUrl,
+        selfieUrl: data.selfieUrl || '',
         biometricScore: data.biometricScore || 99.1,
         biometricStatus: 'VERIFIED' as const,
         verifiedAt: new Date().toISOString(),
         livenessPassed: true,
         facialMatchPassed: true,
-      };
+      } : undefined;
 
       const newStore: Store = {
         id: storeId,
@@ -914,26 +1327,26 @@ async function startServer() {
         email: cleanEmail,
         phone: data.phone.trim(),
         whatsapp: data.phone.trim(),
-        description: data.description.trim(),
-        categoryId: data.categoryId,
+        description: data.description?.trim() || '',
+        categoryId: data.categoryId || 'cat-tecnologia',
         logo: data.logo || 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=300&auto=format&fit=crop&q=80',
         banner: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1600&auto=format&fit=crop&q=80',
-        province: data.province,
-        municipality: data.municipality,
-        address: data.address.trim(),
-        status: 'APPROVED',
-        isPublished: true,
+        province: data.province || 'Distrito Nacional',
+        municipality: data.municipality || 'Santo Domingo',
+        address: (data.address || '').trim(),
+        status: 'PENDING', // Pending Super Admin approval
+        isPublished: false,
         rating: 5.0,
         reviewCount: 0,
         salesCount: 0,
         kycData: kycInfo,
-        isKycVerified: true,
-        isEmailVerified: true,
+        isKycVerified: !!data.cedulaFrontUrl,
+        isEmailVerified: false,
         shippingConfig: {
           type: 'fixed',
           fixedRate: data.shippingRate || 200,
           estimatedDays: '24 a 48 horas',
-          coverageProvinces: [data.province]
+          coverageProvinces: [data.province || 'Distrito Nacional']
         },
         bankInfo: {
           bank: 'Banco Popular Dominicano',
@@ -957,19 +1370,59 @@ async function startServer() {
         addresses: [],
         cedulaNumber: data.cedulaNumber || undefined,
         kycData: kycInfo,
-        isKycVerified: true,
-        isEmailVerified: true,
-        createdAt: new Date().toISOString()
+        isKycVerified: !!data.cedulaFrontUrl,
+        isEmailVerified: false,
+        verification: {
+          code,
+          codeExpiresAt,
+          attempts: 0,
+          lastSentAt: Date.now(),
+          isVerified: false,
+          resendCount: (existingUser?.verification?.resendCount || 0) + 1,
+          accountType: 'STORE',
+          storeName: data.storeName.trim()
+        },
+        createdAt: existingUser ? existingUser.createdAt : new Date().toISOString()
       };
 
-      // CRITICAL: Insert user first so store foreign key (ownerId -> users.id) is satisfied in Cloud SQL
-      db.addUser(newStoreUser);
-      const createdStore = db.addStore(newStore);
-      activeVerificationCodes.delete(cleanEmail);
-      db.addAuditLog('STORE_REGISTER_KYC', storeId, undefined, `Tienda ${newStore.name} registrada con verificación biométrica del titular ${data.ownerName}.`);
+      if (existingUser) {
+        db.updateUser(existingUser.id, newStoreUser);
+      } else {
+        db.addUser(newStoreUser);
+      }
 
-      const token = createSessionToken(newStoreUser);
-      res.json({ success: true, store: createdStore, user: newStoreUser, token, version: db.getVersion() });
+      const existingStore = db.getStores().find(s => s.id === storeId || s.email.toLowerCase() === cleanEmail);
+      if (!existingStore) {
+        db.addStore(newStore);
+      }
+
+      // Automatically dispatch email from contacto@plazado.com
+      const sysSettings = db.getSystemSettings();
+      const mailConfig = sysSettings.mailConfig || {
+        senderEmail: 'contacto@plazado.com',
+        senderName: 'PlazaDO.com - Marketplace Dominicano'
+      };
+
+      const mailResult = await sendRegistrationOtpEmail(cleanEmail, data.ownerName.trim(), code, mailConfig);
+
+      db.addAuditLog(
+        'STORE_REGISTER_PENDING',
+        storeId,
+        undefined,
+        `Tienda ${newStore.name} registrada por ${data.ownerName} (${cleanEmail}). Código de verificación enviado automáticamente desde contacto@plazado.com. Entregado por SMTP: ${mailResult.delivered ? 'SÍ' : 'NO'}`
+      );
+
+      res.json({
+        success: true,
+        pendingVerification: true,
+        email: cleanEmail,
+        name: data.ownerName.trim(),
+        storeName: data.storeName.trim(),
+        accountType: 'STORE',
+        delivered: mailResult.delivered,
+        message: `Código de verificación de 6 dígitos enviado automáticamente a ${cleanEmail} desde contacto@plazado.com.`,
+        expiresInSeconds: 900
+      });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error registering store' });
     }

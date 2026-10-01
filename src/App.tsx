@@ -21,6 +21,7 @@ import { DownloadSectionModal } from './components/common/DownloadSectionModal';
 import { AuthModal } from './components/auth/AuthModal';
 import { OrderChatModal } from './components/chat/OrderChatModal';
 import { MobileNavBar } from './components/layout/MobileNavBar';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { 
   CheckCircle2, 
   Key, 
@@ -268,8 +269,10 @@ const MarketplaceApp: React.FC = () => {
 
 export default function App() {
   return (
-    <AppProvider>
-      <MarketplaceApp />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <MarketplaceApp />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }

@@ -116,9 +116,13 @@ interface AppContextType {
   deleteMyStore: (storeId: string, confirmationText: string) => Promise<{ success: boolean; message: string }>;
   setUserPassword: (userId: string, newPassword: string) => Promise<{ success: boolean; message?: string }>;
   isAuthModalOpen: boolean;
-  authModalMode: 'login' | 'register_select' | 'register_customer' | 'register_store';
-  openAuthModal: (mode?: 'login' | 'register_select' | 'register_customer' | 'register_store') => void;
+  authModalMode: 'login' | 'register_select' | 'register_customer' | 'register_store' | 'verify_email';
+  openAuthModal: (mode?: 'login' | 'register_select' | 'register_customer' | 'register_store' | 'verify_email') => void;
   closeAuthModal: () => void;
+  pendingVerificationEmail: string | null;
+  setPendingVerificationEmail: (email: string | null) => void;
+  verifyCode: (email: string, code: string) => Promise<{ success: boolean; message?: string; user?: User }>;
+  resendVerificationCode: (email: string) => Promise<{ success: boolean; message?: string; remainingSeconds?: number }>;
   pendingPurchaseAction: { productId: string; storeId: string; quantity: number } | null;
   authPurchaseNotice: string | null;
   setAuthPurchaseNotice: (notice: string | null) => void;
@@ -451,11 +455,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Auth Modal states
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authModalMode, setAuthModalMode] = useState<'login' | 'register_select' | 'register_customer' | 'register_store'>('login');
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'register_select' | 'register_customer' | 'register_store' | 'verify_email'>('login');
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
   const [pendingPurchaseAction, setPendingPurchaseAction] = useState<{ productId: string; storeId: string; quantity: number } | null>(null);
   const [authPurchaseNotice, setAuthPurchaseNotice] = useState<string | null>(null);
 
-  const openAuthModal = (mode: 'login' | 'register_select' | 'register_customer' | 'register_store' = 'login') => {
+  const openAuthModal = (mode: 'login' | 'register_select' | 'register_customer' | 'register_store' | 'verify_email' = 'login') => {
     setAuthModalMode(mode);
     setIsAuthModalOpen(true);
   };
@@ -922,40 +927,94 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showNotification('Has cerrado sesión correctamente');
   };
 
-  // Customer Registration (Centralized)
-  const registerCustomer = async (data: CustomerRegistrationInput): Promise<{ success: boolean; message?: string }> => {
+  // Verification operations
+  const verifyCode = async (email: string, code: string): Promise<{ success: boolean; message?: string; user?: User }> => {
     try {
-      const res = await api.registerCustomer(data);
-      if (!res.success || !res.user) {
-        return { success: false, message: res.message || 'Error registrando cliente' };
+      const res = await api.verifyCode(email, code);
+      if (!res.success) {
+        return { success: false, message: res.message || 'Código incorrecto' };
       }
-
-      const newCustomer = res.user;
       if (res.token) {
         localStorage.setItem('plazado_auth_token', res.token);
       }
-      setUsers(prev => [...prev, newCustomer]);
-      setCurrentUser(newCustomer);
-      setIsAuthModalOpen(false);
-
-      if (pendingPurchaseAction) {
-        const targetProd = products.find(p => p.id === pendingPurchaseAction.productId);
-        if (targetProd && targetProd.stock > 0) {
-          setCart(prev => [...prev, {
-            productId: pendingPurchaseAction.productId,
-            storeId: pendingPurchaseAction.storeId,
-            quantity: Math.min(targetProd.stock, pendingPurchaseAction.quantity),
-            addedAt: new Date().toISOString()
-          }]);
-          showNotification(`¡Bienvenido/a a PlazaDO! Añadimos "${targetProd.name}" a tu carrito`, 'success');
+      if (res.user) {
+        setCurrentUser(res.user);
+        setUsers(prev => [...prev.filter(u => u.id !== res.user!.id), res.user!]);
+        setIsAuthModalOpen(false);
+        setPendingVerificationEmail(null);
+        showNotification('¡Cuenta y correo electrónico verificados exitosamente!', 'success');
+        if (res.user.role === 'STORE_OWNER') {
+          setCurrentView('store_dashboard');
+        } else if (res.user.role === 'SUPER_ADMIN') {
+          setCurrentView('admin_dashboard');
+        } else {
+          setCurrentView('home');
         }
-        setPendingPurchaseAction(null);
-        setAuthPurchaseNotice(null);
-        return { success: true };
+      }
+      return { success: true, message: res.message, user: res.user };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Error verificando código' };
+    }
+  };
+
+  const resendVerificationCode = async (email: string): Promise<{ success: boolean; message?: string; remainingSeconds?: number }> => {
+    try {
+      const res = await api.resendVerificationCode(email);
+      if (res.success) {
+        showNotification(res.message || 'Código reenviado a tu correo desde contacto@plazado.com', 'success');
+        return { success: true, message: res.message };
+      } else {
+        return { success: false, message: res.message, remainingSeconds: (res as any).remainingSeconds };
+      }
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Error reenviando código' };
+    }
+  };
+
+  // Customer Registration (Centralized)
+  const registerCustomer = async (data: CustomerRegistrationInput): Promise<{ success: boolean; message?: string; pendingVerification?: boolean; email?: string }> => {
+    try {
+      const res = await api.registerCustomer(data);
+      if (!res.success) {
+        return { success: false, message: res.message || 'Error registrando cliente' };
       }
 
-      setCurrentView('home');
-      showNotification(`¡Bienvenido/a a PlazaDO, ${newCustomer.name}! Tu cuenta ha sido creada.`);
+      if (res.pendingVerification) {
+        const targetEmail = res.email || data.email;
+        setPendingVerificationEmail(targetEmail);
+        setAuthModalMode('verify_email');
+        showNotification(res.message || `Código enviado a ${targetEmail} desde contacto@plazado.com`, 'info');
+        return { success: true, pendingVerification: true, email: targetEmail, message: res.message };
+      }
+
+      if (res.user) {
+        const newCustomer = res.user;
+        if (res.token) {
+          localStorage.setItem('plazado_auth_token', res.token);
+        }
+        setUsers(prev => [...prev.filter(u => u.id !== newCustomer.id), newCustomer]);
+        setCurrentUser(newCustomer);
+        setIsAuthModalOpen(false);
+
+        if (pendingPurchaseAction) {
+          const targetProd = products.find(p => p.id === pendingPurchaseAction.productId);
+          if (targetProd && targetProd.stock > 0) {
+            setCart(prev => [...prev, {
+              productId: pendingPurchaseAction.productId,
+              storeId: pendingPurchaseAction.storeId,
+              quantity: Math.min(targetProd.stock, pendingPurchaseAction.quantity),
+              addedAt: new Date().toISOString()
+            }]);
+            showNotification(`¡Bienvenido/a a PlazaDO! Añadimos "${targetProd.name}" a tu carrito`, 'success');
+          }
+          setPendingPurchaseAction(null);
+          setAuthPurchaseNotice(null);
+        } else {
+          setCurrentView('home');
+          showNotification(`¡Bienvenido/a a PlazaDO, ${newCustomer.name}! Tu cuenta ha sido creada.`);
+        }
+      }
+
       return { success: true };
     } catch (err: any) {
       return { success: false, message: err.message || 'Error registrando cuenta' };
@@ -963,27 +1022,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Store Registration (Centralized in Global Database)
-  const registerStoreAccount = async (data: StoreRegistrationInput): Promise<{ success: boolean; storeId?: string; message?: string }> => {
+  const registerStoreAccount = async (data: StoreRegistrationInput): Promise<{ success: boolean; storeId?: string; message?: string; pendingVerification?: boolean; email?: string }> => {
     try {
       const res = await api.registerStore(data);
-      if (!res.success || !res.store || !res.user) {
+      if (!res.success) {
         return { success: false, message: res.message || 'Error registrando tienda' };
       }
 
-      if (res.token) {
-        localStorage.setItem('plazado_auth_token', res.token);
+      if (res.pendingVerification) {
+        const targetEmail = res.email || data.email;
+        setPendingVerificationEmail(targetEmail);
+        setAuthModalMode('verify_email');
+        showNotification(res.message || `Código de verificación enviado a ${targetEmail} desde contacto@plazado.com`, 'info');
+        return { success: true, pendingVerification: true, email: targetEmail, message: res.message };
       }
-      setStores(prev => [res.store!, ...prev.filter(s => s.id !== res.store!.id)]);
-      setUsers(prev => [...prev.filter(u => u.id !== res.user!.id), res.user!]);
-      setCurrentUser(res.user!);
-      if (res.version) {
-        currentVersionRef.current = res.version;
-      }
-      setIsAuthModalOpen(false);
-      setCurrentView('store_dashboard');
 
-      showNotification(`¡Tienda "${res.store.name}" registrada y publicada en el catálogo global de PlazaDO!`);
-      return { success: true, storeId: res.store.id };
+      if (res.store && res.user) {
+        if (res.token) {
+          localStorage.setItem('plazado_auth_token', res.token);
+        }
+        setStores(prev => [res.store!, ...prev.filter(s => s.id !== res.store!.id)]);
+        setUsers(prev => [...prev.filter(u => u.id !== res.user!.id), res.user!]);
+        setCurrentUser(res.user!);
+        if (res.version) {
+          currentVersionRef.current = res.version;
+        }
+        setIsAuthModalOpen(false);
+        setCurrentView('store_dashboard');
+        showNotification(`¡Tienda "${res.store.name}" registrada en PlazaDO!`);
+        return { success: true, storeId: res.store.id };
+      }
+
+      return { success: true };
     } catch (err: any) {
       return { success: false, message: err.message || 'Error registrando tienda en el servidor global' };
     }
@@ -2822,6 +2892,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       authModalMode,
       openAuthModal,
       closeAuthModal,
+      pendingVerificationEmail,
+      setPendingVerificationEmail,
+      verifyCode,
+      resendVerificationCode,
       pendingPurchaseAction,
       authPurchaseNotice,
       setAuthPurchaseNotice,

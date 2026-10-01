@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../services/api';
 import { 
@@ -62,7 +62,9 @@ import { CreateBannerModal } from './CreateBannerModal';
 import { UserPasswordModal } from './UserPasswordModal';
 import { CategoriesAndSpecsManagement } from './CategoriesAndSpecsManagement';
 import { FulfillmentAdminView, FulfillmentAdminTab } from './FulfillmentAdminView';
+import { UserVerificationsTab } from './UserVerificationsTab';
 import { 
+  ShieldCheck,
   Warehouse,
   BarChart3,
   Scan,
@@ -188,26 +190,38 @@ export const AdminDashboard: React.FC = () => {
   const [isRunningSettlements, setIsRunningSettlements] = useState(false);
 
   // Mailer settings state
-  const [mailSenderEmail, setMailSenderEmail] = useState(systemSettings.mailConfig?.senderEmail || 'Luiss.jimeness@gmail.com');
-  const [mailSenderName, setMailSenderName] = useState(systemSettings.mailConfig?.senderName || 'PlazaDO Marketplace Dominicano');
+  const [mailSenderEmail, setMailSenderEmail] = useState(systemSettings.mailConfig?.senderEmail || 'contacto@plazado.com');
+  const [mailSenderName, setMailSenderName] = useState(systemSettings.mailConfig?.senderName || 'PlazaDO.com - Marketplace Dominicano');
   const [mailSmtpHost, setMailSmtpHost] = useState(systemSettings.mailConfig?.smtpHost || 'smtp.gmail.com');
   const [mailSmtpPort, setMailSmtpPort] = useState(systemSettings.mailConfig?.smtpPort || 465);
+  const [mailSmtpUser, setMailSmtpUser] = useState(systemSettings.mailConfig?.smtpUser || 'contacto@plazado.com');
   const [mailSmtpPass, setMailSmtpPass] = useState(systemSettings.mailConfig?.smtpPass || '');
   const [showMailPass, setShowMailPass] = useState(false);
   const [testingSmtp, setTestingSmtp] = useState(false);
   const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    if (systemSettings.mailConfig) {
+      if (systemSettings.mailConfig.senderEmail) setMailSenderEmail(systemSettings.mailConfig.senderEmail);
+      if (systemSettings.mailConfig.senderName) setMailSenderName(systemSettings.mailConfig.senderName);
+      if (systemSettings.mailConfig.smtpHost) setMailSmtpHost(systemSettings.mailConfig.smtpHost);
+      if (systemSettings.mailConfig.smtpPort) setMailSmtpPort(systemSettings.mailConfig.smtpPort);
+      if (systemSettings.mailConfig.smtpUser) setMailSmtpUser(systemSettings.mailConfig.smtpUser);
+      if (systemSettings.mailConfig.smtpPass) setMailSmtpPass(systemSettings.mailConfig.smtpPass);
+    }
+  }, [systemSettings.mailConfig]);
 
   const handleTestSmtp = async () => {
     setTestingSmtp(true);
     setSmtpTestResult(null);
     try {
       const res = await api.testSmtpConnection({
-        testEmail: mailSenderEmail.trim() || 'luiss.jimeness@gmail.com',
-        senderEmail: mailSenderEmail.trim() || 'Luiss.jimeness@gmail.com',
-        senderName: mailSenderName.trim() || 'PlazaDO Marketplace Dominicano',
+        testEmail: mailSenderEmail.trim() || 'contacto@plazado.com',
+        senderEmail: mailSenderEmail.trim() || 'contacto@plazado.com',
+        senderName: mailSenderName.trim() || 'PlazaDO.com - Marketplace Dominicano',
         smtpHost: mailSmtpHost.trim() || 'smtp.gmail.com',
         smtpPort: Number(mailSmtpPort) || 465,
-        smtpUser: mailSenderEmail.trim() || 'Luiss.jimeness@gmail.com',
+        smtpUser: mailSmtpUser.trim() || mailSenderEmail.trim() || 'contacto@plazado.com',
         smtpPass: mailSmtpPass.trim()
       });
       setSmtpTestResult(res);
@@ -320,13 +334,13 @@ export const AdminDashboard: React.FC = () => {
       rnc: rncVal,
       legalBusinessName: businessName,
       mailConfig: {
-        senderEmail: mailSenderEmail.trim() || 'Luiss.jimeness@gmail.com',
-        senderName: mailSenderName.trim() || 'PlazaDO Marketplace Dominicano',
+        senderEmail: mailSenderEmail.trim() || 'contacto@plazado.com',
+        senderName: mailSenderName.trim() || 'PlazaDO.com - Marketplace Dominicano',
         smtpHost: mailSmtpHost.trim() || 'smtp.gmail.com',
         smtpPort: Number(mailSmtpPort) || 465,
-        smtpUser: mailSenderEmail.trim() || 'Luiss.jimeness@gmail.com',
+        smtpUser: mailSmtpUser.trim() || mailSenderEmail.trim() || 'contacto@plazado.com',
         smtpPass: mailSmtpPass.trim(),
-        useSsl: true,
+        useSsl: Number(mailSmtpPort) === 465,
         isConfigured: true
       }
     });
@@ -536,6 +550,25 @@ export const AdminDashboard: React.FC = () => {
                     activeTab === 'users' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
                   }`}>
                     {allUsers.length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('verifications')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    activeTab === 'verifications'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Verificación de usuarios</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    activeTab === 'verifications' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700'
+                  }`}>
+                    contacto@
                   </span>
                 </button>
 
@@ -2028,6 +2061,11 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
+      {/* TAB VERIFICACIÓN DE USUARIOS */}
+      {activeTab === 'verifications' && (
+        <UserVerificationsTab />
+      )}
+
       {/* TAB 6: LIQUIDACIONES Y DESEMBOLSOS */}
       {activeTab === 'settlements' && (
         <div className="space-y-6">
@@ -2660,6 +2698,49 @@ export const AdminDashboard: React.FC = () => {
                 </span>
               </div>
 
+              {/* Provider Quick Presets */}
+              <div className="flex flex-wrap items-center gap-2 pb-2">
+                <span className="text-xs font-semibold text-stone-600">Plantillas rápidas:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMailSmtpHost('smtp.gmail.com');
+                    setMailSmtpPort(465);
+                    setMailSenderEmail('contacto@plazado.com');
+                    setMailSenderName('PlazaDO.com - Marketplace Dominicano');
+                    setMailSmtpUser('contacto@plazado.com');
+                  }}
+                  className="px-2.5 py-1 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 rounded-lg text-xs font-bold transition-all shadow-2xs"
+                >
+                  ⚡ Google Workspace / Gmail (465 SSL)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMailSmtpHost('smtp.ionos.com');
+                    setMailSmtpPort(465);
+                    setMailSenderEmail('contacto@plazado.com');
+                    setMailSenderName('PlazaDO.com - Marketplace Dominicano');
+                    setMailSmtpUser('contacto@plazado.com');
+                  }}
+                  className="px-2.5 py-1 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 rounded-lg text-xs font-bold transition-all shadow-2xs"
+                >
+                  🌐 IONOS Mail (465 SSL)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMailSmtpHost('smtp.gmail.com');
+                    setMailSmtpPort(587);
+                    setMailSenderEmail('contacto@plazado.com');
+                    setMailSenderName('PlazaDO.com - Marketplace Dominicano');
+                  }}
+                  className="px-2.5 py-1 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 rounded-lg text-xs font-bold transition-all shadow-2xs"
+                >
+                  🔧 Gmail STARTTLS (587)
+                </button>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">
@@ -2670,10 +2751,10 @@ export const AdminDashboard: React.FC = () => {
                     value={mailSenderEmail}
                     onChange={(e) => setMailSenderEmail(e.target.value)}
                     className="w-full p-2.5 bg-white border border-stone-300 rounded-lg outline-none font-bold text-stone-900 focus:border-red-500"
-                    placeholder="Luiss.jimeness@gmail.com"
+                    placeholder="contacto@plazado.com"
                   />
                   <span className="text-[10px] text-stone-400 mt-1 block">
-                    Desde esta dirección se dispara el código de 6 dígitos a nuevos usuarios y comercios.
+                    Desde esta dirección oficial se dispara automáticamente el código de 6 dígitos a nuevos usuarios y comercios.
                   </span>
                 </div>
 
@@ -2686,7 +2767,7 @@ export const AdminDashboard: React.FC = () => {
                     value={mailSenderName}
                     onChange={(e) => setMailSenderName(e.target.value)}
                     className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-lg outline-none"
-                    placeholder="PlazaDO Marketplace Dominicano"
+                    placeholder="PlazaDO.com - Marketplace Dominicano"
                   />
                 </div>
 
@@ -2699,7 +2780,7 @@ export const AdminDashboard: React.FC = () => {
                     value={mailSmtpHost}
                     onChange={(e) => setMailSmtpHost(e.target.value)}
                     className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-lg outline-none font-mono text-xs"
-                    placeholder="smtp.gmail.com"
+                    placeholder="smtp.gmail.com o smtp.ionos.com"
                   />
                 </div>
 
@@ -2712,13 +2793,29 @@ export const AdminDashboard: React.FC = () => {
                     value={mailSmtpPort}
                     onChange={(e) => setMailSmtpPort(Number(e.target.value))}
                     className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-lg outline-none font-mono text-xs"
-                    placeholder="465"
+                    placeholder="465 (SSL) o 587 (STARTTLS)"
                   />
                 </div>
 
-                <div className="sm:col-span-2">
+                <div>
                   <label className="block font-semibold text-stone-700 mb-1">
-                    Contraseña de Aplicación de Google (App Password)
+                    Usuario SMTP / Cuenta de Acceso
+                  </label>
+                  <input
+                    type="text"
+                    value={mailSmtpUser}
+                    onChange={(e) => setMailSmtpUser(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-stone-300 rounded-lg outline-none font-mono text-xs"
+                    placeholder="contacto@plazado.com"
+                  />
+                  <span className="text-[10px] text-stone-400 mt-1 block">
+                    Usuario de conexión SMTP (ej: contacto@plazado.com o cuenta Google).
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Contraseña SMTP / Contraseña de Aplicación de Google
                   </label>
                   <div className="relative">
                     <input
@@ -2726,7 +2823,7 @@ export const AdminDashboard: React.FC = () => {
                       value={mailSmtpPass}
                       onChange={(e) => setMailSmtpPass(e.target.value)}
                       className="w-full p-2.5 bg-white border border-stone-300 rounded-lg outline-none font-mono text-xs pr-10"
-                      placeholder="•••• •••• •••• •••• (16 caracteres de App Password de Google)"
+                      placeholder="•••• •••• •••• •••• (16 caracteres)"
                     />
                     <button
                       type="button"
@@ -2737,7 +2834,7 @@ export const AdminDashboard: React.FC = () => {
                     </button>
                   </div>
                   <span className="text-[10px] text-stone-400 mt-1 block">
-                    Para Gmail con verificación en 2 pasos: Genera una "Contraseña de aplicaciones" en tu cuenta Google de {mailSenderEmail} y pégala aquí para envíos SMTP directos.
+                    Para Gmail: Genera una "Contraseña de aplicaciones" de 16 caracteres en Google &gt; Seguridad &gt; Verificación en 2 pasos &gt; Contraseñas de aplicaciones.
                   </span>
                 </div>
 

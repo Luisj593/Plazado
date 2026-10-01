@@ -285,12 +285,68 @@ export const api = {
     return request('/api/auth/send-verification-code', { method: 'POST', body: JSON.stringify({ email, name, type }) });
   },
 
+  async resendVerificationCode(email: string): Promise<{ success: boolean; message: string; delivered?: boolean; cooldownSeconds?: number; expiresInSeconds?: number }> {
+    return request('/api/auth/resend-verification-code', { method: 'POST', body: JSON.stringify({ email }) });
+  },
+
   async testSmtpConnection(data: any): Promise<{ success: boolean; message: string }> {
     return request('/api/admin/mail/test', { method: 'POST', body: JSON.stringify(data) });
   },
 
-  async verifyCode(email: string, code: string): Promise<{ success: boolean; message: string }> {
+  async verifyCode(email: string, code: string): Promise<{ success: boolean; message: string; verified?: boolean; user?: User; token?: string }> {
     return request('/api/auth/verify-code', { method: 'POST', body: JSON.stringify({ email, code }) });
+  },
+
+  // Super Admin Verification Operations
+  async getVerifications(): Promise<{ success: boolean; verifications: Array<{
+    id: string;
+    name: string;
+    email: string;
+    accountType: 'CUSTOMER' | 'STORE';
+    storeName?: string;
+    storeId?: string;
+    registeredAt: string;
+    isEmailVerified: boolean;
+    verificationStatus: 'PENDING' | 'VERIFIED' | 'EXPIRED';
+    code?: string;
+    codeExpiresAt?: number;
+    attempts: number;
+    resendCount: number;
+    lastSentAt: number;
+  }>; message?: string }> {
+    return request('/api/admin/verifications');
+  },
+
+  async adminConsultVerificationCode(email: string): Promise<{
+    success: boolean;
+    email: string;
+    name: string;
+    code?: string;
+    codeExpiresAt?: number;
+    isExpired?: boolean;
+    attempts?: number;
+    isEmailVerified?: boolean;
+    message?: string;
+  }> {
+    return request('/api/admin/verifications/consult-code', { method: 'POST', body: JSON.stringify({ email }) });
+  },
+
+  async adminGenerateNewVerificationCode(email: string): Promise<{
+    success: boolean;
+    newCode: string;
+    expiresAt: number;
+    delivered?: boolean;
+    message: string;
+  }> {
+    return request('/api/admin/verifications/generate-new-code', { method: 'POST', body: JSON.stringify({ email }) });
+  },
+
+  async adminManualVerify(email: string, reason?: string): Promise<{ success: boolean; message: string }> {
+    return request('/api/admin/verifications/manual-verify', { method: 'POST', body: JSON.stringify({ email, reason }) });
+  },
+
+  async adminResendVerificationEmail(email: string): Promise<{ success: boolean; delivered?: boolean; message: string }> {
+    return request('/api/admin/verifications/resend-email', { method: 'POST', body: JSON.stringify({ email }) });
   },
 
   async getMe(): Promise<{ success: boolean; user?: User; message?: string }> {
@@ -301,11 +357,11 @@ export const api = {
     return request('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
   },
 
-  async registerCustomer(data: CustomerRegistrationInput): Promise<{ success: boolean; user?: User; token?: string; message?: string; version?: number }> {
+  async registerCustomer(data: CustomerRegistrationInput): Promise<{ success: boolean; user?: User; token?: string; message?: string; pendingVerification?: boolean; email?: string; name?: string; accountType?: string; version?: number }> {
     return request('/api/auth/register-customer', { method: 'POST', body: JSON.stringify(data) });
   },
 
-  async registerStore(data: StoreRegistrationInput): Promise<{ success: boolean; store?: Store; user?: User; token?: string; message?: string; version?: number }> {
+  async registerStore(data: StoreRegistrationInput): Promise<{ success: boolean; store?: Store; user?: User; token?: string; message?: string; pendingVerification?: boolean; email?: string; name?: string; storeName?: string; accountType?: string; version?: number }> {
     return request('/api/auth/register-store', { method: 'POST', body: JSON.stringify(data) });
   },
 

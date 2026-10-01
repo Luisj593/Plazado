@@ -257,11 +257,11 @@ export const INITIAL_SETTINGS: SystemSettings = {
   legalDocuments: DEFAULT_LEGAL_DOCUMENTS,
   androidApp: DEFAULT_ANDROID_APP_CONFIG,
   mailConfig: {
-    senderEmail: 'Luiss.jimeness@gmail.com',
-    senderName: 'PlazaDO Marketplace Dominicano',
+    senderEmail: 'contacto@plazado.com',
+    senderName: 'PlazaDO.com - Marketplace Dominicano',
     smtpHost: 'smtp.gmail.com',
     smtpPort: 465,
-    smtpUser: 'Luiss.jimeness@gmail.com',
+    smtpUser: 'contacto@plazado.com',
     useSsl: true,
     isConfigured: true
   }

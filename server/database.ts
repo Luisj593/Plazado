@@ -1,9 +1,11 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { cloudSqlRepo } from './cloudsql-repository';
 import { firestoreRepo } from './firestore-repository';
 import { 
   User, 
+  UserVerificationInfo,
   Store, 
   Category, 
   Product, 
@@ -281,17 +283,22 @@ class GlobalDatabase {
     }
     if (!activeData.systemSettings.mailConfig) {
       activeData.systemSettings.mailConfig = {
-        senderEmail: 'Luiss.jimeness@gmail.com',
-        senderName: 'PlazaDO Marketplace Dominicano',
+        senderEmail: 'contacto@plazado.com',
+        senderName: 'PlazaDO.com - Marketplace Dominicano',
         smtpHost: 'smtp.gmail.com',
         smtpPort: 465,
-        smtpUser: 'Luiss.jimeness@gmail.com',
+        smtpUser: 'contacto@plazado.com',
         useSsl: true,
         isConfigured: true
       };
     } else {
-      activeData.systemSettings.mailConfig.senderEmail = activeData.systemSettings.mailConfig.senderEmail || 'Luiss.jimeness@gmail.com';
-      activeData.systemSettings.mailConfig.senderName = activeData.systemSettings.mailConfig.senderName || 'PlazaDO Marketplace Dominicano';
+      if (!activeData.systemSettings.mailConfig.senderEmail || activeData.systemSettings.mailConfig.senderEmail.toLowerCase() === 'luiss.jimeness@gmail.com') {
+        activeData.systemSettings.mailConfig.senderEmail = 'contacto@plazado.com';
+      }
+      if (!activeData.systemSettings.mailConfig.smtpUser || activeData.systemSettings.mailConfig.smtpUser.toLowerCase() === 'luiss.jimeness@gmail.com') {
+        activeData.systemSettings.mailConfig.smtpUser = 'contacto@plazado.com';
+      }
+      activeData.systemSettings.mailConfig.senderName = activeData.systemSettings.mailConfig.senderName || 'PlazaDO.com - Marketplace Dominicano';
     }
 
     // Ensure financial structure on all store balances
@@ -2653,6 +2660,153 @@ class GlobalDatabase {
     return {
       deletedCount: nonAdminUsers.length,
       remainingAdmins
+    };
+  }
+
+  // --- USER EMAIL VERIFICATION & SUPPORT SYSTEM ---
+  public getUserByEmail(email: string): User | undefined {
+    const clean = (email || '').trim().toLowerCase();
+    return this.memoryData.users.find(u => u.email.toLowerCase() === clean);
+  }
+
+  public setUserVerification(emailOrId: string, verification: UserVerificationInfo): boolean {
+    const clean = emailOrId.trim().toLowerCase();
+    const user = this.memoryData.users.find(u => u.id === emailOrId || u.email.toLowerCase() === clean);
+    if (!user) return false;
+    user.verification = verification;
+    user.isEmailVerified = verification.isVerified;
+    this.commit();
+    return true;
+  }
+
+  public getVerificationsList(): Array<{
+    id: string;
+    name: string;
+    email: string;
+    accountType: 'CUSTOMER' | 'STORE';
+    storeName?: string;
+    storeId?: string;
+    registeredAt: string;
+    isEmailVerified: boolean;
+    verificationStatus: 'PENDING' | 'VERIFIED' | 'EXPIRED';
+    code?: string;
+    codeExpiresAt?: number;
+    attempts: number;
+    resendCount: number;
+    lastSentAt: number;
+  }> {
+    const storesMap = new Map(this.memoryData.stores.map(s => [s.id, s]));
+    return this.memoryData.users.map(u => {
+      const isStore = u.role === 'STORE_OWNER' || !!u.storeId;
+      const store = u.storeId ? storesMap.get(u.storeId) : undefined;
+      const v = u.verification;
+      const isVerified = u.isEmailVerified === true || v?.isVerified === true;
+      let status: 'PENDING' | 'VERIFIED' | 'EXPIRED' = 'PENDING';
+      if (isVerified) {
+        status = 'VERIFIED';
+      } else if (v && Date.now() > v.codeExpiresAt) {
+        status = 'EXPIRED';
+      }
+
+      return {
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        accountType: (isStore ? 'STORE' : 'CUSTOMER') as 'CUSTOMER' | 'STORE',
+        storeName: store?.name || v?.storeName,
+        storeId: u.storeId,
+        registeredAt: u.createdAt,
+        isEmailVerified: isVerified,
+        verificationStatus: status,
+        code: v?.code,
+        codeExpiresAt: v?.codeExpiresAt,
+        attempts: v?.attempts || 0,
+        resendCount: v?.resendCount || 0,
+        lastSentAt: v?.lastSentAt || new Date(u.createdAt).getTime()
+      };
+    }).sort((a, b) => new Date(b.registeredAt).getTime() - new Date(a.registeredAt).getTime());
+  }
+
+  public manualVerifyUser(email: string, adminEmail: string, reason?: string): { success: boolean; message: string; user?: User } {
+    const clean = email.trim().toLowerCase();
+    const user = this.memoryData.users.find(u => u.email.toLowerCase() === clean);
+    if (!user) return { success: false, message: 'Usuario no encontrado' };
+
+    user.isEmailVerified = true;
+    if (user.verification) {
+      user.verification.isVerified = true;
+      user.verification.verifiedAt = new Date().toISOString();
+    } else {
+      user.verification = {
+        code: 'MANUAL',
+        codeExpiresAt: Date.now() + 86400000,
+        attempts: 0,
+        lastSentAt: Date.now(),
+        isVerified: true,
+        verifiedAt: new Date().toISOString(),
+        resendCount: 0,
+        accountType: user.role === 'STORE_OWNER' ? 'STORE' : 'CUSTOMER'
+      };
+    }
+
+    this.addAuditLog(
+      'ADMIN_MANUAL_VERIFICATION_APPROVED',
+      user.id,
+      'PENDING',
+      'VERIFIED_BY_ADMIN',
+      { id: 'super-admin', name: adminEmail, role: 'SUPER_ADMIN' }
+    );
+    this.commit();
+
+    return {
+      success: true,
+      message: `Cuenta de ${user.name} (${user.email}) verificada manualmente con éxito.`,
+      user
+    };
+  }
+
+  public regenerateUserVerificationCode(email: string, adminEmail: string): { 
+    success: boolean; 
+    message: string; 
+    code?: string; 
+    expiresAt?: number; 
+    user?: User 
+  } {
+    const clean = email.trim().toLowerCase();
+    const user = this.memoryData.users.find(u => u.email.toLowerCase() === clean);
+    if (!user) return { success: false, message: 'Usuario no encontrado' };
+
+    // Generate cryptographically secure 6-digit code
+    const newCode = crypto.randomInt(100000, 1000000).toString();
+    const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
+
+    user.isEmailVerified = false;
+    user.verification = {
+      code: newCode,
+      codeExpiresAt: expiresAt,
+      attempts: 0,
+      lastSentAt: Date.now(),
+      isVerified: false,
+      resendCount: (user.verification?.resendCount || 0) + 1,
+      accountType: user.role === 'STORE_OWNER' ? 'STORE' : 'CUSTOMER',
+      storeName: user.verification?.storeName
+    };
+
+    this.addAuditLog(
+      'ADMIN_REGENERATE_VERIFICATION_CODE',
+      user.id,
+      user.email,
+      `Nuevo código generado por Super Admin (${adminEmail}): ${newCode} (Vence en 15m)`,
+      { id: 'super-admin', name: adminEmail, role: 'SUPER_ADMIN' }
+    );
+    this.commit();
+
+    return {
+      success: true,
+      message: `Nuevo código generado para ${user.name}: ${newCode}`,
+      code: newCode,
+      expiresAt,
+      user
     };
   }
 

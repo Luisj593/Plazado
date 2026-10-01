@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { DOMINICAN_PROVINCES } from '../../data/initialData';
 import { BiometricKycVerification, BiometricKycData } from './BiometricKycVerification';
@@ -19,7 +19,9 @@ import {
   Info,
   AlertCircle,
   ShoppingCart,
-  ScanFace
+  ScanFace,
+  MailCheck,
+  RefreshCw
 } from 'lucide-react';
 
 export const AuthModal: React.FC = () => {
@@ -31,6 +33,10 @@ export const AuthModal: React.FC = () => {
     login, 
     registerCustomer, 
     registerStoreAccount,
+    pendingVerificationEmail,
+    setPendingVerificationEmail,
+    verifyCode,
+    resendVerificationCode,
     categories,
     stores,
     authPurchaseNotice
@@ -41,6 +47,15 @@ export const AuthModal: React.FC = () => {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+
+  // Email verification state
+  const [verifyDigits, setVerifyDigits] = useState(['', '', '', '', '', '']);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifyError, setVerifyError] = useState('');
+  const [verifySuccessNotice, setVerifySuccessNotice] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(60);
+  const [isResending, setIsResending] = useState(false);
+  const otpInputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
   // Customer registration state
   const [custName, setCustName] = useState('');
@@ -83,6 +98,27 @@ export const AuthModal: React.FC = () => {
     setStoreError('');
   }, [authModalMode, isAuthModalOpen]);
 
+  // Countdown timer for resend
+  useEffect(() => {
+    if (isAuthModalOpen && resendCooldown > 0 && authModalMode === 'verify_email') {
+      const timer = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCooldown, authModalMode, isAuthModalOpen]);
+
+  // When switching to verify_email, reset fields and autofocus first box
+  useEffect(() => {
+    if (isAuthModalOpen && authModalMode === 'verify_email') {
+      setVerifyDigits(['', '', '', '', '', '']);
+      setVerifyError('');
+      setVerifySuccessNotice('');
+      setResendCooldown(60);
+      setTimeout(() => {
+        otpInputsRef.current[0]?.focus();
+      }, 100);
+    }
+  }, [authModalMode, isAuthModalOpen]);
+
   if (!isAuthModalOpen) return null;
 
   // Unified Login Handler
@@ -102,7 +138,90 @@ export const AuthModal: React.FC = () => {
     }
   };
 
-  // Customer Register Handler - Step 1 Validate Form & Open KYC
+  const handleDigitChange = (index: number, value: string) => {
+    const digit = value.replace(/\D/g, '').slice(-1);
+    const newCode = [...verifyDigits];
+    newCode[index] = digit;
+    setVerifyDigits(newCode);
+
+    if (digit && index < 5) {
+      otpInputsRef.current[index + 1]?.focus();
+    }
+  };
+
+  const handleDigitKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !verifyDigits[index] && index > 0) {
+      otpInputsRef.current[index - 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const paste = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (!paste) return;
+    const newCode = [...verifyDigits];
+    for (let i = 0; i < paste.length; i++) {
+      newCode[i] = paste[i];
+    }
+    setVerifyDigits(newCode);
+    if (paste.length === 6) {
+      otpInputsRef.current[5]?.focus();
+    }
+  };
+
+  const handleVerificationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setVerifyError('');
+    setVerifySuccessNotice('');
+    const fullCode = verifyDigits.join('');
+    if (fullCode.length < 6) {
+      setVerifyError('Por favor introduce el código de 6 dígitos completo.');
+      return;
+    }
+
+    const targetEmail = pendingVerificationEmail || custEmail || storeEmail;
+    if (!targetEmail) {
+      setVerifyError('No se encontró el correo electrónico para verificar.');
+      return;
+    }
+
+    setVerifyLoading(true);
+    try {
+      const res = await verifyCode(targetEmail, fullCode);
+      if (!res.success) {
+        setVerifyError(res.message || 'Código de verificación incorrecto.');
+      }
+    } catch (err: any) {
+      setVerifyError(err.message || 'Error validando código.');
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (resendCooldown > 0 || isResending) return;
+    const targetEmail = pendingVerificationEmail || custEmail || storeEmail;
+    if (!targetEmail) return;
+
+    setIsResending(true);
+    setVerifyError('');
+    setVerifySuccessNotice('');
+    try {
+      const res = await resendVerificationCode(targetEmail);
+      if (res.success) {
+        setVerifySuccessNotice('Nuevo código enviado desde contacto@plazado.com. Revisa tu bandeja de entrada o spam.');
+        setResendCooldown(60);
+      } else {
+        setVerifyError(res.message || 'No se pudo reenviar el código.');
+      }
+    } catch (err: any) {
+      setVerifyError(err.message || 'Error reenviando código');
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  // Customer Register Handler - Step 1: Register directly & automatically dispatch email code
   const handleCustomerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setCustError('');
@@ -132,11 +251,28 @@ export const AuthModal: React.FC = () => {
       return;
     }
 
-    // Proceed to Step 2: Biometric KYC (Cédula + Selfie) and Email confirmation code
-    setIsCustomerKycOpen(true);
+    setCustLoading(true);
+    try {
+      const res = await registerCustomer({
+        name: custName,
+        lastName: custLastName,
+        email: custEmail,
+        phone: custPhone,
+        password: custPass,
+        confirmPassword: custPassConfirm,
+        acceptedTerms: custTerms
+      });
+      if (!res.success) {
+        setCustError(res.message || 'Error al registrar cliente');
+      }
+    } catch (err: any) {
+      setCustError(err.message || 'Ocurrió un error al registrar cliente');
+    } finally {
+      setCustLoading(false);
+    }
   };
 
-  // Complete Customer Registration with Biometric KYC & OTP code
+  // Complete Customer Registration with Biometric KYC & OTP code (if KYC was triggered)
   const handleCompleteCustomerKyc = async (kycData: BiometricKycData) => {
     setCustError('');
     setCustLoading(true);
@@ -167,7 +303,7 @@ export const AuthModal: React.FC = () => {
     }
   };
 
-  // Store Register Handler - Step 1 Validate Form & Open KYC
+  // Store Register Handler - Step 1: Register directly & automatically dispatch email code
   const handleStoreSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setStoreError('');
@@ -205,8 +341,37 @@ export const AuthModal: React.FC = () => {
       return;
     }
 
-    // Proceed to Step 2: Biometric KYC (Cédula del Titular + Selfie) and Email confirmation code
-    setIsStoreKycOpen(true);
+    setStoreLoading(true);
+    try {
+      const shippingMethods: string[] = [];
+      if (deliveryHome) shippingMethods.push('home_delivery');
+      if (deliveryPickup) shippingMethods.push('store_pickup');
+
+      const res = await registerStoreAccount({
+        storeName,
+        ownerName,
+        email: storeEmail,
+        phone: storePhone,
+        password: storePass,
+        confirmPassword: storePassConfirm,
+        province,
+        municipality,
+        address,
+        categoryId,
+        description,
+        logo: logo.trim() || undefined,
+        shippingMethods,
+        shippingRate,
+        acceptedTerms: storeTerms
+      });
+      if (!res.success) {
+        setStoreError(res.message || 'Error al registrar tienda');
+      }
+    } catch (err: any) {
+      setStoreError(err.message || 'Error al registrar tienda');
+    } finally {
+      setStoreLoading(false);
+    }
   };
 
   // Complete Store Registration with Biometric KYC & OTP code
@@ -481,6 +646,136 @@ export const AuthModal: React.FC = () => {
                     Crear cuenta
                   </button>
                 </p>
+              </div>
+            </div>
+          )}
+
+          {/* VERIFICACIÓN OFICIAL DE CORREO ELECTRÓNICO CON contacto@plazado.com */}
+          {authModalMode === 'verify_email' && (
+            <div className="space-y-5">
+              <div className="text-center space-y-2">
+                <div className="w-14 h-14 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center mx-auto shadow-xs border border-red-200">
+                  <MailCheck className="w-7 h-7" />
+                </div>
+                <h2 className="text-lg sm:text-xl font-extrabold text-stone-900">
+                  Introduce tu Código de Verificación
+                </h2>
+                <p className="text-stone-600 text-xs max-w-sm mx-auto leading-relaxed">
+                  Hemos enviado automáticamente un código de 6 dígitos a:
+                </p>
+                <div className="inline-block bg-stone-100 px-3.5 py-1 rounded-full text-xs font-mono font-bold text-stone-900 border border-stone-300">
+                  {pendingVerificationEmail || custEmail || storeEmail || 'tu correo'}
+                </div>
+                <p className="text-[11px] text-stone-500 font-medium">
+                  Remitente oficial: <strong className="text-red-600">contacto@plazado.com</strong>
+                </p>
+              </div>
+
+              {verifyError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{verifyError}</span>
+                </div>
+              )}
+
+              {verifySuccessNotice && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                  <span>{verifySuccessNotice}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleVerificationSubmit} className="space-y-4">
+                {/* 6 Digit Inputs */}
+                <div className="flex justify-center gap-2 sm:gap-3 my-2" onPaste={handleOtpPaste}>
+                  {verifyDigits.map((digit, idx) => (
+                    <input
+                      key={idx}
+                      ref={el => { otpInputsRef.current[idx] = el; }}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={digit}
+                      onChange={(e) => handleDigitChange(idx, e.target.value)}
+                      onKeyDown={(e) => handleDigitKeyDown(idx, e)}
+                      className={`w-11 h-13 text-center text-xl font-mono font-black rounded-xl border-2 transition-all outline-none ${
+                        digit 
+                          ? 'border-red-600 bg-red-50/40 text-stone-950 ring-2 ring-red-100' 
+                          : 'border-stone-300 bg-stone-50 text-stone-900 focus:border-red-500 focus:bg-white'
+                      }`}
+                    />
+                  ))}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={verifyLoading || verifyDigits.join('').length < 6}
+                  className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors text-xs disabled:opacity-50 flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                >
+                  {verifyLoading ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4" />
+                  )}
+                  <span>{verifyLoading ? 'Validando con el servidor...' : 'VERIFICAR CÓDIGO'}</span>
+                </button>
+              </form>
+
+              {/* Mensaje oficial cuando no llegue el correo */}
+              <div className="bg-stone-50 rounded-2xl p-4 border border-stone-200 space-y-3 text-xs text-stone-700">
+                <div className="font-bold text-stone-900 flex items-center gap-1.5 text-xs">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>¿No recibiste tu código de verificación?</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-stone-600">
+                  Revisa primero tu carpeta de correo no deseado o Spam.
+                </p>
+                <p className="text-[11px] leading-relaxed text-stone-600">
+                  Puedes solicitar el reenvío del código. Si aun así no lo recibes, comunícate con nuestro equipo de soporte a través de:
+                </p>
+                <div className="bg-white p-2.5 rounded-xl border border-stone-200 flex items-center justify-between gap-2">
+                  <span className="font-bold text-stone-900 text-xs">contacto@plazado.com</span>
+                  <a 
+                    href="mailto:contacto@plazado.com?subject=Soporte%20C%C3%B3digo%20de%20Verificaci%C3%B3n" 
+                    className="text-[10px] font-bold text-red-600 hover:underline px-2.5 py-1 rounded bg-red-50 border border-red-200"
+                  >
+                    Escribir a soporte
+                  </a>
+                </div>
+                <p className="text-[11px] text-stone-500 italic">
+                  Nuestro equipo podrá ayudarte a completar la verificación de tu cuenta.
+                </p>
+
+                {/* Botón: REENVIAR CÓDIGO con tiempo de espera */}
+                <div className="pt-2 flex flex-col sm:flex-row items-center gap-2 justify-between">
+                  <button
+                    type="button"
+                    disabled={resendCooldown > 0 || isResending}
+                    onClick={handleResendCode}
+                    className={`w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 border ${
+                      resendCooldown > 0 || isResending
+                        ? 'bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed'
+                        : 'bg-white hover:bg-stone-100 text-stone-900 border-stone-300 hover:border-stone-400 shadow-2xs cursor-pointer'
+                    }`}
+                  >
+                    {isResending ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-stone-600" />
+                    ) : (
+                      <Mail className="w-3.5 h-3.5 text-red-600" />
+                    )}
+                    <span>
+                      {resendCooldown > 0 ? `REENVIAR CÓDIGO (${resendCooldown}s)` : 'REENVIAR CÓDIGO'}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => openAuthModal('register_select')}
+                    className="text-[11px] text-stone-500 hover:text-stone-800 underline font-medium"
+                  >
+                    Cambiar correo o volver
+                  </button>
+                </div>
               </div>
             </div>
           )}

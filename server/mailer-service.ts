@@ -11,11 +11,11 @@ export interface MailConfig {
 }
 
 export const DEFAULT_MAIL_CONFIG: MailConfig = {
-  senderEmail: 'Luiss.jimeness@gmail.com',
-  senderName: 'PlazaDO Marketplace Dominicano',
+  senderEmail: process.env.MAIL_SENDER_EMAIL || 'contacto@plazado.com',
+  senderName: process.env.MAIL_SENDER_NAME || 'PlazaDO.com - Marketplace Dominicano',
   smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
   smtpPort: Number(process.env.SMTP_PORT) || 465,
-  smtpUser: process.env.SMTP_USER || 'Luiss.jimeness@gmail.com',
+  smtpUser: process.env.SMTP_USER || process.env.MAIL_SENDER_EMAIL || 'contacto@plazado.com',
   smtpPass: process.env.SMTP_PASS || '',
   useSsl: true,
 };
@@ -34,7 +34,7 @@ export function cleanAppPassword(pass?: string): string {
 function createTransporter(config: MailConfig = DEFAULT_MAIL_CONFIG) {
   const host = config.smtpHost || 'smtp.gmail.com';
   const port = Number(config.smtpPort) || 465;
-  const user = (config.smtpUser || config.senderEmail || 'Luiss.jimeness@gmail.com').trim();
+  const user = (config.smtpUser || config.senderEmail || 'contacto@plazado.com').trim();
   const rawPass = config.smtpPass || process.env.SMTP_PASS || '';
   const pass = cleanAppPassword(rawPass);
 
@@ -91,7 +91,7 @@ export async function verifySmtpConnection(config: MailConfig = DEFAULT_MAIL_CON
 }
 
 /**
- * Dispatches an email with the 6-digit confirmation code from Luiss.jimeness@gmail.com
+ * Dispatches an email with the 6-digit confirmation code from contacto@plazado.com
  */
 export async function sendRegistrationOtpEmail(
   recipientEmail: string,
@@ -178,7 +178,7 @@ export async function sendRegistrationOtpEmail(
               </div>
 
               <p style="margin: 0 0 12px 0; font-size: 12px; line-height: 1.5; color: #78716c;">
-                Si tú no solicitaste este código o no estás creando una cuenta en PlazaDO, puedes ignorar este mensaje de forma segura. Nadie de nuestro equipo te pedirá este código por teléfono o WhatsApp.
+                Si tú no solicitaste este código o no estás creando una cuenta en PlazaDO, puedes ignorar este mensaje de forma segura. Si tienes alguna duda o necesitas asistencia, escríbenos a <strong style="color: #dc2626;">contacto@plazado.com</strong>.
               </p>
             </td>
           </tr>
@@ -187,8 +187,8 @@ export async function sendRegistrationOtpEmail(
           <tr>
             <td style="background-color: #fafaf9; padding: 24px 32px; border-top: 1px solid #e7e5e4; text-align: center;">
               <p style="margin: 0 0 8px 0; font-size: 11px; color: #78716c;">
-                Correo disparado por el sistema central de autenticación de PlazaDO desde:<br />
-                <strong style="color: #1c1917;">${config.senderEmail}</strong>
+                Correo oficial de autenticación y seguridad enviado desde:<br />
+                <strong style="color: #1c1917;">contacto@plazado.com</strong>
               </p>
               <p style="margin: 0; font-size: 10px; color: #a8a29e;">
                 © 2026 Plazado.com • Santo Domingo, República Dominicana • Todos los derechos reservados
@@ -215,9 +215,10 @@ Para validar que tu correo (${recipientEmail}) es verdadero y completar la creac
 ▶▶▶   ${otpCode}   ◀◀◀
 
 Este código es de un solo uso y vence en 15 minutos.
-Correo enviado desde: ${config.senderEmail}
+Correo oficial de seguridad enviado desde: contacto@plazado.com
 
-Si no has solicitado este registro, puedes ignorar este mensaje.
+¿No recibiste tu código a tiempo? Comunícate con nuestro equipo de soporte en: contacto@plazado.com
+
 © 2026 Plazado.com República Dominicana.
   `;
 

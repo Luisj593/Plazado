@@ -55,6 +55,18 @@ export interface KycVerificationData {
   facialMatchPassed: boolean;
 }
 
+export interface UserVerificationInfo {
+  code: string;
+  codeExpiresAt: number;
+  attempts: number;
+  lastSentAt: number;
+  isVerified: boolean;
+  verifiedAt?: string;
+  resendCount: number;
+  accountType: 'CUSTOMER' | 'STORE';
+  storeName?: string;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -69,6 +81,7 @@ export interface User {
   kycData?: KycVerificationData;
   isKycVerified?: boolean;
   isEmailVerified?: boolean;
+  verification?: UserVerificationInfo;
   createdAt: string;
 }
 
@@ -736,6 +749,7 @@ export interface AdMetricEvent {
 export type AdminTab = 
   | 'metrics' 
   | 'solicitudes' 
+  | 'verifications'
   | 'stores' 
   | 'orders' 
   | 'products' 
