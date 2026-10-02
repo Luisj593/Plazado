@@ -82,6 +82,13 @@ export interface User {
   isKycVerified?: boolean;
   isEmailVerified?: boolean;
   verification?: UserVerificationInfo;
+  isApprovedByAdmin?: boolean;
+  adminApprovalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  approvedAt?: string;
+  approvedBy?: string;
+  rejectedAt?: string;
+  rejectedBy?: string;
+  rejectionReason?: string;
   createdAt: string;
 }
 

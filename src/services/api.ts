@@ -297,11 +297,35 @@ export const api = {
     return request('/api/auth/verify-code', { method: 'POST', body: JSON.stringify({ email, code }) });
   },
 
-  // Super Admin Verification Operations
+  async submitKyc(data: {
+    userId?: string;
+    cedulaNumber: string;
+    cedulaFrontUrl: string;
+    selfieUrl?: string;
+    biometricScore?: number;
+  }): Promise<{ success: boolean; message: string; user?: User; version?: number }> {
+    return request('/api/user/kyc', { method: 'POST', body: JSON.stringify(data) });
+  },
+
+  // Super Admin Verification & Identity Validation Operations
   async getVerifications(): Promise<{ success: boolean; verifications: Array<{
     id: string;
     name: string;
     email: string;
+    phone?: string;
+    avatar?: string;
+    cedulaNumber?: string;
+    cedulaFrontUrl?: string;
+    selfieUrl?: string;
+    biometricScore?: number;
+    biometricStatus?: 'VERIFIED' | 'PENDING' | 'REJECTED';
+    isKycVerified?: boolean;
+    adminApprovalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
+    approvedAt?: string;
+    approvedBy?: string;
+    rejectedAt?: string;
+    rejectedBy?: string;
+    rejectionReason?: string;
     accountType: 'CUSTOMER' | 'STORE';
     storeName?: string;
     storeId?: string;
@@ -315,6 +339,18 @@ export const api = {
     lastSentAt: number;
   }>; message?: string }> {
     return request('/api/admin/verifications');
+  },
+
+  async adminApproveUser(userIdOrEmail: string): Promise<{ success: boolean; message: string; user?: User; version?: number }> {
+    return request('/api/admin/approve-user', { method: 'POST', body: JSON.stringify({ userId: userIdOrEmail, email: userIdOrEmail }) });
+  },
+
+  async adminRejectUser(userIdOrEmail: string, reason: string): Promise<{ success: boolean; message: string; user?: User; version?: number }> {
+    return request('/api/admin/reject-user', { method: 'POST', body: JSON.stringify({ userId: userIdOrEmail, email: userIdOrEmail, reason }) });
+  },
+
+  async createSuperAdmin(data: { name: string; email: string; phone: string; password: string }): Promise<{ success: boolean; message: string; user?: User; version?: number }> {
+    return request('/api/admin/create-super-admin', { method: 'POST', body: JSON.stringify(data) });
   },
 
   async adminConsultVerificationCode(email: string): Promise<{
@@ -371,6 +407,10 @@ export const api = {
 
   async updateUserPassword(id: string, newPassword: string, currentPassword?: string): Promise<{ success: boolean; message?: string; user?: User; version: number }> {
     return request(`/api/users/${id}/password`, { method: 'POST', body: JSON.stringify({ newPassword, currentPassword }) });
+  },
+
+  async changePassword(id: string, data: { newPassword: string; currentPassword?: string }): Promise<{ success: boolean; message?: string; user?: User; version: number }> {
+    return this.updateUserPassword(id, data.newPassword, data.currentPassword);
   },
 
   async deleteUser(id: string): Promise<{ success: boolean; version: number }> {

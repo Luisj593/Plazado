@@ -288,6 +288,13 @@ interface AppContextType {
   notification: { message: string; type: 'success' | 'error' | 'info' } | null;
   showNotification: (message: string, type?: 'success' | 'error' | 'info') => void;
 
+  // Super Admin Direct Store Management / Impersonation & Admin Creation
+  adminImpersonatedStoreId: string | null;
+  adminImpersonateStore: (storeId: string) => void;
+  adminExitImpersonation: () => void;
+  createSuperAdminUser: (data: { name: string; email: string; phone: string; password: string }) => Promise<{ success: boolean; message: string }>;
+  submitKycVerification: (data: { cedulaNumber: string; cedulaFrontUrl: string; selfieUrl?: string; biometricScore?: number }) => Promise<{ success: boolean; message: string }>;
+
   // Theme (Dark / Light mode)
   theme: 'light' | 'dark';
   toggleTheme: () => void;
@@ -2831,6 +2838,65 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const [adminImpersonatedStoreId, setAdminImpersonatedStoreId] = useState<string | null>(null);
+
+  const adminImpersonateStore = (storeId: string) => {
+    setAdminImpersonatedStoreId(storeId);
+    const targetStore = stores.find(s => s.id === storeId);
+    setCurrentView('store_dashboard');
+    showNotification(`Ingresando a administrar tienda: ${targetStore?.name || storeId}`, 'info');
+  };
+
+  const adminExitImpersonation = () => {
+    setAdminImpersonatedStoreId(null);
+    setCurrentView('admin_dashboard');
+    showNotification('Has regresado al Panel General Super Admin', 'info');
+  };
+
+  const createSuperAdminUser = async (data: { name: string; email: string; phone: string; password: string }) => {
+    try {
+      const res = await api.createSuperAdmin(data);
+      if (res.success) {
+        showNotification(res.message, 'success');
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return { success: true, message: res.message };
+      } else {
+        showNotification(res.message, 'error');
+        return { success: false, message: res.message };
+      }
+    } catch (err: any) {
+      const msg = err.message || 'Error creando Super Administrador';
+      showNotification(msg, 'error');
+      return { success: false, message: msg };
+    }
+  };
+
+  const submitKycVerification = async (data: { cedulaNumber: string; cedulaFrontUrl: string; selfieUrl?: string; biometricScore?: number }) => {
+    try {
+      const res = await api.submitKyc({
+        userId: currentUser?.id,
+        ...data
+      });
+      if (res.success) {
+        showNotification(res.message, 'success');
+        if (res.user && currentUser) {
+          setCurrentUser(res.user);
+        }
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return { success: true, message: res.message };
+      } else {
+        showNotification(res.message || 'Error enviando documentos', 'error');
+        return { success: false, message: res.message || 'Error' };
+      }
+    } catch (err: any) {
+      const msg = err.message || 'Error de conexión enviando documentos';
+      showNotification(msg, 'error');
+      return { success: false, message: msg };
+    }
+  };
+
   const handleSetCurrentView = (view: AppView) => {
     if (view === 'admin_dashboard' && (!currentUser || currentUser.role !== 'SUPER_ADMIN')) {
       showNotification('Acceso Denegado: Solo el Super Administrador puede acceder al Panel General', 'error');
@@ -3034,6 +3100,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       notification,
       showNotification,
+
+      adminImpersonatedStoreId,
+      adminImpersonateStore,
+      adminExitImpersonation,
+      createSuperAdminUser,
+      submitKycVerification,
 
       theme,
       toggleTheme

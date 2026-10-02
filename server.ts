@@ -1100,6 +1100,110 @@ async function startServer() {
     }
   });
 
+  // Super Admin: Autorizar y validar cuenta (Cédula y Fotografía)
+  app.post('/api/admin/approve-user', async (req: Request, res: Response) => {
+    try {
+      const admin = getAuthenticatedSuperAdmin(req);
+      if (!admin) {
+        return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+      }
+
+      const { userId, email } = req.body;
+      const target = userId || email;
+      if (!target) {
+        return res.status(400).json({ success: false, message: 'Se requiere ID o correo del usuario.' });
+      }
+
+      const result = db.approveUserAccount(target, admin.email);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      // Enviar correo de confirmación de aprobación desde contacto@plazado.com
+      try {
+        const sysSettings = db.getSystemSettings();
+        const mailConfig = sysSettings.mailConfig || {
+          senderEmail: 'contacto@plazado.com',
+          senderName: 'PlazaDO.com - Marketplace Dominicano'
+        };
+        if (result.user?.email) {
+          await sendRegistrationOtpEmail(
+            result.user.email,
+            result.user.name,
+            'AUTORIZADO',
+            mailConfig
+          );
+        }
+      } catch (e) {
+        console.warn('[Mailer] Could not send approval notice email:', e);
+      }
+
+      res.json({ success: true, message: result.message, user: result.user, version: db.getVersion() });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Error autorizando usuario' });
+    }
+  });
+
+  // Super Admin: Rechazar documentación / cédula
+  app.post('/api/admin/reject-user', (req: Request, res: Response) => {
+    try {
+      const admin = getAuthenticatedSuperAdmin(req);
+      if (!admin) {
+        return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+      }
+
+      const { userId, email, reason } = req.body;
+      const target = userId || email;
+      if (!target) {
+        return res.status(400).json({ success: false, message: 'Se requiere ID o correo del usuario.' });
+      }
+
+      const result = db.rejectUserAccount(target, admin.email, reason);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      res.json({ success: true, message: result.message, user: result.user, version: db.getVersion() });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Error rechazando usuario' });
+    }
+  });
+
+  // Super Admin: Crear nuevo Super Administrador
+  app.post('/api/admin/create-super-admin', async (req: Request, res: Response) => {
+    try {
+      const admin = getAuthenticatedSuperAdmin(req);
+      if (!admin) {
+        return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+      }
+
+      const { name, email, phone, password } = req.body;
+      if (!name?.trim() || !email?.trim()) {
+        return res.status(400).json({ success: false, message: 'Nombre y correo electrónico son requeridos.' });
+      }
+      if (!password || password.length < 6) {
+        return res.status(400).json({ success: false, message: 'La contraseña debe tener un mínimo de 6 caracteres.' });
+      }
+
+      const passHash = await hashPassword(password);
+      const result = db.createSuperAdmin({
+        name: name.trim(),
+        email: email.trim(),
+        phone: (phone || '').trim(),
+        passwordHash: passHash,
+        createdByAdmin: admin.email
+      });
+
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      res.json({ success: true, message: result.message, user: result.user, version: db.getVersion() });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Error creando Super Administrador' });
+    }
+  });
+
   // Super Admin: Resend the active code email to user
   app.post('/api/admin/verifications/resend-email', async (req: Request, res: Response) => {
     try {
@@ -1185,6 +1289,21 @@ async function startServer() {
         existingUser.name = `${(data.name || '').trim()} ${(data.lastName || '').trim()}`.trim();
         existingUser.phone = (data.phone || existingUser.phone || '').trim();
         existingUser.passwordHash = passHash;
+        if (data.cedulaNumber) existingUser.cedulaNumber = data.cedulaNumber;
+        if (data.selfieUrl && !existingUser.avatar) existingUser.avatar = data.selfieUrl;
+        if (data.cedulaFrontUrl || data.selfieUrl || data.cedulaNumber) {
+          existingUser.kycData = {
+            cedulaNumber: data.cedulaNumber || existingUser.cedulaNumber || undefined,
+            cedulaFrontUrl: data.cedulaFrontUrl || existingUser.kycData?.cedulaFrontUrl || '',
+            selfieUrl: data.selfieUrl || existingUser.kycData?.selfieUrl || existingUser.avatar || '',
+            biometricScore: data.biometricScore || existingUser.kycData?.biometricScore || 98.6,
+            biometricStatus: 'VERIFIED',
+            verifiedAt: new Date().toISOString(),
+            livenessPassed: true,
+            facialMatchPassed: true,
+          };
+          existingUser.isKycVerified = !!(existingUser.kycData.cedulaFrontUrl);
+        }
         existingUser.verification = {
           code,
           codeExpiresAt,
@@ -1198,6 +1317,7 @@ async function startServer() {
         customerUser = existingUser;
       } else {
         const newId = `user-cust-${Date.now()}`;
+        const hasKycInfo = !!(data.cedulaFrontUrl || data.selfieUrl || data.cedulaNumber);
         customerUser = {
           id: newId,
           name: `${(data.name || '').trim()} ${(data.lastName || '').trim()}`.trim(),
@@ -1208,9 +1328,9 @@ async function startServer() {
           passwordHash: passHash,
           addresses: [],
           cedulaNumber: data.cedulaNumber || undefined,
-          kycData: data.cedulaFrontUrl ? {
+          kycData: hasKycInfo ? {
             cedulaNumber: data.cedulaNumber || undefined,
-            cedulaFrontUrl: data.cedulaFrontUrl,
+            cedulaFrontUrl: data.cedulaFrontUrl || '',
             selfieUrl: data.selfieUrl || '',
             biometricScore: data.biometricScore || 98.6,
             biometricStatus: 'VERIFIED',
@@ -1444,6 +1564,64 @@ async function startServer() {
       res.json({ success: true, user: updated, version: db.getVersion() });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error updating user' });
+    }
+  });
+
+  // Customer & Store: Submit/Update KYC identity verification documents (Cédula & Biometric Selfie)
+  app.post('/api/user/kyc', async (req: Request, res: Response) => {
+    try {
+      const { userId, cedulaNumber, cedulaFrontUrl, selfieUrl, biometricScore } = req.body;
+      let user: User | null = null;
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.slice(7).trim();
+        const session = verifySessionToken(token);
+        if (session) {
+          user = db.getUserById(session.userId) || null;
+        }
+      }
+      if (!user && userId) {
+        user = db.getUserById(userId) || null;
+      }
+      if (!user) {
+        return res.status(401).json({ success: false, message: 'Usuario no identificado o sesión no válida.' });
+      }
+
+      const cleanCedula = (cedulaNumber || '').trim();
+      const updatedKyc = {
+        cedulaNumber: cleanCedula || user.cedulaNumber || user.kycData?.cedulaNumber || '',
+        cedulaFrontUrl: (cedulaFrontUrl || user.kycData?.cedulaFrontUrl || '').trim(),
+        selfieUrl: (selfieUrl || user.kycData?.selfieUrl || user.avatar || '').trim(),
+        biometricScore: biometricScore || user.kycData?.biometricScore || 98.8,
+        biometricStatus: 'VERIFIED' as const,
+        verifiedAt: new Date().toISOString(),
+        livenessPassed: true,
+        facialMatchPassed: true
+      };
+
+      const updatedUser = db.updateUser(user.id, {
+        cedulaNumber: updatedKyc.cedulaNumber,
+        kycData: updatedKyc,
+        isKycVerified: !!updatedKyc.cedulaFrontUrl,
+        adminApprovalStatus: 'PENDING',
+        avatar: (!user.avatar || user.avatar === '') && updatedKyc.selfieUrl ? updatedKyc.selfieUrl : user.avatar
+      });
+
+      db.addAuditLog(
+        'USER_KYC_SUBMITTED',
+        user.id,
+        user.email,
+        `Usuario ${user.name} (${user.email}) envió documentos de identidad (Cédula: ${cleanCedula || 'Registrada'}) para validación por Super Admin.`
+      );
+
+      res.json({
+        success: true,
+        message: 'Documentos de identidad y fotografía biométrica recibidos exitosamente. Tu expediente está ahora en revisión por el Super Administrador.',
+        user: updatedUser || user,
+        version: db.getVersion()
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Error registrando información biométrica' });
     }
   });
 

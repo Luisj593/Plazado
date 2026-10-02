@@ -42,7 +42,9 @@ import {
   KeyRound,
   Shield,
   ExternalLink,
-  Warehouse
+  Warehouse,
+  ArrowLeft,
+  LogIn
 } from 'lucide-react';
 import { Dispute, Order, OrderStatus, Product, ProductStatus, Settlement } from '../../types';
 import { DOMINICAN_BANKS } from '../../data/initialData';
@@ -81,7 +83,10 @@ export const StoreDashboard: React.FC = () => {
     confirmOrderByStore,
     rejectOrderByStore,
     deleteMyStore,
-    toggleStorePublish
+    toggleStorePublish,
+    adminImpersonatedStoreId,
+    adminImpersonateStore,
+    adminExitImpersonation
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'chats' | 'products' | 'finances' | 'reports' | 'settings' | 'fulfillment'>('overview');
@@ -93,10 +98,10 @@ export const StoreDashboard: React.FC = () => {
   const defaultStoreId = matchingOwnerStore ? matchingOwnerStore.id : (currentUser?.storeId || (stores.length > 0 ? stores[0].id : ''));
 
   const [adminSelectedStoreId, setAdminSelectedStoreId] = useState<string>(
-    currentUser?.storeId || defaultStoreId
+    adminImpersonatedStoreId || currentUser?.storeId || defaultStoreId
   );
   const effectiveStoreId = isSuperAdmin 
-    ? (adminSelectedStoreId || defaultStoreId) 
+    ? (adminImpersonatedStoreId || adminSelectedStoreId || defaultStoreId) 
     : defaultStoreId;
   const store = stores.find(s => s.id === effectiveStoreId) || matchingOwnerStore;
 
@@ -648,6 +653,60 @@ export const StoreDashboard: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
+      
+      {/* Super Admin Store Management Bar */}
+      {isSuperAdmin && (
+        <div className="mb-6 p-4 bg-gradient-to-r from-stone-900 via-stone-850 to-stone-900 text-white rounded-2xl border border-stone-800 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-red-600 flex items-center justify-center font-black text-white shadow-xs">
+              🛡️
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-extrabold text-xs text-white uppercase tracking-wider">
+                  Acceso Super Admin:
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-red-600/30 border border-red-500/40 text-red-300 text-xs font-bold">
+                  {store?.name || 'Tienda Seleccionada'}
+                </span>
+                <span className="text-[10px] text-stone-400">
+                  (ID: {store?.id})
+                </span>
+              </div>
+              <p className="text-[11px] text-stone-400 mt-0.5">
+                Estás configurando los productos, horarios, métodos de pago, envíos y datos bancarios de esta tienda.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+            <div className="flex items-center gap-1.5 bg-stone-800/80 px-2 py-1 rounded-xl border border-stone-700">
+              <Store className="w-3.5 h-3.5 text-stone-400" />
+              <select
+                value={effectiveStoreId}
+                onChange={(e) => adminImpersonateStore(e.target.value)}
+                className="bg-transparent text-xs font-bold text-white outline-none cursor-pointer pr-2"
+                title="Cambiar a otra tienda"
+              >
+                {stores.map(s => (
+                  <option key={s.id} value={s.id} className="bg-stone-900 text-white">
+                    {s.name} ({s.status})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={adminExitImpersonation}
+              className="px-3.5 py-1.5 bg-white hover:bg-stone-100 text-stone-900 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 text-red-600" />
+              <span>Volver a Panel Super Admin</span>
+            </button>
+          </div>
+        </div>
+      )}
       
       {/* Pending Approval Banner (Alert) */}
       {(store.status === 'PENDING' || store.status === 'IN_REVIEW') && (

@@ -47,7 +47,10 @@ import {
   Plus,
   Upload,
   FolderTree,
-  Sliders
+  Sliders,
+  LogIn,
+  UserPlus,
+  ScanFace
 } from 'lucide-react';
 import { Dispute, Settlement, UserRole, OrderStatus, Store as StoreType, User as UserType, Banner, isStorePubliclyVisible } from '../../types';
 import { StoreProfileModal } from '../common/StoreProfileModal';
@@ -118,8 +121,18 @@ export const AdminDashboard: React.FC = () => {
     updateSystemSettings,
     cleanTestProducts,
     purgeRecordsByType,
-    showNotification
+    showNotification,
+    adminImpersonateStore,
+    createSuperAdminUser
   } = useApp();
+
+  const [createSuperAdminModalOpen, setCreateSuperAdminModalOpen] = useState(false);
+  const [newAdminName, setNewAdminName] = useState('');
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminPhone, setNewAdminPhone] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [newAdminConfirmPassword, setNewAdminConfirmPassword] = useState('');
+  const [creatingAdminLoading, setCreatingAdminLoading] = useState(false);
 
   const activeTab = adminActiveTab;
   const setActiveTab = setAdminActiveTab;
@@ -562,13 +575,13 @@ export const AdminDashboard: React.FC = () => {
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <ShieldCheck className="w-4 h-4" />
-                    <span>Verificación de usuarios</span>
+                    <ScanFace className="w-4 h-4" />
+                    <span>Validación & Cédulas</span>
                   </div>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                     activeTab === 'verifications' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700'
                   }`}>
-                    contacto@
+                    Fotos & KYC
                   </span>
                 </button>
 
@@ -1492,7 +1505,28 @@ export const AdminDashboard: React.FC = () => {
               />
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Quick Store Impersonation Switcher */}
+              <div className="flex items-center gap-1.5 bg-stone-100 p-1 rounded-xl border border-stone-200">
+                <Store className="w-3.5 h-3.5 text-stone-500 ml-1.5" />
+                <select
+                  defaultValue=""
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      adminImpersonateStore(e.target.value);
+                    }
+                  }}
+                  className="p-1.5 bg-white border border-stone-300 rounded-lg text-xs font-bold text-stone-800 outline-none cursor-pointer"
+                >
+                  <option value="" disabled>Ingreso directo a tienda...</option>
+                  {stores.map(s => (
+                    <option key={s.id} value={s.id}>
+                      🏪 {s.name} ({s.status})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <select
                 value={storeStatusFilter}
                 onChange={(e) => setStoreStatusFilter(e.target.value)}
@@ -1555,6 +1589,17 @@ export const AdminDashboard: React.FC = () => {
 
                       {/* Actions including Super Admin Approval & Delete */}
                       <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        {/* Super Admin Enter Store Directly to Configure */}
+                        <button
+                          type="button"
+                          onClick={() => adminImpersonateStore(st.id)}
+                          className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                          title="Ingresar como Administrador para configurar productos, envíos, métodos de pago y perfil"
+                        >
+                          <LogIn className="w-3.5 h-3.5" />
+                          <span>Administrar Tienda</span>
+                        </button>
+
                         {/* Super Admin Edit Store Profile & Logo */}
                         <button
                           onClick={() => setEditingStore(st)}
@@ -1951,9 +1996,19 @@ export const AdminDashboard: React.FC = () => {
               <h2 className="text-base font-bold text-stone-900">Directorio de Usuarios y Clientes</h2>
               <p className="text-xs text-stone-500">Gestión de cuentas registradas en PlazaDO con facultad de borrado de perfiles</p>
             </div>
-            <span className="text-xs text-stone-500 bg-stone-100 px-3 py-1 rounded-full font-medium">
-              {filteredUsers.length} de {allUsers.length} usuarios
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCreateSuperAdminModalOpen(true)}
+                className="px-3.5 py-2 bg-stone-900 hover:bg-stone-850 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <UserPlus className="w-3.5 h-3.5 text-amber-400" />
+                <span>Crear Super Admin</span>
+              </button>
+              <span className="text-xs text-stone-500 bg-stone-100 px-3 py-1 rounded-full font-medium">
+                {filteredUsers.length} de {allUsers.length} usuarios
+              </span>
+            </div>
           </div>
 
           {/* Filters */}
@@ -2023,7 +2078,19 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      {storeObj && (
+                        <button
+                          type="button"
+                          onClick={() => adminImpersonateStore(storeObj.id)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors bg-amber-500 hover:bg-amber-600 text-white shadow-xs cursor-pointer"
+                          title={`Ingresar a configurar la tienda ${storeObj.name}`}
+                        >
+                          <Store className="w-3.5 h-3.5" />
+                          <span>Administrar Tienda</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => setPasswordModalUser(usr)}
                         className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200"
@@ -3174,6 +3241,159 @@ export const AdminDashboard: React.FC = () => {
         isOpen={Boolean(passwordModalUser)}
         onClose={() => setPasswordModalUser(null)}
       />
+
+      {/* Create Super Admin Modal */}
+      {createSuperAdminModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/70 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-stone-200 space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-stone-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-stone-900 text-amber-400 flex items-center justify-center font-black">
+                  🛡️
+                </div>
+                <div>
+                  <h3 className="font-black text-stone-900 text-sm">
+                    Crear Nuevo Super Administrador
+                  </h3>
+                  <p className="text-[11px] text-stone-500">
+                    Acceso total administrativo a la plataforma PlazaDO
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCreateSuperAdminModalOpen(false)}
+                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!newAdminName.trim() || !newAdminEmail.trim()) {
+                  showNotification('Nombre y correo son requeridos', 'error');
+                  return;
+                }
+                if (!newAdminPassword || newAdminPassword.length < 6) {
+                  showNotification('La contraseña debe tener al menos 6 caracteres', 'error');
+                  return;
+                }
+                if (newAdminPassword !== newAdminConfirmPassword) {
+                  showNotification('Las contraseñas no coinciden', 'error');
+                  return;
+                }
+
+                setCreatingAdminLoading(true);
+                try {
+                  const res = await createSuperAdminUser({
+                    name: newAdminName.trim(),
+                    email: newAdminEmail.trim(),
+                    phone: newAdminPhone.trim(),
+                    password: newAdminPassword
+                  });
+                  if (res.success) {
+                    setCreateSuperAdminModalOpen(false);
+                    setNewAdminName('');
+                    setNewAdminEmail('');
+                    setNewAdminPhone('');
+                    setNewAdminPassword('');
+                    setNewAdminConfirmPassword('');
+                  }
+                } finally {
+                  setCreatingAdminLoading(false);
+                }
+              }}
+              className="space-y-3 text-xs"
+            >
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">Nombre Completo *</label>
+                <input
+                  type="text"
+                  required
+                  value={newAdminName}
+                  onChange={(e) => setNewAdminName(e.target.value)}
+                  placeholder="Ej: Lic. Carlos Santos"
+                  className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs outline-none focus:border-stone-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">Correo Electrónico Oficial *</label>
+                <input
+                  type="email"
+                  required
+                  value={newAdminEmail}
+                  onChange={(e) => setNewAdminEmail(e.target.value)}
+                  placeholder="admin.segundo@plazado.com"
+                  className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs outline-none focus:border-stone-900 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">Teléfono / Celular</label>
+                <input
+                  type="tel"
+                  value={newAdminPhone}
+                  onChange={(e) => setNewAdminPhone(e.target.value)}
+                  placeholder="809-555-0199"
+                  className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs outline-none focus:border-stone-900 font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">Contraseña *</label>
+                  <input
+                    type="password"
+                    required
+                    value={newAdminPassword}
+                    onChange={(e) => setNewAdminPassword(e.target.value)}
+                    placeholder="Mínimo 6 carácteres"
+                    className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs outline-none focus:border-stone-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">Confirmar *</label>
+                  <input
+                    type="password"
+                    required
+                    value={newAdminConfirmPassword}
+                    onChange={(e) => setNewAdminConfirmPassword(e.target.value)}
+                    placeholder="Repetir contraseña"
+                    className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs outline-none focus:border-stone-900"
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900">
+                <span className="font-bold">⚠️ Permiso Máximo: </span>
+                Este usuario tendrá acceso completo al Super Admin (tiendas, finanzas, métricas, pasarelas de pago y validación de usuarios).
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setCreateSuperAdminModalOpen(false)}
+                  className="px-3.5 py-2 text-xs font-bold text-stone-600 hover:bg-stone-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingAdminLoading}
+                  className="px-4 py-2 bg-stone-900 hover:bg-stone-850 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {creatingAdminLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5 text-amber-400" />}
+                  <span>{creatingAdminLoading ? 'Creando...' : 'Crear Super Administrador'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

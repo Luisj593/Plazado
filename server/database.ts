@@ -2582,6 +2582,11 @@ class GlobalDatabase {
     return this.memoryData.users;
   }
 
+  public getUserById(id: string): User | undefined {
+    if (!id) return undefined;
+    return this.memoryData.users.find(u => u.id === id);
+  }
+
   public addUser(user: User): User {
     this.memoryData.users.push(user);
     this.addAuditLog('USER_CREATED', user.id, undefined, `Usuario creado: ${user.name} (${user.email})`);
@@ -2708,10 +2713,27 @@ class GlobalDatabase {
         status = 'EXPIRED';
       }
 
+      const isApproved = u.isApprovedByAdmin === true || (u.isEmailVerified === true && u.adminApprovalStatus !== 'REJECTED');
+      const approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED' = u.adminApprovalStatus || (isApproved ? 'APPROVED' : 'PENDING');
+
       return {
         id: u.id,
         name: u.name,
         email: u.email,
+        phone: u.phone || '',
+        avatar: u.avatar || u.kycData?.selfieUrl || '',
+        cedulaNumber: u.cedulaNumber || u.kycData?.cedulaNumber || '',
+        cedulaFrontUrl: u.kycData?.cedulaFrontUrl || '',
+        selfieUrl: u.kycData?.selfieUrl || u.avatar || '',
+        biometricScore: u.kycData?.biometricScore,
+        biometricStatus: u.kycData?.biometricStatus || (u.isKycVerified ? 'VERIFIED' : 'PENDING'),
+        isKycVerified: u.isKycVerified ?? !!u.kycData?.cedulaFrontUrl,
+        adminApprovalStatus: approvalStatus,
+        approvedAt: u.approvedAt,
+        approvedBy: u.approvedBy,
+        rejectedAt: u.rejectedAt,
+        rejectedBy: u.rejectedBy,
+        rejectionReason: u.rejectionReason,
         accountType: (isStore ? 'STORE' : 'CUSTOMER') as 'CUSTOMER' | 'STORE',
         storeName: store?.name || v?.storeName,
         storeId: u.storeId,
@@ -2725,6 +2747,116 @@ class GlobalDatabase {
         lastSentAt: v?.lastSentAt || new Date(u.createdAt).getTime()
       };
     }).sort((a, b) => new Date(b.registeredAt).getTime() - new Date(a.registeredAt).getTime());
+  }
+
+  public approveUserAccount(userIdOrEmail: string, adminEmail: string): { success: boolean; message: string; user?: User } {
+    const clean = userIdOrEmail.trim().toLowerCase();
+    const user = this.memoryData.users.find(u => u.id === userIdOrEmail || u.email.toLowerCase() === clean);
+    if (!user) return { success: false, message: 'Usuario no encontrado' };
+
+    user.adminApprovalStatus = 'APPROVED';
+    user.isApprovedByAdmin = true;
+    user.isEmailVerified = true;
+    user.isKycVerified = true;
+    user.approvedAt = new Date().toISOString();
+    user.approvedBy = adminEmail;
+    user.rejectionReason = undefined;
+
+    if (user.verification) {
+      user.verification.isVerified = true;
+      user.verification.verifiedAt = new Date().toISOString();
+    }
+
+    if (user.storeId) {
+      const store = this.memoryData.stores.find(s => s.id === user.storeId);
+      if (store && (store.status === 'PENDING' || store.status === 'IN_REVIEW')) {
+        store.status = 'APPROVED';
+        store.isEmailVerified = true;
+        store.isKycVerified = true;
+      }
+    }
+
+    this.addAuditLog(
+      'ADMIN_APPROVED_USER_ACCOUNT',
+      user.id,
+      user.email,
+      `Super Admin (${adminEmail}) autorizó la cuenta y validó la cédula/identidad de ${user.name} (${user.email}).`,
+      { id: 'super-admin', name: adminEmail, role: 'SUPER_ADMIN' }
+    );
+    this.commit();
+    return { success: true, message: `Cuenta de ${user.name} autorizada y validada exitosamente.`, user };
+  }
+
+  public rejectUserAccount(userIdOrEmail: string, adminEmail: string, reason: string): { success: boolean; message: string; user?: User } {
+    const clean = userIdOrEmail.trim().toLowerCase();
+    const user = this.memoryData.users.find(u => u.id === userIdOrEmail || u.email.toLowerCase() === clean);
+    if (!user) return { success: false, message: 'Usuario no encontrado' };
+
+    user.adminApprovalStatus = 'REJECTED';
+    user.isApprovedByAdmin = false;
+    user.rejectedAt = new Date().toISOString();
+    user.rejectedBy = adminEmail;
+    user.rejectionReason = reason || 'Documentación de identidad no válida o ilegible';
+
+    if (user.storeId) {
+      const store = this.memoryData.stores.find(s => s.id === user.storeId);
+      if (store) {
+        store.status = 'REJECTED';
+        store.rejectionReason = user.rejectionReason;
+      }
+    }
+
+    this.addAuditLog(
+      'ADMIN_REJECTED_USER_ACCOUNT',
+      user.id,
+      user.email,
+      `Super Admin (${adminEmail}) rechazó la documentación de ${user.name} (${user.email}). Motivo: ${user.rejectionReason}`,
+      { id: 'super-admin', name: adminEmail, role: 'SUPER_ADMIN' }
+    );
+    this.commit();
+    return { success: true, message: `Documentación de ${user.name} marcada como rechazada.`, user };
+  }
+
+  public createSuperAdmin(data: { name: string; email: string; phone: string; passwordHash: string; createdByAdmin: string }): { success: boolean; message: string; user?: User } {
+    const cleanEmail = data.email.trim().toLowerCase();
+    const existing = this.memoryData.users.find(u => u.email.toLowerCase() === cleanEmail);
+    if (existing) {
+      if (existing.role === 'SUPER_ADMIN') {
+        return { success: false, message: 'Ya existe un Super Administrador con este correo electrónico.' };
+      }
+      existing.role = 'SUPER_ADMIN';
+      existing.passwordHash = data.passwordHash;
+      existing.isEmailVerified = true;
+      existing.isApprovedByAdmin = true;
+      existing.adminApprovalStatus = 'APPROVED';
+      this.commit();
+      return { success: true, message: `El usuario existente ${cleanEmail} ha sido elevado a Super Administrador.`, user: existing };
+    }
+
+    const newAdmin: User = {
+      id: `user-super-admin-${Date.now()}`,
+      name: data.name.trim(),
+      email: cleanEmail,
+      role: 'SUPER_ADMIN',
+      phone: data.phone.trim(),
+      addresses: [],
+      passwordHash: data.passwordHash,
+      isEmailVerified: true,
+      isApprovedByAdmin: true,
+      adminApprovalStatus: 'APPROVED',
+      isKycVerified: true,
+      createdAt: new Date().toISOString()
+    };
+
+    this.addUser(newAdmin);
+    this.addAuditLog(
+      'SUPER_ADMIN_CREATED',
+      newAdmin.id,
+      newAdmin.email,
+      `Nuevo Super Administrador ${newAdmin.name} (${newAdmin.email}) creado por ${data.createdByAdmin}`,
+      { id: 'super-admin', name: data.createdByAdmin, role: 'SUPER_ADMIN' }
+    );
+    return { success: true, message: `Super Administrador ${newAdmin.name} creado exitosamente.`, user: newAdmin };
   }
 
   public manualVerifyUser(email: string, adminEmail: string, reason?: string): { success: boolean; message: string; user?: User } {
