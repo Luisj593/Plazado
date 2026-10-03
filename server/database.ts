@@ -348,24 +348,44 @@ class GlobalDatabase {
   }
 
   private ensureSuperAdmins(data: GlobalDatabaseData) {
-    const superAdminEmails = ['luis.jimenez@msn.com', 'luiss.jimeness@gmail.com'];
-    for (const email of superAdminEmails) {
-      const found = data.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    const superAdminAccounts = [
+      {
+        email: 'luiss.jimeness@gmail.com',
+        id: 'user-super-admin-luissjimeness',
+        hash: '1b6d3ad378f4fb28c02b8a71745bfd81b0a8253f848f9e8645ca9629dc903c50' // Plazado2026!
+      },
+      {
+        email: 'luis.jimenez@msn.com',
+        id: 'user-super-admin-luisjimenez',
+        hash: '66fc5c4b3d7c57b3c1760b876866b220dd78d7f698d02b8e3e93eee3c82d8b91' // Admin2026!
+      }
+    ];
+    for (const admin of superAdminAccounts) {
+      const found = data.users.find(u => u.email.toLowerCase() === admin.email.toLowerCase());
       if (found) {
         found.role = 'SUPER_ADMIN';
+        if (!found.passwordHash || found.passwordHash === '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918') {
+          found.passwordHash = admin.hash;
+        }
       } else {
         data.users.push({
-          id: `user-super-admin-${email.split('@')[0].replace(/[^a-z0-9]/g, '')}`,
+          id: admin.id,
           name: 'Luis Jiménez',
-          email: email,
+          email: admin.email,
           role: 'SUPER_ADMIN',
           phone: '809-449-3325',
           avatar: '',
-          passwordHash: '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918',
+          passwordHash: admin.hash,
           addresses: [],
           createdAt: '2026-01-01T00:00:00Z'
         });
       }
+    }
+
+    // Individual password migration for store owner user account
+    const storeAdmin = data.users.find(u => u.email.toLowerCase() === 'clahsventa28@gmail.com');
+    if (storeAdmin && (!storeAdmin.passwordHash || storeAdmin.passwordHash === 'e967c5b7e0c6e658ce20e7f08f218590b41a87b19e757b3cba3541b5d2b52d14')) {
+      storeAdmin.passwordHash = '9a4307bf89f794e8fa18462ac041f5c47d7d0e3730817a532b2daee7474337cf'; // Tienda2026!
     }
   }
 

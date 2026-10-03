@@ -961,28 +961,41 @@ async function startServer() {
   app.post('/api/auth/login', async (req: Request, res: Response) => {
     try {
       const { email, password } = req.body;
+
+      // 1. Password must be provided as a non-empty string. Exact characters preserved.
+      if (!password || typeof password !== 'string' || password.length === 0) {
+        return res.status(401).json({ success: false, message: 'Credenciales inválidas.' });
+      }
+
       const cleanEmail = (email || '').trim().toLowerCase();
-      const users = db.getUsers();
-      const user = users.find(u => u.email.toLowerCase() === cleanEmail);
+      if (!cleanEmail) {
+        return res.status(401).json({ success: false, message: 'Credenciales inválidas.' });
+      }
 
+      // 2. Identify user exclusively by email
+      const user = db.getUserByEmail(cleanEmail);
       if (!user) {
-        return res.status(404).json({ success: false, message: 'No existe una cuenta registrada con este correo electrónico.' });
+        return res.status(401).json({ success: false, message: 'Credenciales inválidas.' });
       }
 
-      if (!user.passwordHash) {
-        return res.status(401).json({ success: false, message: 'Contraseña no configurada para este usuario. Solicita restablecimiento.' });
+      // 3. Obtain password_hash belonging specifically to this user
+      if (!user.passwordHash || typeof user.passwordHash !== 'string') {
+        return res.status(401).json({ success: false, message: 'Credenciales inválidas.' });
       }
 
-      const valid = await verifyPassword(password, user.passwordHash);
-      if (!valid) {
-        return res.status(401).json({ success: false, message: 'Contraseña incorrecta. Por favor intenta nuevamente.' });
+      // 4. Exact cryptographic comparison: password against user.passwordHash
+      // Exact character check: no lowercase, uppercase, partial, or fuzzy matching
+      const passwordValida = await verifyPassword(password, user.passwordHash);
+      if (passwordValida !== true) {
+        return res.status(401).json({ success: false, message: 'Credenciales inválidas.' });
       }
 
+      // 5. Generate session token ONLY after explicit verification is valid
       const token = createSessionToken(user);
       db.addAuditLog('USER_LOGIN', user.id, undefined, `Inicio de sesión exitoso como ${user.role} (${user.email})`);
-      res.json({ success: true, user: sanitizeUser(user), token, version: db.getVersion() });
+      return res.json({ success: true, user: sanitizeUser(user), token, version: db.getVersion() });
     } catch (err: any) {
-      res.status(500).json({ success: false, message: err.message || 'Error logging in' });
+      return res.status(500).json({ success: false, message: 'Error procesando autenticación' });
     }
   });
 
@@ -1137,15 +1150,12 @@ async function startServer() {
       const user = db.getUserByEmail(cleanEmail);
       const preRecord = activeVerificationCodes.get(cleanEmail);
 
-      // Check if user is already verified
+      // Check if user is already verified - NEVER issue a token without password verification
       if (user && user.isEmailVerified === true) {
-        const token = createSessionToken(user);
-        return res.json({
-          success: true,
+        return res.status(400).json({
+          success: false,
           verified: true,
-          user,
-          token,
-          message: 'Tu cuenta ya está verificada.'
+          message: 'Tu cuenta ya está verificada. Por favor inicia sesión con tu contraseña.'
         });
       }
 
