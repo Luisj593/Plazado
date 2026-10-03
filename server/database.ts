@@ -1157,6 +1157,109 @@ class GlobalDatabase {
     return true;
   }
 
+  public getStoreAdminUser(storeId: string): User | undefined {
+    const store = this.memoryData.stores.find(s => s.id === storeId);
+    if (!store) return undefined;
+    return this.memoryData.users.find(u =>
+      (u.storeId === storeId && u.role === 'STORE_OWNER') ||
+      (store.ownerId && u.id === store.ownerId) ||
+      (u.storeId === storeId) ||
+      (store.email && u.email.toLowerCase() === store.email.toLowerCase())
+    );
+  }
+
+  public assignStoreAdmin(
+    storeId: string,
+    email: string,
+    passwordHash: string,
+    name?: string,
+    phone?: string
+  ): { success: boolean; user?: User; store?: Store; message?: string } {
+    const cleanEmail = email.trim().toLowerCase();
+    const store = this.memoryData.stores.find(s => s.id === storeId);
+    if (!store) {
+      return { success: false, message: 'Tienda no encontrada' };
+    }
+
+    // Check if an admin user already exists for this store or matching email
+    let user = this.memoryData.users.find(u => 
+      u.storeId === storeId || 
+      (store.ownerId && u.id === store.ownerId) || 
+      u.email.toLowerCase() === cleanEmail
+    );
+
+    if (user) {
+      // If user exists for a different store, verify conflict
+      if (user.storeId && user.storeId !== storeId && user.email.toLowerCase() === cleanEmail) {
+        return { success: false, message: 'Este correo electrónico ya pertenece a otra tienda registrada.' };
+      }
+      user.email = cleanEmail;
+      user.passwordHash = passwordHash;
+      user.role = 'STORE_OWNER';
+      user.storeId = storeId;
+      if (name && name.trim()) user.name = name.trim();
+      if (phone && phone.trim()) user.phone = phone.trim();
+      user.isEmailVerified = true;
+      user.isApprovedByAdmin = true;
+      user.adminApprovalStatus = 'APPROVED';
+      user.approvedAt = new Date().toISOString();
+      user.approvedBy = 'SUPER_ADMIN';
+    } else {
+      user = {
+        id: `user-store-${Date.now()}`,
+        name: (name && name.trim()) || `Admin ${store.name}`,
+        email: cleanEmail,
+        role: 'STORE_OWNER',
+        phone: (phone && phone.trim()) || store.phone || '',
+        avatar: store.logo || '',
+        storeId: storeId,
+        passwordHash: passwordHash,
+        addresses: [],
+        isEmailVerified: true,
+        isApprovedByAdmin: true,
+        adminApprovalStatus: 'APPROVED',
+        approvedAt: new Date().toISOString(),
+        approvedBy: 'SUPER_ADMIN',
+        createdAt: new Date().toISOString()
+      };
+      this.memoryData.users.push(user);
+    }
+
+    // Link store to user
+    store.ownerId = user.id;
+    store.owner_id = user.id;
+    store.email = cleanEmail;
+    if (name && name.trim()) store.ownerName = name.trim();
+    if (phone && phone.trim()) {
+      store.phone = phone.trim();
+      store.whatsapp = phone.trim();
+    }
+
+    this.addAuditLog(
+      'STORE_ADMIN_ASSIGNED',
+      storeId,
+      undefined,
+      `Super Admin asignó administrador para la tienda "${store.name}": ${user.email} (${user.name})`
+    );
+    this.commit();
+
+    // Background sync to persistent providers
+    firestoreRepo.saveUser(user).catch(e => console.error('[Firestore] User sync error in assignStoreAdmin:', e));
+    firestoreRepo.saveStore(store).catch(e => console.error('[Firestore] Store sync error in assignStoreAdmin:', e));
+    cloudSqlRepo.createUser({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone,
+      avatar: user.avatar,
+      storeId: user.storeId,
+      addresses: user.addresses
+    }).catch(e => console.warn('[CloudSQL] User sync warning in assignStoreAdmin:', e));
+
+    return { success: true, user, store };
+  }
+
   // --- PRODUCTS ---
   public getProducts(): Product[] {
     return this.memoryData.products;

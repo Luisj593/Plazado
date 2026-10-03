@@ -43,6 +43,7 @@ import {
   Smartphone,
   FileCheck,
   Key,
+  KeyRound,
   FolderPlus,
   Plus,
   Upload,
@@ -63,6 +64,7 @@ import { AndroidAppManagementTab } from './AndroidAppManagementTab';
 import { CreateCategoryModal } from './CreateCategoryModal';
 import { CreateBannerModal } from './CreateBannerModal';
 import { UserPasswordModal } from './UserPasswordModal';
+import { AssignStoreAdminModal } from './AssignStoreAdminModal';
 import { CategoriesAndSpecsManagement } from './CategoriesAndSpecsManagement';
 import { FulfillmentAdminView, FulfillmentAdminTab } from './FulfillmentAdminView';
 import { UserVerificationsTab } from './UserVerificationsTab';
@@ -186,6 +188,9 @@ export const AdminDashboard: React.FC = () => {
 
   // User password modal state
   const [passwordModalUser, setPasswordModalUser] = useState<UserType | null>(null);
+
+  // Store admin assignment modal state (email and password)
+  const [assignAdminStore, setAssignAdminStore] = useState<StoreType | null>(null);
 
   // Dispute resolution modal state
   const [resolvingDispute, setResolvingDispute] = useState<Dispute | null>(null);
@@ -1551,6 +1556,12 @@ export const AdminDashboard: React.FC = () => {
                 {filteredStores.map(st => {
                   const bal = storeBalances[st.id] || { availableBalance: 0, pendingBalance: 0, totalSales: 0 };
                   const storeProductCount = products.filter(p => p.storeId === st.id).length;
+                  const assignedAdmin = allUsers.find(u => 
+                    (u.storeId === st.id && u.role === 'STORE_OWNER') ||
+                    (st.ownerId && u.id === st.ownerId) ||
+                    (u.storeId === st.id) ||
+                    (st.email && u.email.toLowerCase() === st.email.toLowerCase())
+                  );
                   return (
                     <div key={st.id} className="p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                       <div className="flex items-center gap-4">
@@ -1579,6 +1590,22 @@ export const AdminDashboard: React.FC = () => {
                           <p className="text-xs text-stone-500 mt-0.5">
                             RNC: {st.bankInfo?.rncOrCedula || 'N/A'} • Propietario: {st.ownerName} ({st.email}) • {st.province}
                           </p>
+
+                          {/* Account credentials status */}
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            {assignedAdmin ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                                <span>Acceso Admin: <strong>{assignedAdmin.email}</strong> ({assignedAdmin.name})</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                                <AlertTriangle className="w-3 h-3 text-amber-600" />
+                                <span>Sin usuario administrador asignado</span>
+                              </span>
+                            )}
+                          </div>
+
                           <div className="flex items-center gap-3 text-xs text-stone-600 mt-1">
                             <span>Balance Disp: <strong>RD$ {bal.availableBalance.toLocaleString()}</strong></span>
                             <span>• En Custodia: RD$ {bal.pendingBalance.toLocaleString()}</span>
@@ -1598,6 +1625,17 @@ export const AdminDashboard: React.FC = () => {
                         >
                           <LogIn className="w-3.5 h-3.5" />
                           <span>Administrar Tienda</span>
+                        </button>
+
+                        {/* Super Admin Assign Store Credentials (Email & Password) */}
+                        <button
+                          type="button"
+                          onClick={() => setAssignAdminStore(st)}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                          title="Asignar o modificar correo y contraseña de acceso para esta tienda"
+                        >
+                          <KeyRound className="w-3.5 h-3.5" />
+                          <span>{assignedAdmin ? 'Credenciales de Tienda' : 'Asignar Correo & Clave'}</span>
                         </button>
 
                         {/* Super Admin Edit Store Profile & Logo */}
@@ -3240,6 +3278,13 @@ export const AdminDashboard: React.FC = () => {
         user={passwordModalUser}
         isOpen={Boolean(passwordModalUser)}
         onClose={() => setPasswordModalUser(null)}
+      />
+
+      {/* Super Admin Store Admin Assignment Modal (Email & Password) */}
+      <AssignStoreAdminModal
+        store={assignAdminStore}
+        isOpen={Boolean(assignAdminStore)}
+        onClose={() => setAssignAdminStore(null)}
       />
 
       {/* Create Super Admin Modal */}

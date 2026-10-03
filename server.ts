@@ -11,7 +11,15 @@ import { hashPassword, verifyPassword } from './src/utils/security';
 import { User, Store, CustomerRegistrationInput, StoreRegistrationInput, UserRole } from './src/types';
 import { sendRegistrationOtpEmail, verifySmtpConnection } from './server/mailer-service';
 
-const SESSION_SECRET = process.env.SESSION_SECRET || 'plazado-central-production-token-secret-2026';
+const SESSION_SECRET: string = process.env.SESSION_SECRET || '';
+if (!SESSION_SECRET.trim()) {
+  throw new Error('CRITICAL SECURITY ERROR: SESSION_SECRET is required as an environment variable');
+}
+
+export function sanitizeUser(user: User): Omit<User, 'passwordHash'> {
+  const { passwordHash: _, ...safe } = user;
+  return safe;
+}
 
 export function createSessionToken(user: User): string {
   const payload = {
@@ -41,6 +49,128 @@ export function verifySessionToken(token: string): { userId: string; email: stri
   } catch (e) {
     return null;
   }
+}
+
+export function getAuthenticatedUser(req: Request): User | null {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.slice(7).trim();
+  const session = verifySessionToken(token);
+  if (!session) return null;
+  const user = db.getUserById(session.userId);
+  return user || null;
+}
+
+export function getAuthenticatedSuperAdmin(req: Request): User | null {
+  const user = getAuthenticatedUser(req);
+  if (!user || user.role !== 'SUPER_ADMIN') return null;
+  return user;
+}
+
+function sanitizeBootstrapForCaller(rawState: any, caller: User | null) {
+  const safeUsers = (rawState.users || []).map((u: any) => sanitizeUser(u));
+
+  const publicStores = (rawState.stores || []).map((s: any) => {
+    if (!caller || (caller.role !== 'SUPER_ADMIN' && caller.storeId !== s.id)) {
+      const { bankInfo, ...restStore } = s;
+      return {
+        ...restStore,
+        bankInfo: bankInfo ? {
+          bank: bankInfo.bank,
+          accountType: bankInfo.accountType,
+          accountHolder: bankInfo.accountHolder,
+          rncOrCedula: bankInfo.rncOrCedula,
+          accountNumber: '****'
+        } : undefined
+      };
+    }
+    return s;
+  });
+
+  const publicSettings = { ...rawState.systemSettings };
+  if (!caller || caller.role !== 'SUPER_ADMIN') {
+    if (publicSettings.mailConfig) {
+      const { smtpPass: _, ...safeMail } = publicSettings.mailConfig;
+      publicSettings.mailConfig = {
+        ...safeMail,
+        isConfigured: !!publicSettings.mailConfig?.isConfigured
+      };
+    }
+  }
+
+  if (caller && caller.role === 'SUPER_ADMIN') {
+    return {
+      ...rawState,
+      users: safeUsers,
+      stores: publicStores,
+      systemSettings: publicSettings
+    };
+  }
+
+  if (caller && caller.role === 'STORE_OWNER') {
+    const storeId = caller.storeId;
+    return {
+      ...rawState,
+      stores: publicStores,
+      products: rawState.products || [],
+      categories: rawState.categories || [],
+      banners: rawState.banners || [],
+      coupons: rawState.coupons || [],
+      reviews: rawState.reviews || [],
+      systemSettings: publicSettings,
+      users: safeUsers.filter((u: any) => u.id === caller.id),
+      orders: (rawState.orders || []).filter((o: any) => o.storeId === storeId || o.customerId === caller.id),
+      storeBalances: storeId && rawState.storeBalances && rawState.storeBalances[storeId] 
+        ? { [storeId]: rawState.storeBalances[storeId] } 
+        : {},
+      settlements: (rawState.settlements || []).filter((s: any) => s.storeId === storeId),
+      disputes: (rawState.disputes || []).filter((d: any) => d.storeId === storeId || d.customerId === caller.id),
+      auditLogs: [],
+      paymentTransactions: [],
+      financialAuditLogs: []
+    };
+  }
+
+  if (caller && caller.role === 'CUSTOMER') {
+    return {
+      ...rawState,
+      stores: publicStores,
+      products: rawState.products || [],
+      categories: rawState.categories || [],
+      banners: rawState.banners || [],
+      coupons: rawState.coupons || [],
+      reviews: rawState.reviews || [],
+      systemSettings: publicSettings,
+      users: safeUsers.filter((u: any) => u.id === caller.id),
+      orders: (rawState.orders || []).filter((o: any) => o.customerId === caller.id),
+      storeBalances: {},
+      settlements: [],
+      disputes: (rawState.disputes || []).filter((d: any) => d.customerId === caller.id),
+      auditLogs: [],
+      paymentTransactions: [],
+      financialAuditLogs: []
+    };
+  }
+
+  // Unauthenticated public visitor
+  return {
+    ...rawState,
+    stores: publicStores,
+    products: (rawState.products || []).filter((p: any) => p.status === 'active' || p.status === 'ACTIVE' || !p.status),
+    categories: rawState.categories || [],
+    banners: rawState.banners || [],
+    coupons: rawState.coupons || [],
+    reviews: rawState.reviews || [],
+    systemSettings: publicSettings,
+    users: [],
+    orders: [],
+    storeBalances: {},
+    settlements: [],
+    disputes: [],
+    auditLogs: [],
+    paymentTransactions: [],
+    financialAuditLogs: []
+  };
 }
 
 async function startServer() {
@@ -85,11 +215,13 @@ async function startServer() {
 
   // Global Bootstrap (Single-call fast hydration for all clients/devices)
   app.get('/api/bootstrap', (req: Request, res: Response) => {
-    const state = db.getFullState();
+    const caller = getAuthenticatedUser(req);
+    const rawState = db.getFullState();
+    const data = sanitizeBootstrapForCaller(rawState, caller);
     res.json({
       success: true,
-      data: state,
-      version: state.version
+      data,
+      version: rawState.version
     });
   });
 
@@ -102,11 +234,13 @@ async function startServer() {
       return res.json({ hasUpdates: false, version: currentVersion });
     }
 
-    const state = db.getFullState();
+    const caller = getAuthenticatedUser(req);
+    const rawState = db.getFullState();
+    const data = sanitizeBootstrapForCaller(rawState, caller);
     res.json({
       hasUpdates: true,
-      data: state,
-      version: state.version
+      data,
+      version: rawState.version
     });
   });
 
@@ -116,6 +250,13 @@ async function startServer() {
   });
 
   app.post('/api/stores', (req: Request, res: Response) => {
+    const caller = getAuthenticatedUser(req);
+    if (!caller) {
+      return res.status(401).json({ success: false, message: 'No autenticado' });
+    }
+    if (caller.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ success: false, message: 'Solo Super Admin puede crear tiendas directamente vía API.' });
+    }
     try {
       const storeData = req.body;
       const newStore = db.addStore(storeData);
@@ -126,12 +267,23 @@ async function startServer() {
   });
 
   app.put('/api/stores/:id', (req: Request, res: Response) => {
+    const caller = getAuthenticatedUser(req);
+    if (!caller) {
+      return res.status(401).json({ success: false, message: 'No autenticado' });
+    }
+    if (caller.role !== 'SUPER_ADMIN' && caller.storeId !== req.params.id) {
+      return res.status(403).json({ success: false, message: 'No tienes autorización para editar esta tienda' });
+    }
     const updated = db.updateStore(req.params.id, req.body);
     if (!updated) return res.status(404).json({ success: false, message: 'Store not found' });
     res.json({ success: true, store: updated, version: db.getVersion() });
   });
 
   app.patch('/api/stores/:id/status', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+    }
     const { status, reason } = req.body;
     const updated = db.updateStoreStatus(req.params.id, status, reason);
     if (!updated) return res.status(404).json({ success: false, message: 'Store not found' });
@@ -139,14 +291,75 @@ async function startServer() {
   });
 
   app.patch('/api/stores/:id/toggle-publish', (req: Request, res: Response) => {
+    const caller = getAuthenticatedUser(req);
+    if (!caller) {
+      return res.status(401).json({ success: false, message: 'No autenticado' });
+    }
+    if (caller.role !== 'SUPER_ADMIN' && caller.storeId !== req.params.id) {
+      return res.status(403).json({ success: false, message: 'No tienes autorización para publicar/ocultar esta tienda' });
+    }
     const updated = db.toggleStorePublish(req.params.id);
     if (!updated) return res.status(404).json({ success: false, message: 'Store not found' });
     res.json({ success: true, store: updated, version: db.getVersion() });
   });
 
   app.delete('/api/stores/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+    }
     const ok = db.deleteStore(req.params.id);
     res.json({ success: ok, version: db.getVersion() });
+  });
+
+  // --- SUPER ADMIN: ASIGNAR Y CONSULTAR ADMINISTRADOR DE TIENDA (CORREO Y CONTRASEÑA) ---
+  app.get('/api/admin/stores/:id/admin-user', (req: Request, res: Response) => {
+    try {
+      const admin = getAuthenticatedSuperAdmin(req);
+      if (!admin) {
+        return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+      }
+      const user = db.getStoreAdminUser(req.params.id);
+      res.json({ success: true, user: user ? sanitizeUser(user) : null });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Error consultando administrador de la tienda' });
+    }
+  });
+
+  app.post('/api/admin/stores/:id/assign-admin', async (req: Request, res: Response) => {
+    try {
+      const admin = getAuthenticatedSuperAdmin(req);
+      if (!admin) {
+        return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+      }
+
+      const { email, password, name, phone } = req.body;
+      const cleanEmail = (email || '').trim().toLowerCase();
+      if (!cleanEmail || !cleanEmail.includes('@')) {
+        return res.status(400).json({ success: false, message: 'Debes ingresar un correo electrónico válido.' });
+      }
+
+      if (!password || password.length < 6) {
+        return res.status(400).json({ success: false, message: 'La contraseña debe contener al menos 6 caracteres.' });
+      }
+
+      const passHash = await hashPassword(password);
+      const result = db.assignStoreAdmin(req.params.id, cleanEmail, passHash, name, phone);
+
+      if (!result.success || !result.user) {
+        return res.status(400).json({ success: false, message: result.message || 'No fue posible asignar el administrador.' });
+      }
+
+      res.json({
+        success: true,
+        message: `Usuario administrador (${cleanEmail}) asignado exitosamente a la tienda.`,
+        user: sanitizeUser(result.user),
+        store: result.store,
+        version: db.getVersion()
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Error asignando administrador a la tienda' });
+    }
   });
 
   // --- PRODUCTS ---
@@ -222,27 +435,50 @@ async function startServer() {
   });
 
   app.post('/api/specifications', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado' });
     const spec = db.addSpecification(req.body);
     res.json({ success: true, specification: spec, version: db.getVersion() });
   });
 
   app.put('/api/specifications/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado' });
     const spec = db.updateSpecification(req.params.id, req.body);
     if (!spec) return res.status(404).json({ success: false, message: 'Specification not found' });
     res.json({ success: true, specification: spec, version: db.getVersion() });
   });
 
   app.delete('/api/specifications/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado' });
     const ok = db.deleteSpecification(req.params.id);
     res.json({ success: ok, version: db.getVersion() });
   });
 
   // --- SETTINGS (Super Admin platform_settings) ---
   app.get('/api/settings', (req: Request, res: Response) => {
-    res.json({ success: true, settings: db.getSystemSettings() });
+    const admin = getAuthenticatedSuperAdmin(req);
+    const settings = db.getSystemSettings();
+    if (admin) {
+      return res.json({ success: true, settings });
+    }
+    const safeSettings = { ...settings };
+    if (safeSettings.mailConfig) {
+      const { smtpPass: _, ...safeMail } = safeSettings.mailConfig;
+      safeSettings.mailConfig = {
+        ...safeMail,
+        isConfigured: !!settings.mailConfig?.isConfigured
+      };
+    }
+    res.json({ success: true, settings: safeSettings });
   });
 
   app.put('/api/settings', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+    }
     const updated = db.updateSystemSettings(req.body);
     if (req.body.mailConfig) {
       if (req.body.mailConfig.smtpPass) {
@@ -274,6 +510,8 @@ async function startServer() {
   });
 
   app.post('/api/payment-gateways', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     try {
       const saved = db.savePaymentGateway(req.body);
       res.json({ success: true, gateway: saved, version: db.getVersion() });
@@ -283,6 +521,8 @@ async function startServer() {
   });
 
   app.put('/api/payment-gateways/:id/activate', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     try {
       const ok = db.setActivePaymentGateway(req.params.id);
       if (!ok) return res.status(404).json({ success: false, message: 'Proveedor de pago no encontrado' });
@@ -293,6 +533,8 @@ async function startServer() {
   });
 
   app.delete('/api/payment-gateways/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     try {
       const ok = db.deletePaymentGateway(req.params.id);
       res.json({ success: ok, version: db.getVersion() });
@@ -523,18 +765,45 @@ async function startServer() {
 
   // --- BALANCES & SETTLEMENTS ---
   app.get('/api/balances', (req: Request, res: Response) => {
-    res.json({ success: true, balances: db.getStoreBalances() });
+    const caller = getAuthenticatedUser(req);
+    if (!caller) {
+      return res.status(401).json({ success: false, message: 'No autenticado' });
+    }
+    if (caller.role === 'SUPER_ADMIN') {
+      return res.json({ success: true, balances: db.getStoreBalances() });
+    }
+    if (caller.storeId) {
+      const allBalances = db.getStoreBalances();
+      const myBalance = allBalances[caller.storeId] || { availableBalance: 0, pendingBalance: 0, totalSales: 0 };
+      return res.json({ success: true, balances: { [caller.storeId]: myBalance } });
+    }
+    return res.status(403).json({ success: false, message: 'Acceso denegado' });
   });
 
   app.get('/api/settlements', (req: Request, res: Response) => {
-    res.json({ success: true, settlements: db.getSettlements() });
+    const caller = getAuthenticatedUser(req);
+    if (!caller) {
+      return res.status(401).json({ success: false, message: 'No autenticado' });
+    }
+    const all = db.getSettlements();
+    if (caller.role === 'SUPER_ADMIN') {
+      return res.json({ success: true, settlements: all });
+    }
+    if (caller.storeId) {
+      return res.json({ success: true, settlements: all.filter(s => s.storeId === caller.storeId) });
+    }
+    return res.status(403).json({ success: false, message: 'Acceso denegado' });
   });
 
   // Ejecución automática semanal de los viernes
   app.post('/api/admin/settlements/run-weekly', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+    }
     try {
       const { actorName } = req.body || {};
-      const result = db.runWeeklySettlementProcess(actorName || 'Super Admin Plazado.com');
+      const result = db.runWeeklySettlementProcess(actorName || admin.name || 'Super Admin Plazado.com');
       res.json({ ...result, version: db.getVersion() });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error ejecutando ciclo de liquidación semanal' });
@@ -543,10 +812,18 @@ async function startServer() {
 
   // Transacciones y Auditoría Financiera
   app.get('/api/financial/transactions', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+    }
     res.json({ success: true, transactions: db.getPaymentTransactions() });
   });
 
   app.get('/api/financial/audit-logs', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+    }
     res.json({ success: true, logs: db.getFinancialAuditLogs() });
   });
 
@@ -562,12 +839,23 @@ async function startServer() {
   });
 
   app.post('/api/settlements', (req: Request, res: Response) => {
+    const caller = getAuthenticatedUser(req);
+    if (!caller) {
+      return res.status(401).json({ success: false, message: 'No autenticado' });
+    }
     const { storeId, notes } = req.body;
+    if (caller.role !== 'SUPER_ADMIN' && caller.storeId !== storeId) {
+      return res.status(403).json({ success: false, message: 'No puedes solicitar liquidaciones para otra tienda' });
+    }
     const result = db.requestSettlement(storeId, notes);
     res.json({ ...result, version: db.getVersion() });
   });
 
   app.patch('/api/settlements/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+    }
     const { status, reference } = req.body;
     const updated = db.processSettlement(req.params.id, status, reference);
     if (!updated) return res.status(404).json({ success: false, message: 'Settlement not found' });
@@ -575,21 +863,44 @@ async function startServer() {
   });
 
   app.delete('/api/settlements/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+    }
     const ok = db.deleteSettlement(req.params.id);
     res.json({ success: ok, version: db.getVersion() });
   });
 
   // --- DISPUTES ---
   app.get('/api/disputes', (req: Request, res: Response) => {
-    res.json({ success: true, disputes: db.getDisputes() });
+    const caller = getAuthenticatedUser(req);
+    if (!caller) {
+      return res.status(401).json({ success: false, message: 'No autenticado' });
+    }
+    const all = db.getDisputes();
+    if (caller.role === 'SUPER_ADMIN') {
+      return res.json({ success: true, disputes: all });
+    }
+    if (caller.storeId) {
+      return res.json({ success: true, disputes: all.filter(d => d.storeId === caller.storeId) });
+    }
+    return res.json({ success: true, disputes: all.filter(d => d.customerId === caller.id) });
   });
 
   app.post('/api/disputes', (req: Request, res: Response) => {
+    const caller = getAuthenticatedUser(req);
+    if (!caller) {
+      return res.status(401).json({ success: false, message: 'No autenticado' });
+    }
     const disp = db.createDispute(req.body);
     res.json({ success: true, dispute: disp, version: db.getVersion() });
   });
 
   app.patch('/api/disputes/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+    }
     const { status, resolutionNotes } = req.body;
     const updated = db.resolveDispute(req.params.id, status, resolutionNotes);
     if (!updated) return res.status(404).json({ success: false, message: 'Dispute not found' });
@@ -597,6 +908,10 @@ async function startServer() {
   });
 
   app.delete('/api/disputes/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+    }
     const ok = db.deleteDispute(req.params.id);
     res.json({ success: ok, version: db.getVersion() });
   });
@@ -612,33 +927,32 @@ async function startServer() {
   });
 
   app.delete('/api/reviews/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+    }
     const ok = db.deleteReview(req.params.id);
     res.json({ success: ok, version: db.getVersion() });
   });
 
   // --- USERS & AUTHENTICATION ---
   app.get('/api/users', (req: Request, res: Response) => {
-    res.json({ success: true, users: db.getUsers() });
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+    }
+    const safeUsers = db.getUsers().map(u => sanitizeUser(u));
+    res.json({ success: true, users: safeUsers });
   });
 
   // Verify active session token & return fresh user profile
   app.get('/api/auth/me', (req: Request, res: Response) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ success: false, message: 'No autenticado' });
-      }
-      const token = authHeader.slice(7).trim();
-      const session = verifySessionToken(token);
-      if (!session) {
-        return res.status(401).json({ success: false, message: 'Sesión expirada o token no válido' });
-      }
-      const users = db.getUsers();
-      const user = users.find(u => u.id === session.userId);
+      const user = getAuthenticatedUser(req);
       if (!user) {
-        return res.status(404).json({ success: false, message: 'Usuario no encontrado en la base central' });
+        return res.status(401).json({ success: false, message: 'No autenticado o sesión expirada' });
       }
-      res.json({ success: true, user });
+      res.json({ success: true, user: sanitizeUser(user) });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error validando sesión' });
     }
@@ -655,38 +969,22 @@ async function startServer() {
         return res.status(404).json({ success: false, message: 'No existe una cuenta registrada con este correo electrónico.' });
       }
 
-      let valid = false;
-      if (user.passwordHash) {
-        valid = await verifyPassword(password, user.passwordHash);
-      }
-      if (!valid && (password === '123456' || password === 'admin123' || password === 'plazado2026' || (password && password.length >= 6))) {
-        valid = true;
+      if (!user.passwordHash) {
+        return res.status(401).json({ success: false, message: 'Contraseña no configurada para este usuario. Solicita restablecimiento.' });
       }
 
+      const valid = await verifyPassword(password, user.passwordHash);
       if (!valid) {
         return res.status(401).json({ success: false, message: 'Contraseña incorrecta. Por favor intenta nuevamente.' });
       }
 
       const token = createSessionToken(user);
       db.addAuditLog('USER_LOGIN', user.id, undefined, `Inicio de sesión exitoso como ${user.role} (${user.email})`);
-      res.json({ success: true, user, token, version: db.getVersion() });
+      res.json({ success: true, user: sanitizeUser(user), token, version: db.getVersion() });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error logging in' });
     }
   });
-
-  // Helper to authenticate Super Admin via Bearer token
-  function getAuthenticatedSuperAdmin(req: Request): User | null {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
-    const token = authHeader.slice(7).trim();
-    const session = verifySessionToken(token);
-    if (!session) return null;
-    const users = db.getUsers();
-    const user = users.find(u => u.id === session.userId);
-    if (!user || user.role !== 'SUPER_ADMIN') return null;
-    return user;
-  }
 
   // Active email verification OTP memory cache for non-registered users (guest / pre-register)
   const activeVerificationCodes = new Map<string, { code: string; expiresAt: number; name?: string; type: string }>();
@@ -1550,7 +1848,21 @@ async function startServer() {
 
   app.put('/api/users/:id', async (req: Request, res: Response) => {
     try {
+      const caller = getAuthenticatedUser(req);
+      if (!caller) {
+        return res.status(401).json({ success: false, message: 'No autenticado' });
+      }
+      if (caller.id !== req.params.id && caller.role !== 'SUPER_ADMIN') {
+        return res.status(403).json({ success: false, message: 'No tienes autorización para modificar este usuario' });
+      }
+
       const updateData = { ...req.body };
+      if (caller.role !== 'SUPER_ADMIN') {
+        delete updateData.role;
+        delete updateData.isApprovedByAdmin;
+        delete updateData.adminApprovalStatus;
+      }
+
       if (updateData.password || updateData.newPassword) {
         const pass = (updateData.password || updateData.newPassword).trim();
         if (pass.length >= 6) {
@@ -1561,7 +1873,7 @@ async function startServer() {
       }
       const updated = db.updateUser(req.params.id, updateData);
       if (!updated) return res.status(404).json({ success: false, message: 'User not found' });
-      res.json({ success: true, user: updated, version: db.getVersion() });
+      res.json({ success: true, user: sanitizeUser(updated), version: db.getVersion() });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error updating user' });
     }
@@ -1617,7 +1929,7 @@ async function startServer() {
       res.json({
         success: true,
         message: 'Documentos de identidad y fotografía biométrica recibidos exitosamente. Tu expediente está ahora en revisión por el Super Administrador.',
-        user: updatedUser || user,
+        user: updatedUser ? sanitizeUser(updatedUser) : sanitizeUser(user),
         version: db.getVersion()
       });
     } catch (err: any) {
@@ -1628,6 +1940,11 @@ async function startServer() {
   // Dedicated endpoint for user password change (Customers, Stores, Super Admin)
   app.post('/api/users/:id/password', async (req: Request, res: Response) => {
     try {
+      const caller = getAuthenticatedUser(req);
+      if (!caller) {
+        return res.status(401).json({ success: false, message: 'No autenticado' });
+      }
+
       const { password, newPassword, currentPassword } = req.body;
       const targetPass = (newPassword || password || '').trim();
       if (!targetPass || targetPass.length < 6) {
@@ -1639,11 +1956,19 @@ async function startServer() {
         return res.status(404).json({ success: false, message: 'Usuario no encontrado.' });
       }
 
-      // If currentPassword was provided, verify it against existing passwordHash
-      if (currentPassword && existingUser.passwordHash) {
-        const isCurrentValid = await verifyPassword(currentPassword, existingUser.passwordHash);
-        if (!isCurrentValid && currentPassword !== '123456' && currentPassword !== 'admin123') {
-          return res.status(400).json({ success: false, message: 'La contraseña actual ingresada es incorrecta.' });
+      // If caller is NOT Super Admin, caller must be the user themselves AND must verify currentPassword
+      if (caller.role !== 'SUPER_ADMIN') {
+        if (caller.id !== req.params.id) {
+          return res.status(403).json({ success: false, message: 'No tienes permiso para modificar esta contraseña.' });
+        }
+        if (!currentPassword) {
+          return res.status(400).json({ success: false, message: 'Debes proporcionar tu contraseña actual.' });
+        }
+        if (existingUser.passwordHash) {
+          const isCurrentValid = await verifyPassword(currentPassword, existingUser.passwordHash);
+          if (!isCurrentValid) {
+            return res.status(401).json({ success: false, message: 'La contraseña actual ingresada es incorrecta.' });
+          }
         }
       }
 
@@ -1657,13 +1982,17 @@ async function startServer() {
       firestoreRepo.saveUser(updated).catch(e => console.error('Firestore user password sync error:', e));
 
       db.addAuditLog('USER_PASSWORD_CHANGE', req.params.id, undefined, `Contraseña actualizada para ${updated.email} (${updated.name})`);
-      res.json({ success: true, message: 'Contraseña actualizada con éxito', user: updated, version: db.getVersion() });
+      res.json({ success: true, message: 'Contraseña actualizada con éxito', user: sanitizeUser(updated), version: db.getVersion() });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error actualizando contraseña' });
     }
   });
 
   app.delete('/api/users/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+    }
     const ok = db.deleteUser(req.params.id);
     if (!ok) return res.status(400).json({ success: false, message: 'Cannot delete user' });
     res.json({ success: true, version: db.getVersion() });
@@ -1672,9 +2001,18 @@ async function startServer() {
   // Self-service account deletion for users & merchants
   app.post('/api/account/delete', async (req: Request, res: Response) => {
     try {
+      const caller = getAuthenticatedUser(req);
+      if (!caller) {
+        return res.status(401).json({ success: false, message: 'No autenticado' });
+      }
+
       const { userId, password, deleteAssociatedStore } = req.body;
       if (!userId) {
         return res.status(400).json({ success: false, message: 'ID de usuario requerido' });
+      }
+
+      if (caller.id !== userId && caller.role !== 'SUPER_ADMIN') {
+        return res.status(403).json({ success: false, message: 'No autorizado para eliminar esta cuenta' });
       }
 
       const user = db.getUsers().find(u => u.id === userId);
@@ -1689,14 +2027,16 @@ async function startServer() {
         });
       }
 
-      if (password && user.passwordHash) {
+      if (user.passwordHash && caller.role !== 'SUPER_ADMIN') {
+        if (!password) {
+          return res.status(400).json({ success: false, message: 'Se requiere la contraseña para confirmar la eliminación de la cuenta.' });
+        }
         const valid = await verifyPassword(password, user.passwordHash);
         if (!valid) {
           return res.status(400).json({ success: false, message: 'La contraseña ingresada no es correcta.' });
         }
       }
 
-      const userName = user.name;
       const userEmail = user.email;
       const ok = db.deleteUser(userId, !!deleteAssociatedStore);
       if (!ok) {
@@ -1756,6 +2096,8 @@ async function startServer() {
   });
 
   app.post('/api/admin/users/purge-non-admins', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const result = db.deleteNonAdminUsers();
     res.json({
       success: true,
@@ -1767,26 +2109,36 @@ async function startServer() {
 
   // --- AUDIT & PURGE ---
   app.get('/api/audit-logs', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     res.json({ success: true, auditLogs: db.getAuditLogs() });
   });
 
   app.post('/api/audit-logs', (req: Request, res: Response) => {
+    const caller = getAuthenticatedUser(req);
+    if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
     const { action, record, prev, next, user } = req.body;
     const log = db.addAuditLog(action, record, prev, next, user);
     res.json({ success: true, log, version: db.getVersion() });
   });
 
   app.delete('/api/audit-logs/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const ok = db.deleteAuditLog(req.params.id);
     res.json({ success: ok, version: db.getVersion() });
   });
 
   app.delete('/api/audit-logs', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     db.clearAllAuditLogs();
     res.json({ success: true, version: db.getVersion() });
   });
 
   app.post('/api/admin/purge', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const { type } = req.body;
     const count = db.purgeRecords(type);
     res.json({ success: true, purgedCount: count, version: db.getVersion() });
@@ -2024,10 +2376,14 @@ async function startServer() {
 
   // --- PERSISTENCE & DATA INTEGRITY PROTECTION ---
   app.get('/api/admin/persistence/status', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     res.json({ success: true, persistence: db.getPersistenceStatus() });
   });
 
   app.post('/api/admin/persistence/sync-firestore', async (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     try {
       await db.initFirestoreSync();
       const status = db.getPersistenceStatus();
@@ -2042,12 +2398,16 @@ async function startServer() {
   });
 
   app.post('/api/admin/persistence/backup', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const { label } = req.body;
     const result = db.createManualBackup(label);
     res.json(result);
   });
 
   app.post('/api/admin/persistence/restore', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const { filename } = req.body;
     if (!filename) {
       return res.status(400).json({ success: false, message: 'Nombre de archivo requerido' });

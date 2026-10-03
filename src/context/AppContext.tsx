@@ -293,6 +293,7 @@ interface AppContextType {
   adminImpersonateStore: (storeId: string) => void;
   adminExitImpersonation: () => void;
   createSuperAdminUser: (data: { name: string; email: string; phone: string; password: string }) => Promise<{ success: boolean; message: string }>;
+  assignStoreAdmin: (storeId: string, data: { email: string; password: string; name?: string; phone?: string }) => Promise<{ success: boolean; message: string; user?: User }>;
   submitKycVerification: (data: { cedulaNumber: string; cedulaFrontUrl: string; selfieUrl?: string; biometricScore?: number }) => Promise<{ success: boolean; message: string }>;
 
   // Theme (Dark / Light mode)
@@ -2872,6 +2873,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const assignStoreAdmin = async (storeId: string, data: { email: string; password: string; name?: string; phone?: string }): Promise<{ success: boolean; message: string; user?: User }> => {
+    try {
+      const res = await api.assignStoreAdmin(storeId, data);
+      if (res.success && res.user) {
+        showNotification(res.message || 'Administrador asignado correctamente a la tienda', 'success');
+        setUsers(prev => {
+          const exists = prev.some(u => u.id === res.user!.id);
+          if (exists) {
+            return prev.map(u => u.id === res.user!.id ? res.user! : u);
+          }
+          return [...prev, res.user!];
+        });
+        if (res.store) {
+          setStores(prev => prev.map(s => s.id === res.store!.id ? { ...s, ...res.store } : s));
+        }
+        const syncRes = await api.sync(0);
+        if (syncRes.data) applyServerState(syncRes.data, syncRes.version);
+        return { success: true, message: res.message, user: res.user };
+      }
+      showNotification(res.message || 'Error al asignar administrador', 'error');
+      return { success: false, message: res.message || 'Error al asignar administrador' };
+    } catch (err: any) {
+      const msg = err.message || 'Error al comunicarse con el servidor central';
+      showNotification(msg, 'error');
+      return { success: false, message: msg };
+    }
+  };
+
   const submitKycVerification = async (data: { cedulaNumber: string; cedulaFrontUrl: string; selfieUrl?: string; biometricScore?: number }) => {
     try {
       const res = await api.submitKyc({
@@ -3105,6 +3134,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       adminImpersonateStore,
       adminExitImpersonation,
       createSuperAdminUser,
+      assignStoreAdmin,
       submitKycVerification,
 
       theme,

@@ -401,6 +401,18 @@ export const api = {
     return request('/api/auth/register-store', { method: 'POST', body: JSON.stringify(data) });
   },
 
+  // Super Admin: Asignar usuario administrador (correo y contraseña) a una tienda
+  async assignStoreAdmin(storeId: string, data: { email: string; password: string; name?: string; phone?: string }): Promise<{ success: boolean; message: string; user?: User; store?: Store; version?: number }> {
+    return request(`/api/admin/stores/${storeId}/assign-admin`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
+  async getStoreAdminUser(storeId: string): Promise<{ success: boolean; user: User | null }> {
+    return request(`/api/admin/stores/${storeId}/admin-user`);
+  },
+
   async updateUser(id: string, data: Partial<User>): Promise<{ success: boolean; user: User; version: number }> {
     return request(`/api/users/${id}`, { method: 'PUT', body: JSON.stringify(data) });
   },
