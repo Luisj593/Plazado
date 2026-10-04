@@ -962,35 +962,46 @@ async function startServer() {
     try {
       const { email, password } = req.body;
 
-      // 1. Password must be provided as a non-empty string. Exact characters preserved.
+      // PASO 1: Recibir email y password (validar presencia de caracteres)
       if (!password || typeof password !== 'string' || password.length === 0) {
-        return res.status(401).json({ success: false, message: 'Credenciales inválidas.' });
+        return res.status(401).json({ success: false, message: 'Correo electrónico o contraseña incorrectos.' });
       }
 
-      const cleanEmail = (email || '').trim().toLowerCase();
-      if (!cleanEmail) {
-        return res.status(401).json({ success: false, message: 'Credenciales inválidas.' });
+      const normalizedEmail = (email || '').trim().toLowerCase();
+      if (!normalizedEmail) {
+        return res.status(401).json({ success: false, message: 'Correo electrónico o contraseña incorrectos.' });
       }
 
-      // 2. Identify user exclusively by email
-      const user = db.getUserByEmail(cleanEmail);
+      // PASO 2: Buscar exactamente UN usuario por email normalizado
+      const user = db.getUserByEmail(normalizedEmail);
+
+      // PASO 3: Si el usuario NO existe -> DENEGAR ACCESO inmediatamente
       if (!user) {
-        return res.status(401).json({ success: false, message: 'Credenciales inválidas.' });
+        return res.status(401).json({ success: false, message: 'Correo electrónico o contraseña incorrectos.' });
       }
 
-      // 3. Obtain password_hash belonging specifically to this user
-      if (!user.passwordHash || typeof user.passwordHash !== 'string') {
-        return res.status(401).json({ success: false, message: 'Credenciales inválidas.' });
+      // PASO 4: Obtener EXCLUSIVAMENTE el passwordHash asociado al user.id encontrado
+      const credential = db.getUserCredential(user.id);
+      const storedHash = credential?.passwordHash || user.passwordHash;
+      if (!storedHash || typeof storedHash !== 'string' || storedHash.length === 0) {
+        return res.status(401).json({ success: false, message: 'Correo electrónico o contraseña incorrectos.' });
       }
 
-      // 4. Exact cryptographic comparison: password against user.passwordHash
-      // Exact character check: no lowercase, uppercase, partial, or fuzzy matching
-      const passwordValida = await verifyPassword(password, user.passwordHash);
-      if (passwordValida !== true) {
-        return res.status(401).json({ success: false, message: 'Credenciales inválidas.' });
+      // PASO 5: Comparar la contraseña introducida contra ese hash exacto (sin alterar mayúsculas/minúsculas)
+      const passwordIsValid = await verifyPassword(password, storedHash);
+
+      // PASO 6: ÚNICAMENTE si passwordIsValid === true se autoriza acceso
+      if (passwordIsValid !== true) {
+        return res.status(401).json({ success: false, message: 'Correo electrónico o contraseña incorrectos.' });
       }
 
-      // 5. Generate session token ONLY after explicit verification is valid
+      // Si el hash almacenado requiere actualización a bcrypt moderno, actualizar credencial 1:1
+      if (!storedHash.startsWith('$2')) {
+        const upgradedHash = await hashPassword(password);
+        db.setUserCredential(user.id, upgradedHash);
+      }
+
+      // Generar sesión / token EXCLUSIVAMENTE tras validar la contraseña correctamente
       const token = createSessionToken(user);
       db.addAuditLog('USER_LOGIN', user.id, undefined, `Inicio de sesión exitoso como ${user.role} (${user.email})`);
       return res.json({ success: true, user: sanitizeUser(user), token, version: db.getVersion() });
@@ -1229,13 +1240,11 @@ async function startServer() {
         }
 
         db.addAuditLog('USER_EMAIL_VERIFIED', user.id, undefined, `Usuario ${user.name} (${user.email}) validó su código de correo exitosamente.`);
-        const token = createSessionToken(user);
         return res.json({
           success: true,
           verified: true,
-          user,
-          token,
-          message: '¡Tu cuenta y correo electrónico han sido verificados exitosamente!'
+          user: sanitizeUser(user),
+          message: '¡Tu cuenta y correo electrónico han sido verificados exitosamente! Por favor inicia sesión con tu contraseña.'
         });
       }
 

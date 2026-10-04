@@ -75,7 +75,7 @@ export const INITIAL_USERS: User[] = [
     role: 'SUPER_ADMIN',
     phone: '809-449-3325',
     avatar: '',
-    passwordHash: 'e967c5b7e0c6e658ce20e7f08f218590b41a87b19e757b3cba3541b5d2b52d14', // Matthias8325
+    passwordHash: '$2b$10$976iN/8lgyrlwBQUknbEcuPeBWn.SReKDTPI07KT0QDMiwNpHGh6K', // Matthias8325 (bcrypt)
     addresses: [],
     createdAt: '2026-01-01T00:00:00Z'
   },
@@ -86,7 +86,7 @@ export const INITIAL_USERS: User[] = [
     role: 'SUPER_ADMIN',
     phone: '809-449-3325',
     avatar: '',
-    passwordHash: 'e967c5b7e0c6e658ce20e7f08f218590b41a87b19e757b3cba3541b5d2b52d14', // Matthias8325
+    passwordHash: '$2b$10$976iN/8lgyrlwBQUknbEcuPeBWn.SReKDTPI07KT0QDMiwNpHGh6K', // Matthias8325 (bcrypt)
     addresses: [],
     createdAt: '2026-01-01T00:00:00Z'
   }

@@ -966,22 +966,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!res.success) {
         return { success: false, message: res.message || 'Código incorrecto' };
       }
-      if (res.token) {
+      if (res.token && res.user) {
         localStorage.setItem('plazado_auth_token', res.token);
-      }
-      if (res.user) {
         setCurrentUser(res.user);
         setUsers(prev => [...prev.filter(u => u.id !== res.user!.id), res.user!]);
         setIsAuthModalOpen(false);
         setPendingVerificationEmail(null);
         showNotification('¡Cuenta y correo electrónico verificados exitosamente!', 'success');
-        if (res.user.role === 'STORE_OWNER') {
-          setCurrentView('store_dashboard');
-        } else if (res.user.role === 'SUPER_ADMIN') {
-          setCurrentView('admin_dashboard');
-        } else {
-          setCurrentView('home');
-        }
+      } else {
+        setPendingVerificationEmail(null);
+        setAuthModalMode('login');
+        showNotification('¡Cuenta verificada! Ingresa tu correo y contraseña para iniciar sesión.', 'success');
       }
       return { success: true, message: res.message, user: res.user };
     } catch (err: any) {

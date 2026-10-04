@@ -5,6 +5,7 @@ import { cloudSqlRepo } from './cloudsql-repository';
 import { firestoreRepo } from './firestore-repository';
 import { 
   User, 
+  UserCredential,
   UserVerificationInfo,
   Store, 
   Category, 
@@ -64,6 +65,7 @@ export interface GlobalDatabaseData {
   products: Product[];
   categories: Category[];
   users: User[];
+  userCredentials?: UserCredential[];
   orders: Order[];
   storeBalances: Record<string, StoreBalance>;
   settlements: Settlement[];
@@ -351,13 +353,13 @@ class GlobalDatabase {
     const superAdminAccounts = [
       {
         email: 'luiss.jimeness@gmail.com',
-        id: 'user-super-admin-luissjimeness',
-        hash: 'e967c5b7e0c6e658ce20e7f08f218590b41a87b19e757b3cba3541b5d2b52d14' // Matthias8325
+        id: 'user-super-admin-2',
+        hash: '$2b$10$976iN/8lgyrlwBQUknbEcuPeBWn.SReKDTPI07KT0QDMiwNpHGh6K' // Matthias8325 (bcrypt)
       },
       {
         email: 'luis.jimenez@msn.com',
-        id: 'user-super-admin-luisjimenez',
-        hash: 'e967c5b7e0c6e658ce20e7f08f218590b41a87b19e757b3cba3541b5d2b52d14' // Matthias8325
+        id: 'user-super-admin',
+        hash: '$2b$10$976iN/8lgyrlwBQUknbEcuPeBWn.SReKDTPI07KT0QDMiwNpHGh6K' // Matthias8325 (bcrypt)
       }
     ];
     for (const admin of superAdminAccounts) {
@@ -382,8 +384,32 @@ class GlobalDatabase {
 
     // Individual password migration for store owner user account
     const storeAdmin = data.users.find(u => u.email.toLowerCase() === 'clahsventa28@gmail.com');
-    if (storeAdmin && (!storeAdmin.passwordHash || storeAdmin.passwordHash === 'e967c5b7e0c6e658ce20e7f08f218590b41a87b19e757b3cba3541b5d2b52d14')) {
-      storeAdmin.passwordHash = '9a4307bf89f794e8fa18462ac041f5c47d7d0e3730817a532b2daee7474337cf'; // Tienda2026!
+    if (storeAdmin) {
+      storeAdmin.passwordHash = '$2b$10$cBqrl9b4RkRsogvDgjoyXuKlx.rBzTfqJGqOK6pROpoEglDsNB64K'; // Tienda2026! (bcrypt)
+    }
+
+    // Ensure 1:1 UserCredential records for all users (USER.ID -> PASSWORD_HASH)
+    if (!data.userCredentials) {
+      data.userCredentials = [];
+    }
+    const now = new Date().toISOString();
+    for (const u of data.users) {
+      if (!u.id) continue;
+      const existing = data.userCredentials.find(c => c.userId === u.id);
+      if (existing) {
+        if (u.passwordHash && existing.passwordHash !== u.passwordHash) {
+          existing.passwordHash = u.passwordHash;
+          existing.updatedAt = now;
+        }
+      } else if (u.passwordHash) {
+        data.userCredentials.push({
+          id: `cred-${u.id}`,
+          userId: u.id,
+          passwordHash: u.passwordHash,
+          createdAt: u.createdAt || now,
+          updatedAt: now
+        });
+      }
     }
   }
 
@@ -1242,6 +1268,8 @@ class GlobalDatabase {
       };
       this.memoryData.users.push(user);
     }
+
+    this.setUserCredential(user.id, passwordHash);
 
     // Link store to user
     store.ownerId = user.id;
@@ -2708,8 +2736,59 @@ class GlobalDatabase {
     return this.memoryData.users.find(u => u.id === id);
   }
 
+  public getUserCredentials(): UserCredential[] {
+    if (!this.memoryData.userCredentials) {
+      this.memoryData.userCredentials = [];
+    }
+    return this.memoryData.userCredentials;
+  }
+
+  public getUserCredential(userId: string): UserCredential | undefined {
+    if (!this.memoryData.userCredentials) {
+      this.memoryData.userCredentials = [];
+    }
+    return this.memoryData.userCredentials.find(c => c.userId === userId);
+  }
+
+  public setUserCredential(userId: string, passwordHash: string): UserCredential {
+    if (!this.memoryData.userCredentials) {
+      this.memoryData.userCredentials = [];
+    }
+    const idx = this.memoryData.userCredentials.findIndex(c => c.userId === userId);
+    const now = new Date().toISOString();
+    let cred: UserCredential;
+    if (idx !== -1) {
+      cred = {
+        ...this.memoryData.userCredentials[idx],
+        passwordHash,
+        updatedAt: now
+      };
+      this.memoryData.userCredentials[idx] = cred;
+    } else {
+      cred = {
+        id: `cred-${userId}`,
+        userId,
+        passwordHash,
+        createdAt: now,
+        updatedAt: now
+      };
+      this.memoryData.userCredentials.push(cred);
+    }
+
+    const u = this.memoryData.users.find(user => user.id === userId);
+    if (u) {
+      u.passwordHash = passwordHash;
+    }
+
+    this.commit();
+    return cred;
+  }
+
   public addUser(user: User): User {
     this.memoryData.users.push(user);
+    if (user.passwordHash) {
+      this.setUserCredential(user.id, user.passwordHash);
+    }
     this.addAuditLog('USER_CREATED', user.id, undefined, `Usuario creado: ${user.name} (${user.email})`);
     this.commit();
 
@@ -2731,6 +2810,9 @@ class GlobalDatabase {
     const idx = this.memoryData.users.findIndex(u => u.id === userId);
     if (idx === -1) return null;
     this.memoryData.users[idx] = { ...this.memoryData.users[idx], ...data };
+    if (data.passwordHash) {
+      this.setUserCredential(userId, data.passwordHash);
+    }
     this.commit();
 
     cloudSqlRepo.updateUser(userId, {
@@ -2763,6 +2845,9 @@ class GlobalDatabase {
     }
 
     this.memoryData.users.splice(idx, 1);
+    if (this.memoryData.userCredentials) {
+      this.memoryData.userCredentials = this.memoryData.userCredentials.filter(c => c.userId !== userId);
+    }
     this.addAuditLog('USER_DELETED', userId, user.email, 'Usuario eliminado de la base de datos y Google Cloud');
     this.commit();
     firestoreRepo.deleteUser(userId).catch(err => console.error('[Firestore] Error deleting user:', err));

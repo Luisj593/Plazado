@@ -92,6 +92,14 @@ export interface User {
   createdAt: string;
 }
 
+export interface UserCredential {
+  id: string;
+  userId: string; // UNIQUE: One-to-One with User
+  passwordHash: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CustomerRegistrationInput {
   name: string;
   lastName: string;
