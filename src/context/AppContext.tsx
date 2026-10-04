@@ -413,10 +413,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (res.success && res.user) {
           setCurrentUser(res.user);
           localStorage.setItem('plazado_user_profile_cache', JSON.stringify(res.user));
+          localStorage.setItem(CLIENT_STORAGE_KEYS.SESSION_USER, res.user.id);
         } else {
+          // Token is invalid or expired - wipe all session traces
+          setCurrentUser(null);
           localStorage.removeItem('plazado_auth_token');
+          localStorage.removeItem('plazado_user_profile_cache');
+          localStorage.removeItem(CLIENT_STORAGE_KEYS.SESSION_USER);
         }
-      }).catch(() => {});
+      }).catch(() => {
+        setCurrentUser(null);
+        localStorage.removeItem('plazado_auth_token');
+        localStorage.removeItem('plazado_user_profile_cache');
+        localStorage.removeItem(CLIENT_STORAGE_KEYS.SESSION_USER);
+      });
+    } else {
+      // No token present - enforce unauthenticated state
+      setCurrentUser(null);
+      localStorage.removeItem('plazado_user_profile_cache');
+      localStorage.removeItem(CLIENT_STORAGE_KEYS.SESSION_USER);
     }
   }, []);
 
@@ -556,9 +571,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const currentVersionRef = useRef<number>(0);
   const isSyncingRef = useRef<boolean>(false);
 
-  // Client device session user with instant local recovery to prevent session loss on page refresh
+  // Client device session user - strictly require active plazado_auth_token
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     if (typeof window === 'undefined') return null;
+    const token = localStorage.getItem('plazado_auth_token');
+    if (!token) {
+      localStorage.removeItem('plazado_user_profile_cache');
+      localStorage.removeItem(CLIENT_STORAGE_KEYS.SESSION_USER);
+      return null;
+    }
     try {
       const cached = localStorage.getItem('plazado_user_profile_cache');
       if (cached) return JSON.parse(cached);
@@ -618,9 +639,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (state.fulfillmentWithdrawals) setFulfillmentWithdrawals(state.fulfillmentWithdrawals);
     if (state.fulfillmentConfig) setFulfillmentConfig(state.fulfillmentConfig);
 
-    // Reconcile current user session
+    // Reconcile current user session ONLY IF a valid auth token is present
+    const token = typeof window !== 'undefined' ? localStorage.getItem('plazado_auth_token') : null;
     const savedUserId = typeof window !== 'undefined' ? localStorage.getItem(CLIENT_STORAGE_KEYS.SESSION_USER) : null;
-    if (savedUserId) {
+    if (token && savedUserId) {
       const found = state.users.find(u => u.id === savedUserId);
       if (found) {
         setCurrentUser(found);
@@ -628,6 +650,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           localStorage.setItem('plazado_user_profile_cache', JSON.stringify(found));
         } catch (e) {}
       }
+    } else if (!token) {
+      setCurrentUser(null);
+      localStorage.removeItem('plazado_user_profile_cache');
+      localStorage.removeItem(CLIENT_STORAGE_KEYS.SESSION_USER);
     }
   }, []);
 
@@ -824,54 +850,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return e === 'luis.jimenez@msn.com' || e === 'luiss.jimeness@gmail.com';
   };
 
-  // RBAC Persona Switcher (Convenience for testing and live demonstration)
-  const switchPersona = (role: UserRole, storeId?: string) => {
-    if (role === 'CUSTOMER') {
-      const cust = users.find(u => u.role === 'CUSTOMER') || users[0];
-      setCurrentUser(cust);
-      setCurrentView('home');
-      showNotification(`Cambiado a perfil: Cliente (${cust.name})`, 'info');
-    } else if (role === 'STORE_OWNER') {
-      const targetStoreId = storeId || (stores[0]?.id || 'store-techzone');
-      const storeUser = users.find(u => u.role === 'STORE_OWNER' && u.storeId === targetStoreId) || {
-        id: `user-store-${targetStoreId}`,
-        name: `Encargado de Tienda`,
-        email: `tienda@${targetStoreId}.com`,
-        role: 'STORE_OWNER' as UserRole,
-        phone: '809-555-0000',
-        storeId: targetStoreId,
-        addresses: [],
-        createdAt: new Date().toISOString()
-      };
-      setCurrentUser(storeUser);
-      setCurrentView('store_dashboard');
-      const store = stores.find(s => s.id === targetStoreId);
-      showNotification(`Cambiado a panel de tienda: ${store ? store.name : targetStoreId}`, 'info');
-    } else if (role === 'SUPER_ADMIN') {
-      const admin = users.find(u => u.role === 'SUPER_ADMIN' && isSuperAdminEmail(u.email)) || users.find(u => u.role === 'SUPER_ADMIN');
-      if (admin) {
-        setCurrentUser(admin);
-        setCurrentView('admin_dashboard');
-        showNotification(`Cambiado a: Super Administrador (Control Global PlazaDO)`, 'info');
-      } else {
-        showNotification('Acceso Denegado: Sesión de Super Administrador reservada', 'error');
-      }
-    }
+  // RBAC Persona Switcher (Disabled in production to enforce strict password authentication)
+  const switchPersona = (_role: UserRole, _storeId?: string) => {
+    showNotification('Para cambiar de usuario debes autenticarte ingresando tu correo y contraseña.', 'info');
+    setIsAuthModalOpen(true);
   };
 
   // Global Centralized Login
   const login = async (email: string, pass: string): Promise<{ success: boolean; message?: string }> => {
+    // 1. Password must be a non-empty string
+    if (!pass || typeof pass !== 'string' || pass.length === 0) {
+      setCurrentUser(null);
+      localStorage.removeItem('plazado_auth_token');
+      localStorage.removeItem('plazado_user_profile_cache');
+      localStorage.removeItem(CLIENT_STORAGE_KEYS.SESSION_USER);
+      return { success: false, message: 'La contraseña es requerida.' };
+    }
+
     const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setCurrentUser(null);
+      localStorage.removeItem('plazado_auth_token');
+      localStorage.removeItem('plazado_user_profile_cache');
+      localStorage.removeItem(CLIENT_STORAGE_KEYS.SESSION_USER);
+      return { success: false, message: 'El correo electrónico es requerido.' };
+    }
+
     try {
       const res = await api.login(cleanEmail, pass);
-      if (!res.success || !res.user) {
+      if (!res.success || !res.user || !res.token) {
+        // Enforce Section 8: Una autenticación fallida jamás debe heredar una sesión previamente autenticada.
+        // Si se intenta iniciar sesión con contraseña incorrecta: NO TOKEN, NO NUEVA SESIÓN, NO ACCESO.
+        setCurrentUser(null);
+        localStorage.removeItem('plazado_auth_token');
+        localStorage.removeItem('plazado_user_profile_cache');
+        localStorage.removeItem(CLIENT_STORAGE_KEYS.SESSION_USER);
         return { success: false, message: res.message || 'Credenciales inválidas' };
       }
 
       const user = res.user;
-      if (res.token) {
-        localStorage.setItem('plazado_auth_token', res.token);
-      }
+      localStorage.setItem('plazado_auth_token', res.token);
+      localStorage.setItem('plazado_user_profile_cache', JSON.stringify(user));
+      localStorage.setItem(CLIENT_STORAGE_KEYS.SESSION_USER, user.id);
       setCurrentUser(user);
       setIsAuthModalOpen(false);
 
@@ -917,6 +937,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       return { success: true };
     } catch (err: any) {
+      setCurrentUser(null);
+      localStorage.removeItem('plazado_auth_token');
+      localStorage.removeItem('plazado_user_profile_cache');
+      localStorage.removeItem(CLIENT_STORAGE_KEYS.SESSION_USER);
       return { success: false, message: err.message || 'Error de conexión con el servidor central' };
     }
   };
