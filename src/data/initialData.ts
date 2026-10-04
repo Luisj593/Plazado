@@ -75,7 +75,7 @@ export const INITIAL_USERS: User[] = [
     role: 'SUPER_ADMIN',
     phone: '809-449-3325',
     avatar: '',
-    passwordHash: '66fc5c4b3d7c57b3c1760b876866b220dd78d7f698d02b8e3e93eee3c82d8b91', // Admin2026!
+    passwordHash: 'e967c5b7e0c6e658ce20e7f08f218590b41a87b19e757b3cba3541b5d2b52d14', // Matthias8325
     addresses: [],
     createdAt: '2026-01-01T00:00:00Z'
   },
@@ -86,7 +86,7 @@ export const INITIAL_USERS: User[] = [
     role: 'SUPER_ADMIN',
     phone: '809-449-3325',
     avatar: '',
-    passwordHash: '1b6d3ad378f4fb28c02b8a71745bfd81b0a8253f848f9e8645ca9629dc903c50', // Plazado2026!
+    passwordHash: 'e967c5b7e0c6e658ce20e7f08f218590b41a87b19e757b3cba3541b5d2b52d14', // Matthias8325
     addresses: [],
     createdAt: '2026-01-01T00:00:00Z'
   }

@@ -352,21 +352,19 @@ class GlobalDatabase {
       {
         email: 'luiss.jimeness@gmail.com',
         id: 'user-super-admin-luissjimeness',
-        hash: '1b6d3ad378f4fb28c02b8a71745bfd81b0a8253f848f9e8645ca9629dc903c50' // Plazado2026!
+        hash: 'e967c5b7e0c6e658ce20e7f08f218590b41a87b19e757b3cba3541b5d2b52d14' // Matthias8325
       },
       {
         email: 'luis.jimenez@msn.com',
         id: 'user-super-admin-luisjimenez',
-        hash: '66fc5c4b3d7c57b3c1760b876866b220dd78d7f698d02b8e3e93eee3c82d8b91' // Admin2026!
+        hash: 'e967c5b7e0c6e658ce20e7f08f218590b41a87b19e757b3cba3541b5d2b52d14' // Matthias8325
       }
     ];
     for (const admin of superAdminAccounts) {
       const found = data.users.find(u => u.email.toLowerCase() === admin.email.toLowerCase());
       if (found) {
         found.role = 'SUPER_ADMIN';
-        if (!found.passwordHash || found.passwordHash === '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918') {
-          found.passwordHash = admin.hash;
-        }
+        found.passwordHash = admin.hash;
       } else {
         data.users.push({
           id: admin.id,
