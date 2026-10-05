@@ -441,18 +441,14 @@ class GlobalDatabase {
         }
       }
 
-      // Preserve existing store status unless unapproved
-      const currentStatus = (store.status || '').toUpperCase();
-      const finalStatus = (currentStatus === 'SUSPENDED' || currentStatus === 'REJECTED') ? store.status : 'APPROVED';
-      const finalPublished = (currentStatus === 'SUSPENDED' || currentStatus === 'REJECTED') ? false : (store.isPublished !== false);
-
+      // Preserve exact store fields created by users without altering their decisions
       safeStores.push({
         ...store,
         slug,
         ownerId: ownerId,
         owner_id: ownerId,
-        status: finalStatus,
-        isPublished: finalPublished,
+        status: store.status || 'APPROVED',
+        isPublished: store.isPublished !== undefined ? store.isPublished : true,
         rating: typeof store.rating === 'number' ? store.rating : 5.0,
         reviewCount: typeof store.reviewCount === 'number' ? store.reviewCount : 0,
         salesCount: typeof store.salesCount === 'number' ? store.salesCount : 0
@@ -513,16 +509,36 @@ class GlobalDatabase {
       }
 
       let updated = false;
-      // If Firestore has stores, replace memory stores with Firestore production stores
-      if (firestoreData.stores && firestoreData.stores.length > 0) {
-        console.log(`[GlobalDatabase] Loaded ${firestoreData.stores.length} official production stores from Firestore.`);
-        this.memoryData.stores = firestoreData.stores;
-        updated = true;
+      // Non-destructively merge stores from Firestore: preserve stores created by users
+      if (Array.isArray(firestoreData.stores) && firestoreData.stores.length > 0) {
+        console.log(`[GlobalDatabase] Syncing ${firestoreData.stores.length} stores from Firestore.`);
+        for (const fsStore of firestoreData.stores) {
+          const existingIdx = this.memoryData.stores.findIndex(s => s.id === fsStore.id);
+          if (existingIdx === -1) {
+            this.memoryData.stores.push(fsStore);
+            updated = true;
+          } else {
+            this.memoryData.stores[existingIdx] = {
+              ...fsStore,
+              ...this.memoryData.stores[existingIdx]
+            };
+          }
+        }
       }
-      if (firestoreData.products && firestoreData.products.length > 0) {
-        console.log(`[GlobalDatabase] Loaded ${firestoreData.products.length} official production products from Firestore.`);
-        this.memoryData.products = firestoreData.products;
-        updated = true;
+      if (Array.isArray(firestoreData.products) && firestoreData.products.length > 0) {
+        console.log(`[GlobalDatabase] Syncing ${firestoreData.products.length} products from Firestore.`);
+        for (const fsProd of firestoreData.products) {
+          const existingIdx = this.memoryData.products.findIndex(p => p.id === fsProd.id);
+          if (existingIdx === -1) {
+            this.memoryData.products.push(fsProd);
+            updated = true;
+          } else {
+            this.memoryData.products[existingIdx] = {
+              ...fsProd,
+              ...this.memoryData.products[existingIdx]
+            };
+          }
+        }
       }
       if (firestoreData.categories && firestoreData.categories.length > 0) {
         console.log(`[GlobalDatabase] Loaded ${firestoreData.categories.length} official categories from Firestore.`);
@@ -1095,6 +1111,8 @@ class GlobalDatabase {
       status: newStore.status,
     }).catch(err => console.error('[CloudSQL] Error syncing createStore:', err));
 
+    firestoreRepo.saveStore(newStore).catch(err => console.error('[Firestore] Error syncing createStore:', err));
+
     return newStore;
   }
 
@@ -1124,6 +1142,8 @@ class GlobalDatabase {
       status: updated.status,
     }).catch(err => console.error('[CloudSQL] Error syncing updateStore:', err));
 
+    firestoreRepo.saveStore(updated).catch(err => console.error('[Firestore] Error syncing updateStore:', err));
+
     return updated;
   }
 
@@ -1143,6 +1163,8 @@ class GlobalDatabase {
     cloudSqlRepo.updateStore(storeId, {
       status,
     }).catch(err => console.error('[CloudSQL] Error syncing store status:', err));
+
+    firestoreRepo.saveStore(store).catch(err => console.error('[Firestore] Error syncing store status:', err));
 
     return store;
   }
