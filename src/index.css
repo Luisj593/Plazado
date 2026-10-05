@@ -137,4 +137,40 @@ html.dark .stores-scroll-track::-webkit-scrollbar-track {
   background: #292524;
 }
 
+/* Horizontal scrollbar for Store and Admin action buttons */
+.admin-actions-scroll {
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scrollbar-width: thin;
+  scrollbar-color: #a8a29e #f5f5f4;
+  -webkit-overflow-scrolling: touch;
+}
+.admin-actions-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+.admin-actions-scroll::-webkit-scrollbar-track {
+  background: #f5f5f4;
+  border-radius: 9999px;
+}
+.admin-actions-scroll::-webkit-scrollbar-thumb {
+  background: #a8a29e;
+  border-radius: 9999px;
+}
+.admin-actions-scroll::-webkit-scrollbar-thumb:hover {
+  background: #78716c;
+}
+html.dark .admin-actions-scroll {
+  scrollbar-color: #78716c #292524;
+}
+html.dark .admin-actions-scroll::-webkit-scrollbar-track {
+  background: #292524;
+}
+html.dark .admin-actions-scroll::-webkit-scrollbar-thumb {
+  background: #78716c;
+}
+html.dark .admin-actions-scroll::-webkit-scrollbar-thumb:hover {
+  background: #a8a29e;
+}
+
+
 

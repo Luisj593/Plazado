@@ -1564,7 +1564,7 @@ export const AdminDashboard: React.FC = () => {
                   );
                   return (
                     <div key={st.id} className="p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-4 min-w-0 flex-1">
                         {st.logo ? (
                           <img src={st.logo} alt="" className="w-14 h-14 rounded-xl object-cover border border-stone-200 shrink-0" />
                         ) : (
@@ -1572,9 +1572,9 @@ export const AdminDashboard: React.FC = () => {
                             {st.name.charAt(0).toUpperCase()}
                           </div>
                         )}
-                        <div>
+                        <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-bold text-sm text-stone-900">{st.name}</h3>
+                            <h3 className="font-bold text-sm text-stone-900 truncate">{st.name}</h3>
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
                               st.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' :
                               st.status === 'PENDING' || st.status === 'IN_REVIEW' ? 'bg-amber-100 text-amber-800' :
@@ -1587,7 +1587,7 @@ export const AdminDashboard: React.FC = () => {
                               {storeProductCount} productos
                             </span>
                           </div>
-                          <p className="text-xs text-stone-500 mt-0.5">
+                          <p className="text-xs text-stone-500 mt-0.5 truncate">
                             RNC: {st.bankInfo?.rncOrCedula || 'N/A'} • Propietario: {st.ownerName} ({st.email}) • {st.province}
                           </p>
 
@@ -1595,18 +1595,18 @@ export const AdminDashboard: React.FC = () => {
                           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                             {assignedAdmin ? (
                               <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                                <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                                <ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" />
                                 <span>Acceso Admin: <strong>{assignedAdmin.email}</strong> ({assignedAdmin.name})</span>
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
-                                <AlertTriangle className="w-3 h-3 text-amber-600" />
+                                <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
                                 <span>Sin usuario administrador asignado</span>
                               </span>
                             )}
                           </div>
 
-                          <div className="flex items-center gap-3 text-xs text-stone-600 mt-1">
+                          <div className="flex items-center gap-3 text-xs text-stone-600 mt-1 flex-wrap">
                             <span>Balance Disp: <strong>RD$ {bal.availableBalance.toLocaleString()}</strong></span>
                             <span>• En Custodia: RD$ {bal.pendingBalance.toLocaleString()}</span>
                             <span>• Ventas: RD$ {bal.totalSales.toLocaleString()}</span>
@@ -1614,16 +1614,16 @@ export const AdminDashboard: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Actions including Super Admin Approval & Delete */}
-                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      {/* Actions with Horizontal Scrollbar */}
+                      <div className="w-full md:w-auto max-w-full md:max-w-[480px] lg:max-w-[560px] xl:max-w-[640px] 2xl:max-w-[740px] flex items-center gap-2 overflow-x-auto pb-2 pt-1 admin-actions-scroll shrink-0">
                         {/* Super Admin Enter Store Directly to Configure */}
                         <button
                           type="button"
                           onClick={() => adminImpersonateStore(st.id)}
-                          className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                          className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
                           title="Ingresar como Administrador para configurar productos, envíos, métodos de pago y perfil"
                         >
-                          <LogIn className="w-3.5 h-3.5" />
+                          <LogIn className="w-3.5 h-3.5 shrink-0" />
                           <span>Administrar Tienda</span>
                         </button>
 
@@ -1631,40 +1631,43 @@ export const AdminDashboard: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setAssignAdminStore(st)}
-                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
                           title="Asignar o modificar correo y contraseña de acceso para esta tienda"
                         >
-                          <KeyRound className="w-3.5 h-3.5" />
+                          <KeyRound className="w-3.5 h-3.5 shrink-0" />
                           <span>{assignedAdmin ? 'Credenciales de Tienda' : 'Asignar Correo & Clave'}</span>
                         </button>
 
                         {/* Super Admin Edit Store Profile & Logo */}
                         <button
+                          type="button"
                           onClick={() => setEditingStore(st)}
-                          className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
+                          className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                           title="Editar perfil y logo de la tienda"
                         >
-                          <Edit className="w-3.5 h-3.5 text-amber-600" />
+                          <Edit className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                           <span>Editar Perfil</span>
                         </button>
 
                         {(st.status === 'PENDING' || st.status === 'IN_REVIEW') && (
                           <>
                             <button
+                              type="button"
                               onClick={() => updateStoreStatus(st.id, 'APPROVED')}
-                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs"
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap shrink-0 cursor-pointer"
                             >
-                              <Check className="w-3.5 h-3.5" />
+                              <Check className="w-3.5 h-3.5 shrink-0" />
                               <span>Aprobar</span>
                             </button>
                             <button
+                              type="button"
                               onClick={() => {
                                 setRejectingStore(st);
                                 setRejectionReasonInput('');
                               }}
-                              className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-xs font-semibold flex items-center gap-1"
+                              className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-xs font-semibold flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
                             >
-                              <X className="w-3.5 h-3.5" />
+                              <X className="w-3.5 h-3.5 shrink-0" />
                               <span>Rechazar</span>
                             </button>
                           </>
@@ -1672,8 +1675,9 @@ export const AdminDashboard: React.FC = () => {
 
                         {st.status === 'APPROVED' && (
                           <button
+                            type="button"
                             onClick={() => updateStoreStatus(st.id, 'SUSPENDED', 'Suspensión administrativa')}
-                            className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-xs font-semibold"
+                            className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer"
                           >
                             Suspender
                           </button>
@@ -1681,8 +1685,9 @@ export const AdminDashboard: React.FC = () => {
 
                         {st.status === 'SUSPENDED' && (
                           <button
+                            type="button"
                             onClick={() => updateStoreStatus(st.id, 'APPROVED')}
-                            className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 rounded-lg text-xs font-semibold"
+                            className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer"
                           >
                             Reactivar
                           </button>
@@ -1690,19 +1695,21 @@ export const AdminDashboard: React.FC = () => {
 
                         {/* View Public Store Page */}
                         <button
+                          type="button"
                           onClick={() => {
                             setSelectedStoreSlug(st.slug || st.id);
                             setCurrentView('store_public');
                           }}
-                          className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
+                          className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                           title="Ver página pública de la tienda"
                         >
-                          <Eye className="w-3.5 h-3.5" />
+                          <Eye className="w-3.5 h-3.5 shrink-0" />
                           <span>Ver Tienda</span>
                         </button>
 
                         {/* Super Admin Delete Store Button */}
                         <button
+                          type="button"
                           onClick={() => setDeleteModal({
                             typeLabel: 'TIENDA & PUBLICACIONES',
                             title: `Eliminar Tienda: ${st.name}`,
@@ -1710,10 +1717,10 @@ export const AdminDashboard: React.FC = () => {
                             description: `Esta acción de Super Administrador borrará permanentemente la tienda "${st.name}", sus ${storeProductCount} publicaciones de productos asociadas y su registro de balance fiduciario de la base de datos de PlazaDO.`,
                             action: () => deleteStore(st.id)
                           })}
-                          className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
+                          className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                           title="Borrar registro de tienda (Super Admin)"
                         >
-                          <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                          <Trash2 className="w-3.5 h-3.5 text-red-600 shrink-0" />
                           <span>Borrar Tienda</span>
                         </button>
                       </div>
@@ -2116,29 +2123,31 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    <div className="w-full md:w-auto max-w-full flex items-center gap-2 overflow-x-auto pb-2 pt-1 admin-actions-scroll shrink-0">
                       {storeObj && (
                         <button
                           type="button"
                           onClick={() => adminImpersonateStore(storeObj.id)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors bg-amber-500 hover:bg-amber-600 text-white shadow-xs cursor-pointer"
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors bg-amber-500 hover:bg-amber-600 text-white shadow-xs cursor-pointer whitespace-nowrap shrink-0"
                           title={`Ingresar a configurar la tienda ${storeObj.name}`}
                         >
-                          <Store className="w-3.5 h-3.5" />
+                          <Store className="w-3.5 h-3.5 shrink-0" />
                           <span>Administrar Tienda</span>
                         </button>
                       )}
 
                       <button
+                        type="button"
                         onClick={() => setPasswordModalUser(usr)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200"
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap shrink-0 cursor-pointer"
                         title="Asignar o restablecer contraseña"
                       >
-                        <Key className="w-3.5 h-3.5 text-amber-700" />
+                        <Key className="w-3.5 h-3.5 text-amber-700 shrink-0" />
                         <span>Contraseña</span>
                       </button>
 
                       <button
+                        type="button"
                         disabled={isCurrent}
                         onClick={() => setDeleteModal({
                           typeLabel: 'CUENTA DE USUARIO',
@@ -2147,14 +2156,14 @@ export const AdminDashboard: React.FC = () => {
                           description: `Esta acción de Super Administrador borrará permanentemente la cuenta de "${usr.name}" (${usr.email}) con rol ${usr.role}.`,
                           action: () => deleteUser(usr.id)
                         })}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors whitespace-nowrap shrink-0 ${
                           isCurrent 
                             ? 'bg-stone-100 text-stone-400 cursor-not-allowed border border-stone-200' 
-                            : 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-200'
+                            : 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 cursor-pointer'
                         }`}
                         title={isCurrent ? 'No puedes eliminar tu propia cuenta en sesión' : 'Borrar usuario'}
                       >
-                        <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                        <Trash2 className="w-3.5 h-3.5 text-red-600 shrink-0" />
                         <span>{isCurrent ? 'Sesión Protegida' : 'Borrar Usuario'}</span>
                       </button>
                     </div>
