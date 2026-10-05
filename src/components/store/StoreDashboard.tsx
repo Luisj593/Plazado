@@ -52,6 +52,7 @@ import { StoreProfileModal, PRESET_STORE_BANNERS } from '../common/StoreProfileM
 import { ImageUploadInput } from '../common/ImageUploadInput';
 import { ProductImagesManager } from './ProductImagesManager';
 import { FulfillmentStoreView, FulfillmentStoreSubTab } from './FulfillmentStoreView';
+import { AiProductDescriptionAgent } from './AiProductDescriptionAgent';
 
 export const StoreDashboard: React.FC = () => {
   const { 
@@ -2768,12 +2769,33 @@ export const StoreDashboard: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-semibold text-stone-700 mb-1">Descripción del Producto</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-stone-700">
+                    Descripción del Producto
+                  </label>
+                  <span className="text-[11px] text-stone-400">
+                    {pDesc ? `${pDesc.length} caracteres` : 'Redacta o genera automáticamente'}
+                  </span>
+                </div>
+
+                {/* Agente de Inteligencia Artificial para Redacción Automática */}
+                <AiProductDescriptionAgent
+                  productName={pName}
+                  categoryName={categories.find(c => c.id === pCategory)?.name}
+                  storeName={store?.name}
+                  price={pPrice}
+                  promoPrice={pPromoPrice}
+                  currentDescription={pDesc}
+                  onDescriptionGenerated={(newDesc) => setPDesc(newDesc)}
+                  showNotification={showNotification}
+                />
+
                 <textarea
-                  rows={3}
+                  rows={4}
                   value={pDesc}
                   onChange={(e) => setPDesc(e.target.value)}
-                  className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-lg outline-none"
+                  placeholder="Describe las características, dimensiones, uso y beneficios de tu producto, o usa el botón 'Generar con IA' para redactarlo automáticamente..."
+                  className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-lg outline-none focus:border-red-500 focus:bg-white transition-colors text-xs leading-relaxed"
                 />
               </div>
 

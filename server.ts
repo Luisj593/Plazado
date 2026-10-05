@@ -10,6 +10,7 @@ import { firestoreRepo } from './server/firestore-repository';
 import { hashPassword, verifyPassword } from './src/utils/security';
 import { User, Store, CustomerRegistrationInput, StoreRegistrationInput, UserRole } from './src/types';
 import { sendRegistrationOtpEmail, verifySmtpConnection } from './server/mailer-service';
+import { generateProductDescription } from './server/ai-service';
 
 const SESSION_SECRET: string = process.env.SESSION_SECRET || '';
 if (!SESSION_SECRET.trim()) {
@@ -391,6 +392,34 @@ async function startServer() {
   app.post('/api/products/clean-test', (req: Request, res: Response) => {
     const cleaned = db.cleanTestProducts();
     res.json({ success: true, cleanedCount: cleaned, version: db.getVersion() });
+  });
+
+  // --- AI PRODUCT DESCRIPTION AGENT ---
+  app.post('/api/ai/generate-product-description', async (req: Request, res: Response) => {
+    try {
+      const { productName, categoryName, storeName, price, promoPrice, tone, keywords } = req.body;
+      if (!productName || typeof productName !== 'string' || !productName.trim()) {
+        return res.status(400).json({ success: false, message: 'El nombre del producto es obligatorio para generar la descripción.' });
+      }
+
+      const result = await generateProductDescription({
+        productName: productName.trim(),
+        categoryName: typeof categoryName === 'string' ? categoryName.trim() : undefined,
+        storeName: typeof storeName === 'string' ? storeName.trim() : undefined,
+        price: price ? Number(price) : undefined,
+        promoPrice: promoPrice ? Number(promoPrice) : undefined,
+        tone: ['persuasive', 'technical', 'premium', 'concise'].includes(tone) ? tone : 'persuasive',
+        keywords: typeof keywords === 'string' ? keywords.trim() : undefined
+      });
+
+      res.json({
+        success: true,
+        ...result
+      });
+    } catch (err: any) {
+      console.error('[AI Product Description Agent Error]:', err);
+      res.status(500).json({ success: false, message: err.message || 'Error generando descripción con IA' });
+    }
   });
 
   // --- CATEGORIES ---

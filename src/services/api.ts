@@ -713,5 +713,20 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(config)
     });
+  },
+
+  async generateProductDescription(params: {
+    productName: string;
+    categoryName?: string;
+    storeName?: string;
+    price?: number;
+    promoPrice?: number;
+    tone?: 'persuasive' | 'technical' | 'premium' | 'concise';
+    keywords?: string;
+  }): Promise<{ success: boolean; description: string; highlights?: string[]; tags?: string[]; source?: string }> {
+    return request('/api/ai/generate-product-description', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    });
   }
 };
