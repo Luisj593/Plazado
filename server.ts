@@ -11,6 +11,7 @@ import { hashPassword, verifyPassword } from './src/utils/security';
 import { User, Store, CustomerRegistrationInput, StoreRegistrationInput, UserRole } from './src/types';
 import { sendRegistrationOtpEmail, verifySmtpConnection } from './server/mailer-service';
 import { generateProductDescription } from './server/ai-service';
+import { storesDb } from './server/stores-database';
 
 const SESSION_SECRET: string = process.env.SESSION_SECRET || '';
 if (!SESSION_SECRET.trim()) {
@@ -2427,6 +2428,33 @@ async function startServer() {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     res.json({ success: true, persistence: db.getPersistenceStatus() });
+  });
+
+  // --- DEDICATED STORES DATABASE REGISTRY STATUS ---
+  app.get('/api/admin/stores-database/status', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+    const allStores = storesDb.getAllAdminStores();
+    res.json({
+      success: true,
+      registryVersion: storesDb.getRegistryVersion(),
+      totalStores: allStores.length,
+      stores: allStores.map(s => ({
+        id: s.id,
+        name: s.name,
+        slug: s.slug,
+        ownerId: s.ownerId,
+        email: s.email,
+        status: s.status,
+        isPublished: s.isPublished,
+        createdAt: s.createdAt
+      })),
+      vaults: {
+        primary: 'data/plazado_stores_internal_registry.json',
+        backup: 'data/backups/plazado_stores_master_vault.json',
+        snapshot: 'server/stores_snapshot.json'
+      }
+    });
   });
 
   app.post('/api/admin/persistence/sync-firestore', async (req: Request, res: Response) => {

@@ -1,0 +1,47 @@
+{
+  "version": 2,
+  "lastUpdated": "2026-10-05T20:52:55.768Z",
+  "totalStores": 1,
+  "stores": [
+    {
+      "id": "store-1791233515327",
+      "name": "Tienda Test Integridad",
+      "slug": "tienda-test-integridad",
+      "ownerId": "owner-store-1791233515327",
+      "owner_id": "owner-store-1791233515327",
+      "ownerName": "",
+      "email": "test@integridad.do",
+      "phone": "809-555-9999",
+      "whatsapp": "809-555-9999",
+      "description": "Tienda de prueba temporal para verificar triple bóveda",
+      "categoryId": "cat-general",
+      "logo": "",
+      "banner": "",
+      "province": "Santiago",
+      "municipality": "Santiago de los Caballeros",
+      "address": "",
+      "status": "APPROVED",
+      "isPublished": true,
+      "rating": 5,
+      "reviewCount": 0,
+      "salesCount": 0,
+      "shippingConfig": {
+        "type": "fixed",
+        "fixedRate": 200,
+        "estimatedDays": "24 a 48 horas",
+        "coverageProvinces": [
+          "Santiago"
+        ]
+      },
+      "bankInfo": {
+        "bank": "Banco Popular Dominicano",
+        "accountType": "CORRIENTE",
+        "accountNumber": "",
+        "accountHolder": "",
+        "rncOrCedula": ""
+      },
+      "createdAt": "2026-10-05T20:51:55.788Z",
+      "updatedAt": "2026-10-05T20:52:55.768Z"
+    }
+  ]
+}

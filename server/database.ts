@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { cloudSqlRepo } from './cloudsql-repository';
 import { firestoreRepo } from './firestore-repository';
+import { storesDb } from './stores-database';
 import { 
   User, 
   UserCredential,
@@ -210,6 +211,23 @@ class GlobalDatabase {
     // Ensure all critical collections are always valid arrays/objects (protect against undefined properties)
     activeData.stores = Array.isArray(activeData.stores) ? activeData.stores : [];
     activeData.products = Array.isArray(activeData.products) ? activeData.products : [];
+
+    // Non-destructive synchronization with dedicated Stores Database internal registry
+    const dedicatedStores = storesDb.getAllAdminStores();
+    if (dedicatedStores.length > 0) {
+      for (const dst of dedicatedStores) {
+        const exIdx = activeData.stores.findIndex(s => s.id === dst.id);
+        if (exIdx === -1) {
+          activeData.stores.push(dst);
+        } else {
+          activeData.stores[exIdx] = { ...dst, ...activeData.stores[exIdx] };
+        }
+      }
+    } else if (activeData.stores.length > 0) {
+      for (const st of activeData.stores) {
+        storesDb.saveStore(st);
+      }
+    }
 
     // Non-destructive synchronization of official categories and subcategories
     if (Array.isArray(activeData.categories) && activeData.categories.length > 0) {
@@ -524,6 +542,7 @@ class GlobalDatabase {
             };
           }
         }
+        storesDb.syncFromFirestore(firestoreData.stores);
       }
       if (Array.isArray(firestoreData.products) && firestoreData.products.length > 0) {
         console.log(`[GlobalDatabase] Syncing ${firestoreData.products.length} products from Firestore.`);
@@ -774,6 +793,7 @@ class GlobalDatabase {
             };
           }
         }
+        storesDb.syncFromCloudSql(sqlStores);
       }
 
       // 4. SYNC PRODUCTS (Safe bidirectional merge: push memory products to Cloud SQL and vice-versa)
@@ -1089,6 +1109,7 @@ class GlobalDatabase {
     };
 
     this.memoryData.stores.push(newStore);
+    storesDb.saveStore(newStore);
     this.addAuditLog('STORE_REGISTERED', id, undefined, `Nueva tienda registrada y protegida globalmente: ${newStore.name}`);
     this.commit();
 
@@ -1122,6 +1143,7 @@ class GlobalDatabase {
     const prev = this.memoryData.stores[idx];
     const updated = { ...prev, ...data };
     this.memoryData.stores[idx] = updated;
+    storesDb.updateStore(storeId, updated);
     this.addAuditLog('STORE_UPDATED', storeId, prev.name, updated.name);
     this.commit();
 
@@ -1158,6 +1180,7 @@ class GlobalDatabase {
       store.isPublished = false;
     }
     this.addAuditLog('STORE_STATUS_CHANGE', storeId, prevStatus, `${status}${reason ? ` (Motivo: ${reason})` : ''}`);
+    storesDb.updateStatus(storeId, status, reason);
     this.commit();
 
     cloudSqlRepo.updateStore(storeId, {
@@ -1173,6 +1196,7 @@ class GlobalDatabase {
     const store = this.memoryData.stores.find(s => s.id === storeId);
     if (!store) return null;
     store.isPublished = !store.isPublished;
+    storesDb.togglePublish(storeId);
     this.addAuditLog('STORE_PUBLISH_TOGGLE', storeId, undefined, store.isPublished ? 'Publicada' : 'Oculta');
     this.commit();
     return store;
@@ -1185,8 +1209,9 @@ class GlobalDatabase {
     const name = store.name;
     const productsToDelete = this.memoryData.products.filter(p => p.storeId === storeId);
 
-    // Remove store from memory
+    // Remove store from memory & dedicated stores database
     this.memoryData.stores.splice(idx, 1);
+    storesDb.deleteStore(storeId);
     this.memoryData.products = this.memoryData.products.filter(p => p.storeId !== storeId);
     if (this.memoryData.storeBalances && this.memoryData.storeBalances[storeId]) {
       delete this.memoryData.storeBalances[storeId];
