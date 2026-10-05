@@ -487,13 +487,10 @@ class GlobalDatabase {
         console.warn('[GlobalDatabase] Could not write to server snapshot:', snapshotErr);
       }
 
-      // 4. Safely synchronize immutable production backup with structural updates (banners, settings, categories)
-      // Only write if production stores and users are present to guarantee data integrity
+      // 4. Safely synchronize backup snapshot
       try {
         const immutablePath = path.join(this.backupDir, 'plazado_db_backup_immutable.json');
-        if (dataToSave.stores && dataToSave.stores.length >= 7 && dataToSave.users && dataToSave.users.length >= 3) {
-          fs.writeFileSync(immutablePath, serialized, 'utf-8');
-        }
+        fs.writeFileSync(immutablePath, serialized, 'utf-8');
       } catch (immErr) {
         console.warn('[GlobalDatabase] Could not write to immutable backup:', immErr);
       }
