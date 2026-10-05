@@ -58,14 +58,14 @@ export const DOMINICAN_BANKS = [
 ];
 
 import { OFFICIAL_CATEGORIES, OFFICIAL_SPECIFICATIONS } from './officialCategoriesCatalog.ts';
-import { PRODUCTION_OFFICIAL_STORES, PRODUCTION_OFFICIAL_PRODUCTS } from './officialStoresAndProducts.ts';
 
 export const INITIAL_CATEGORIES: Category[] = OFFICIAL_CATEGORIES;
 export const INITIAL_SPECIFICATIONS: CategorySpecification[] = OFFICIAL_SPECIFICATIONS;
 
-export const INITIAL_STORES: Store[] = PRODUCTION_OFFICIAL_STORES;
+// Production strict policy: Zero fake/seed stores or products. All records originate from Firestore or real user registration.
+export const INITIAL_STORES: Store[] = [];
 
-export const INITIAL_PRODUCTS: Product[] = PRODUCTION_OFFICIAL_PRODUCTS;
+export const INITIAL_PRODUCTS: Product[] = [];
 
 export const INITIAL_USERS: User[] = [
   {
@@ -99,21 +99,7 @@ export const INITIAL_STORE_BALANCES: Record<string, StoreBalance> = {};
 export const INITIAL_SETTLEMENTS: Settlement[] = [];
 
 export const INITIAL_BANNERS: Banner[] = [];
-
-export const INITIAL_COUPONS: Coupon[] = [
-  {
-    id: 'coup-1',
-    code: 'PLAZA500',
-    storeId: null, // Cupón general de PlazaDO
-    discountType: 'FIXED',
-    discountValue: 500,
-    minSpend: 3000,
-    usageLimit: 100,
-    usageCount: 0,
-    validUntil: '2026-12-31',
-    isActive: true
-  }
-];
+export const INITIAL_COUPONS: Coupon[] = [];
 
 export const DEFAULT_LEGAL_DOCUMENTS: LegalDocument[] = [
   {

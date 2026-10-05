@@ -39,14 +39,6 @@ export const ProductImagesUpload: React.FC<ProductImagesUploadProps> = ({
     onChange([selected, ...remaining]);
   };
 
-  // Mock sample image presets for fast testing
-  const samplePresets = [
-    { label: 'Gadget / Tech', url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&auto=format&fit=crop&q=80' },
-    { label: 'Mascota / Pet', url: 'https://images.unsplash.com/photo-1583337130417-3346a1be7dee?w=800&auto=format&fit=crop&q=80' },
-    { label: 'Moda / Ropa', url: 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?w=800&auto=format&fit=crop&q=80' },
-    { label: 'Café / Gourmet', url: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=800&auto=format&fit=crop&q=80' }
-  ];
-
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -132,25 +124,6 @@ export const ProductImagesUpload: React.FC<ProductImagesUploadProps> = ({
             >
               <Plus className="w-3.5 h-3.5" /> Agregar Foto
             </button>
-          </div>
-
-          {/* Presets shortcut */}
-          <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-stone-500">
-            <span className="font-semibold text-stone-600">Fotos de ejemplo:</span>
-            {samplePresets.map((preset, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => {
-                  if (images.length < maxImages) {
-                    onChange([...images, preset.url]);
-                  }
-                }}
-                className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-md transition-colors"
-              >
-                + {preset.label}
-              </button>
-            ))}
           </div>
         </div>
       )}

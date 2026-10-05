@@ -184,31 +184,27 @@ class GlobalDatabase {
       }
     }
 
-    // 4. Only if NO data exists anywhere in any source, initialize seeds
+    // 4. In pure production, if no data exists, start with clean baseline (0 stores, 0 products)
     if (!activeData) {
-      console.log('[GlobalDatabase] No existing database or backup found. Bootstrapping pristine initial dataset.');
+      console.log('[GlobalDatabase] No database found on disk. Initializing clean production baseline (0 stores, 0 products).');
       activeData = {
-        stores: INITIAL_STORES.map(s => ({
-          ...s,
-          status: (s.status === 'APPROVED' || s.status === 'active' || s.status === 'ACTIVE') ? 'APPROVED' : s.status,
-          isPublished: s.isPublished !== undefined ? s.isPublished : true
-        })),
-        products: INITIAL_PRODUCTS,
+        stores: [],
+        products: [],
         categories: INITIAL_CATEGORIES,
         users: INITIAL_USERS,
-        orders: INITIAL_ORDERS,
-        storeBalances: INITIAL_STORE_BALANCES,
-        settlements: INITIAL_SETTLEMENTS,
+        orders: [],
+        storeBalances: {},
+        settlements: [],
         disputes: [],
-        banners: INITIAL_BANNERS,
-        coupons: INITIAL_COUPONS,
+        banners: [],
+        coupons: [],
         systemSettings: INITIAL_SETTINGS,
-        auditLogs: INITIAL_AUDIT_LOGS,
+        auditLogs: [],
         reviews: [],
         version: 1,
         lastUpdated: new Date().toISOString()
       };
-      loadedFrom = 'new_seed';
+      loadedFrom = 'clean_production';
     }
 
     // Ensure all critical collections are always valid arrays/objects (protect against undefined properties)
@@ -249,8 +245,8 @@ class GlobalDatabase {
     activeData.storeBalances = activeData.storeBalances && typeof activeData.storeBalances === 'object' ? activeData.storeBalances : {};
     activeData.settlements = Array.isArray(activeData.settlements) ? activeData.settlements : [];
     activeData.disputes = Array.isArray(activeData.disputes) ? activeData.disputes : [];
-    activeData.banners = Array.isArray(activeData.banners) ? activeData.banners : INITIAL_BANNERS;
-    activeData.coupons = Array.isArray(activeData.coupons) ? activeData.coupons : INITIAL_COUPONS;
+    activeData.banners = Array.isArray(activeData.banners) ? activeData.banners : [];
+    activeData.coupons = Array.isArray(activeData.coupons) ? activeData.coupons : [];
     activeData.auditLogs = Array.isArray(activeData.auditLogs) ? activeData.auditLogs : [];
     activeData.reviews = Array.isArray(activeData.reviews) ? activeData.reviews : [];
     activeData.paymentTransactions = Array.isArray((activeData as any).paymentTransactions) ? (activeData as any).paymentTransactions : [];
