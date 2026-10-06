@@ -588,21 +588,34 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
 
           {/* Acciones derechas: Tema Claro/Oscuro + 🛒 Carrito */}
           <div className="flex items-center gap-1">
-            {/* Toggle Tema Claro / Oscuro móvil */}
-            <button
-              id="mobile-theme-toggle-btn"
-              type="button"
-              onClick={toggleTheme}
-              className="p-2 text-stone-200 hover:text-[#f20544] dark:hover:text-amber-400 active:scale-95 transition-transform"
-              title={theme === 'dark' ? 'Cambiar a versión clara' : 'Cambiar a versión oscura'}
-              aria-label="Alternar versión clara y oscura"
+            {/* Selector de tema disponible para todos los visitantes, con o sin sesión */}
+            <div
+              id="mobile-theme-selector"
+              className="flex items-center rounded-lg border border-stone-700 bg-stone-900 p-0.5"
+              role="group"
+              aria-label="Seleccionar apariencia"
             >
-              {theme === 'dark' ? (
-                <Sun className="w-5 h-5 text-amber-400 fill-amber-400/20" />
-              ) : (
-                <Moon className="w-5 h-5 text-slate-700" />
-              )}
-            </button>
+              <button
+                type="button"
+                onClick={() => setThemeMode('light')}
+                className={`p-1.5 rounded-md transition-all ${theme === 'light' ? 'bg-white text-stone-950' : 'text-stone-400'}`}
+                aria-label="Vista clara"
+                aria-pressed={theme === 'light'}
+                title="Vista clara"
+              >
+                <Sun className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setThemeMode('dark')}
+                className={`p-1.5 rounded-md transition-all ${theme === 'dark' ? 'bg-stone-700 text-white' : 'text-stone-400'}`}
+                aria-label="Vista oscura"
+                aria-pressed={theme === 'dark'}
+                title="Vista oscura"
+              >
+                <Moon className="w-4 h-4" />
+              </button>
+            </div>
 
             {/* 🛒 Carrito con badge */}
             <button
