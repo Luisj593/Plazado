@@ -631,6 +631,7 @@ export interface SystemSettings {
   faviconType?: 'default' | 'custom';
   faviconUrl?: string; // Favicon de la pestaña del navegador (.ico, .png, .svg)
   headerBannerType?: 'default' | 'custom';
+  homeHeroMode?: 'header' | 'slider'; // Cabecera fija o slider aleatorio de productos
   headerBannerUrl?: string; // Imagen principal del Header / Hero (configurable por Super Admin)
   azulConfig: AzulConfig;
   activePaymentMethods: {
