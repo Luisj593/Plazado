@@ -35,6 +35,7 @@ export const BrandingSettingsTab: React.FC = () => {
     systemSettings.headerBannerType || (systemSettings.headerBannerUrl ? 'custom' : 'default')
   );
   const [headerBannerUrl, setHeaderBannerUrl] = useState<string>(systemSettings.headerBannerUrl || '');
+  const [homeHeroMode, setHomeHeroMode] = useState<'header' | 'slider'>(systemSettings.homeHeroMode || 'slider');
   const [headerBannerError, setHeaderBannerError] = useState<string | null>(null);
   const [isDraggingHeaderBanner, setIsDraggingHeaderBanner] = useState(false);
   const headerBannerInputRef = useRef<HTMLInputElement>(null);
@@ -109,6 +110,7 @@ export const BrandingSettingsTab: React.FC = () => {
         logoDarkUrl: cleanLogoDarkUrl,
         headerBannerType,
         headerBannerUrl: cleanHeaderBannerUrl,
+        homeHeroMode,
         faviconType,
         faviconUrl: cleanFaviconUrl
       });
@@ -135,6 +137,7 @@ export const BrandingSettingsTab: React.FC = () => {
       setUseCustomDarkLogo(false);
       setHeaderBannerType('default');
       setHeaderBannerUrl('');
+      setHomeHeroMode('slider');
       setFaviconType('default');
       setFaviconUrl('/dominican-flag.svg');
 
@@ -144,6 +147,7 @@ export const BrandingSettingsTab: React.FC = () => {
         logoDarkUrl: '',
         headerBannerType: 'default',
         headerBannerUrl: '',
+        homeHeroMode: 'slider',
         faviconType: 'default',
         faviconUrl: '/dominican-flag.svg'
       });
@@ -494,6 +498,37 @@ export const BrandingSettingsTab: React.FC = () => {
             <p className="text-[11px] text-stone-500 leading-relaxed">
               Esta es la fotografía comercial destacada que se muestra a la derecha en la sección Hero / Cabecera de la portada de Plazado.com.
             </p>
+
+            <div className="space-y-2">
+              <span className="font-bold text-stone-800">Contenido de la cabecera de inicio</span>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  id="btn-hero-mode-header"
+                  onClick={() => setHomeHeroMode('header')}
+                  className={`p-3.5 rounded-xl border text-left transition-all ${homeHeroMode === 'header' ? 'border-[#f20544] bg-rose-50 ring-2 ring-rose-500/20' : 'border-stone-200 bg-stone-50 hover:border-stone-300'}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-black text-stone-900">Cabecera</span>
+                    {homeHeroMode === 'header' && <Check className="w-4 h-4 text-[#f20544]" />}
+                  </div>
+                  <p className="text-[11px] text-stone-500 mt-1">Muestra la imagen fija configurada para el Hero.</p>
+                </button>
+                <button
+                  type="button"
+                  id="btn-hero-mode-slider"
+                  onClick={() => setHomeHeroMode('slider')}
+                  className={`p-3.5 rounded-xl border text-left transition-all ${homeHeroMode === 'slider' ? 'border-[#f20544] bg-rose-50 ring-2 ring-rose-500/20' : 'border-stone-200 bg-stone-50 hover:border-stone-300'}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-black text-stone-900">Slider de productos</span>
+                    {homeHeroMode === 'slider' && <Check className="w-4 h-4 text-[#f20544]" />}
+                  </div>
+                  <p className="text-[11px] text-stone-500 mt-1">Rota automáticamente productos reales publicados.</p>
+                </button>
+              </div>
+              <p className="text-[10px] text-stone-400">Pulsa “Guardar Cambios” para aplicar la opción elegida a la portada.</p>
+            </div>
 
             {/* Mode selection radio / pills */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
