@@ -55,6 +55,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
     orderMessages,
     theme,
     toggleTheme,
+    setThemeMode,
     setOpenPolicySlug
   } = useApp();
 
@@ -322,29 +323,34 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
               <span className="hidden xl:inline text-xs font-bold text-stone-100">Favoritos</span>
             </button>
 
-            {/* Selector Versión Clara / Oscura */}
-            <button
-              id="header-theme-toggle-btn"
-              type="button"
-              onClick={toggleTheme}
-              className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-stone-800 text-stone-200 hover:text-[#f20544] dark:hover:text-rose-400 border border-slate-200 dark:border-stone-700 transition-colors shadow-2xs cursor-pointer"
-              title={theme === 'dark' ? 'Cambiar a Versión Clara' : 'Cambiar a Versión Oscura'}
-              aria-label="Alternar versión clara y oscura"
+            {/* Selector explícito de apariencia: Claro / Oscuro */}
+            <div
+              id="header-theme-selector"
+              className="flex items-center rounded-xl border border-stone-700 bg-stone-900 p-1 shadow-2xs"
+              role="group"
+              aria-label="Seleccionar apariencia"
             >
-              <div className="w-6 h-6 rounded-lg bg-amber-50 dark:bg-stone-800 flex items-center justify-center text-amber-500">
-                {theme === 'dark' ? (
-                  <Sun className="w-4 h-4 text-amber-400 fill-amber-400/20" />
-                ) : (
-                  <Moon className="w-4 h-4 text-slate-700" />
-                )}
-              </div>
-              <div className="text-left leading-tight hidden lg:block">
-                <span className="text-[9px] text-slate-400 dark:text-stone-400 block font-normal">Tema</span>
-                <span className="text-xs font-bold text-stone-100">
-                  {theme === 'dark' ? 'Oscuro' : 'Claro'}
-                </span>
-              </div>
-            </button>
+              <button
+                type="button"
+                onClick={() => setThemeMode('light')}
+                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all ${theme === 'light' ? 'bg-white text-stone-950 shadow-sm' : 'text-stone-400 hover:text-white'}`}
+                aria-pressed={theme === 'light'}
+                title="Usar fondo blanco"
+              >
+                <Sun className="w-4 h-4" />
+                <span className="hidden xl:inline">Claro</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setThemeMode('dark')}
+                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all ${theme === 'dark' ? 'bg-stone-700 text-white shadow-sm' : 'text-stone-400 hover:text-white'}`}
+                aria-pressed={theme === 'dark'}
+                title="Usar fondo oscuro"
+              >
+                <Moon className="w-4 h-4" />
+                <span className="hidden xl:inline">Oscuro</span>
+              </button>
+            </div>
 
             {/* Carrito */}
             <button
