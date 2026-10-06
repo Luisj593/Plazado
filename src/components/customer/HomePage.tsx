@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useState } from 'react';
+import React, { useRef, useMemo, useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { DominicanFlag } from '../common/DominicanFlag';
 import { isProductPubliclyVisible, isStorePubliclyVisible } from '../../types';
@@ -49,6 +49,7 @@ export const HomePage: React.FC = () => {
   } = useApp();
 
   const [heroImageError, setHeroImageError] = useState(false);
+  const [heroSlideIndex, setHeroSlideIndex] = useState(0);
 
   // Imagen del Header/Hero configurable por el Super Admin
   const heroImageSrc = (!heroImageError && systemSettings?.headerBannerUrl)
@@ -71,6 +72,28 @@ export const HomePage: React.FC = () => {
   const displayProducts = useMemo(() => {
     return featuredProducts.length > 0 ? featuredProducts : publishedProducts;
   }, [featuredProducts, publishedProducts]);
+
+  // Slider de cabecera: toma productos REALES publicados y los mezcla al azar
+  // cada vez que cambia el catálogo. No crea productos ficticios.
+  const heroProducts = useMemo(() => {
+    const candidates = publishedProducts.filter(p => p.images && p.images.length > 0);
+    return [...candidates].sort(() => Math.random() - 0.5).slice(0, 8);
+  }, [publishedProducts]);
+
+  useEffect(() => {
+    if (heroProducts.length <= 1) return;
+    const timer = window.setInterval(() => {
+      setHeroSlideIndex(current => (current + 1) % heroProducts.length);
+      setHeroImageError(false);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [heroProducts.length]);
+
+  useEffect(() => {
+    if (heroSlideIndex >= heroProducts.length) setHeroSlideIndex(0);
+  }, [heroProducts.length, heroSlideIndex]);
+
+  const activeHeroProduct = heroProducts[heroSlideIndex];
 
   const activeCategories = (categories && categories.length > 0) ? categories : INITIAL_CATEGORIES;
   const mainCategories = activeCategories.filter(c => !c.parentId);
@@ -185,13 +208,70 @@ export const HomePage: React.FC = () => {
                 {/* Contenedor de la Imagen con badges superpuestos */}
                 <div className="relative w-full h-[190px] sm:h-[300px] lg:h-[390px] rounded-xl sm:rounded-2xl overflow-hidden shadow-md border border-slate-200/80 dark:border-stone-800 group">
                   <img 
-                    src={heroImageSrc} 
-                    alt="Compras en Plazado.com República Dominicana" 
+                    src={activeHeroProduct && !heroImageError ? activeHeroProduct.images[0] : heroImageSrc} 
+                    alt={activeHeroProduct ? activeHeroProduct.name : "Compras en Plazado.com República Dominicana"} 
                     className="w-full h-full object-cover object-center group-hover:scale-102 transition-transform duration-500"
                     loading="eager"
                     onError={() => setHeroImageError(true)}
                   />
                   
+                  {activeHeroProduct && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProductId(activeHeroProduct.id)}
+                      className="absolute left-3 bottom-16 z-30 max-w-[75%] rounded-xl bg-black/75 px-3 py-2 text-left text-white backdrop-blur-md hover:bg-black/90 transition-colors"
+                      title="Ver producto"
+                    >
+                      <span className="block truncate text-xs sm:text-sm font-bold">{activeHeroProduct.name}</span>
+                      <span className="block text-[11px] sm:text-xs font-black text-rose-300 mt-0.5">
+                        RD$ {(activeHeroProduct.promoPrice && activeHeroProduct.promoPrice < activeHeroProduct.price
+                          ? activeHeroProduct.promoPrice
+                          : activeHeroProduct.price).toLocaleString()}
+                      </span>
+                    </button>
+                  )}
+
+                  {heroProducts.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHeroSlideIndex(i => (i - 1 + heroProducts.length) % heroProducts.length);
+                          setHeroImageError(false);
+                        }}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 z-30 w-9 h-9 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-[#f20544] transition-colors"
+                        aria-label="Producto anterior"
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHeroSlideIndex(i => (i + 1) % heroProducts.length);
+                          setHeroImageError(false);
+                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 z-30 w-9 h-9 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-[#f20544] transition-colors"
+                        aria-label="Producto siguiente"
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-40 flex gap-1.5">
+                        {heroProducts.map((_, index) => (
+                          <button
+                            key={index}
+                            type="button"
+                            onClick={() => {
+                              setHeroSlideIndex(index);
+                              setHeroImageError(false);
+                            }}
+                            className={`h-2 rounded-full transition-all ${index === heroSlideIndex ? 'w-6 bg-[#f20544]' : 'w-2 bg-white/70'}`}
+                            aria-label={`Ir al producto ${index + 1}`}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+
                   {/* Sutil gradiente para integrar badges */}
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent pointer-events-none" />
 
