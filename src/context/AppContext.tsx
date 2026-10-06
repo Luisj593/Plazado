@@ -299,6 +299,7 @@ interface AppContextType {
   // Theme (Dark / Light mode)
   theme: 'light' | 'dark';
   toggleTheme: () => void;
+  setThemeMode: (mode: 'light' | 'dark') => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -452,7 +453,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const saved = localStorage.getItem('plazado_theme');
       if (saved === 'dark' || saved === 'light') return saved;
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      return 'light';
     } catch {
       return 'light';
     }
@@ -471,6 +472,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('Theme storage error:', e);
     }
   }, [theme]);
+
+  const setThemeMode = (mode: 'light' | 'dark') => {
+    setTheme(mode);
+  };
 
   const toggleTheme = () => {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
