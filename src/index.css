@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* El modo oscuro se controla manualmente con la clase .dark, no por el sistema operativo */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Theme root: el modo seleccionado controla el fondo completo de la aplicación */
 html, body, #root {
   min-height: 100%;
