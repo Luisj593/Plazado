@@ -62,7 +62,13 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [categoriesDropdownOpen, setCategoriesDropdownOpen] = useState(false);
   const [isUserProfileOpen, setIsUserProfileOpen] = useState(false);
+  const [headerImageError, setHeaderImageError] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Imagen personalizada del Header configurada por el Super Admin (con soporte para modo oscuro)
+  const customHeaderImage = (systemSettings?.logoType === 'custom' || systemSettings?.logoUrl)
+    ? (theme === 'dark' && systemSettings?.logoDarkUrl ? systemSettings.logoDarkUrl : systemSettings?.logoUrl)
+    : null;
 
   // Close categories dropdown on outside click
   useEffect(() => {
@@ -123,7 +129,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
       <div className="hidden md:block border-b border-slate-100 dark:border-stone-800/80 bg-white dark:bg-stone-900">
         <div className="max-w-[1440px] mx-auto px-4 lg:px-6 py-3 flex items-center justify-between gap-4 lg:gap-6">
           
-          {/* Izquierda: Logo oficial Plazado.com con slogan */}
+          {/* Izquierda: Logo oficial Plazado.com con slogan o imagen personalizada del Super Admin */}
           <div className="flex items-center shrink-0">
             <button 
               id="header-logo-btn"
@@ -134,24 +140,37 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
               className="text-left flex items-center gap-2.5 group focus:outline-none hover:opacity-95 transition-opacity"
               title="PlazaDO.com — Comprar y vender en todo RD"
             >
-              {/* Green Shopping Bag Logo */}
-              <div className="w-10 h-10 rounded-xl bg-[#008f51] flex items-center justify-center text-white shrink-0 shadow-xs">
-                <svg viewBox="0 0 36 36" className="w-6 h-6 fill-none stroke-white stroke-[2.6] stroke-linecap-round stroke-linejoin-round">
-                  <path d="M11 13 C11 7.5, 25 7.5, 25 13" />
-                  <path d="M7 14 L29 14 L27.5 31 C27.5 33, 25.5 34, 24 34 L12 34 C10.5 34, 8.5 33, 8.5 31 Z" fill="white" />
-                  <path d="M14 23 Q18 28, 22 23" stroke="#008f51" strokeWidth="2.5" />
-                </svg>
-              </div>
+              {customHeaderImage && !headerImageError ? (
+                <div className="flex items-center py-0.5">
+                  <img 
+                    src={customHeaderImage} 
+                    alt={systemSettings?.platformName || "PlazaDO.com"} 
+                    className="h-9 sm:h-10 max-h-11 w-auto max-w-[220px] object-contain transition-transform group-hover:scale-102"
+                    onError={() => setHeaderImageError(true)}
+                  />
+                </div>
+              ) : (
+                <>
+                  {/* Green Shopping Bag Logo */}
+                  <div className="w-10 h-10 rounded-xl bg-[#008f51] flex items-center justify-center text-white shrink-0 shadow-xs">
+                    <svg viewBox="0 0 36 36" className="w-6 h-6 fill-none stroke-white stroke-[2.6] stroke-linecap-round stroke-linejoin-round">
+                      <path d="M11 13 C11 7.5, 25 7.5, 25 13" />
+                      <path d="M7 14 L29 14 L27.5 31 C27.5 33, 25.5 34, 24 34 L12 34 C10.5 34, 8.5 33, 8.5 31 Z" fill="white" />
+                      <path d="M14 23 Q18 28, 22 23" stroke="#008f51" strokeWidth="2.5" />
+                    </svg>
+                  </div>
 
-              {/* Text: Plazado.com + Slogan */}
-              <div className="flex flex-col text-left">
-                <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tight leading-none">
-                  Plazado<span className="text-[#008f51]">.com</span>
-                </span>
-                <span className="text-[11px] text-slate-500 dark:text-stone-400 font-medium tracking-tight mt-0.5 leading-none">
-                  Comprar y vender en todo RD
-                </span>
-              </div>
+                  {/* Text: Plazado.com + Slogan */}
+                  <div className="flex flex-col text-left">
+                    <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tight leading-none">
+                      Plazado<span className="text-[#008f51]">.com</span>
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-stone-400 font-medium tracking-tight mt-0.5 leading-none">
+                      Comprar y vender en todo RD
+                    </span>
+                  </div>
+                </>
+              )}
             </button>
           </div>
 
@@ -222,12 +241,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
           <div className="flex items-center gap-3 lg:gap-5 shrink-0">
             
             {/* Ubicación: Enviar a República Dominicana */}
-            <div className="hidden xl:flex items-center gap-1.5 text-xs text-slate-700 font-medium">
+            <div className="hidden xl:flex items-center gap-1.5 text-xs text-slate-700 dark:text-stone-300 font-medium">
               <MapPin className="w-4 h-4 text-[#008f51] shrink-0" />
               <div className="leading-tight text-left">
-                <span className="text-[10px] text-slate-400 block font-normal">Enviar a</span>
-                <span className="font-bold flex items-center gap-1">
-                  República Dominicana <ChevronDown className="w-3 h-3 text-slate-400" />
+                <span className="text-[10px] text-slate-400 dark:text-stone-500 block font-normal">Enviar a</span>
+                <span className="font-bold flex items-center gap-1 text-slate-900 dark:text-stone-100">
+                  República Dominicana <ChevronDown className="w-3 h-3 text-slate-400 dark:text-stone-500" />
                 </span>
               </div>
             </div>
@@ -237,7 +256,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
               <button
                 id="header-user-profile-btn"
                 onClick={() => setIsUserProfileOpen(true)}
-                className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100 transition-colors text-left focus:outline-none group border border-transparent hover:border-slate-200"
+                className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-stone-800 transition-colors text-left focus:outline-none group border border-transparent hover:border-slate-200 dark:hover:border-stone-700"
                 title={`Mi cuenta: ${currentUser.name}`}
               >
                 {currentUser.avatar ? (
@@ -247,14 +266,14 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                     className="w-8 h-8 rounded-full object-cover border border-[#008f51] shadow-2xs"
                   />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-emerald-100 border border-emerald-300 flex items-center justify-center text-[#008f51] font-bold text-xs">
+                  <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 flex items-center justify-center text-[#008f51] dark:text-emerald-400 font-bold text-xs">
                     {currentUser.role === 'STORE_OWNER' ? <Store className="w-4 h-4" /> : currentUser.role === 'SUPER_ADMIN' ? <Shield className="w-4 h-4" /> : <User className="w-4 h-4" />}
                   </div>
                 )}
                 <div className="hidden lg:block leading-tight">
-                  <span className="text-[10px] text-slate-400 block font-normal">Hola,</span>
-                  <span className="text-xs font-bold text-slate-800 group-hover:text-[#008f51] transition-colors truncate max-w-[100px] flex items-center gap-0.5">
-                    {currentUser.name.split(' ')[0]} <ChevronDown className="w-3 h-3 text-slate-400" />
+                  <span className="text-[10px] text-slate-400 dark:text-stone-400 block font-normal">Hola,</span>
+                  <span className="text-xs font-bold text-slate-800 dark:text-stone-200 group-hover:text-[#008f51] dark:group-hover:text-emerald-400 transition-colors truncate max-w-[100px] flex items-center gap-0.5">
+                    {currentUser.name.split(' ')[0]} <ChevronDown className="w-3 h-3 text-slate-400 dark:text-stone-500" />
                   </span>
                 </div>
               </button>
@@ -262,16 +281,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
               <button
                 id="header-auth-login-btn"
                 onClick={() => openAuthModal('login')}
-                className="flex items-center gap-2 text-xs font-semibold text-slate-700 hover:text-[#008f51] transition-colors p-1.5 rounded-xl hover:bg-slate-50"
+                className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-stone-300 hover:text-[#008f51] dark:hover:text-emerald-400 transition-colors p-1.5 rounded-xl hover:bg-slate-50 dark:hover:bg-stone-800 cursor-pointer"
                 title="Ingresar a mi cuenta"
               >
-                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600">
+                <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-stone-800 flex items-center justify-center text-slate-600 dark:text-stone-300">
                   <User className="w-4 h-4" />
                 </div>
                 <div className="text-left leading-tight hidden lg:block">
-                  <span className="text-[10px] text-slate-400 font-normal block">Ingresar</span>
-                  <span className="font-bold flex items-center gap-0.5">
-                    Mi cuenta <ChevronDown className="w-3 h-3 text-slate-400" />
+                  <span className="text-[10px] text-slate-400 dark:text-stone-500 font-normal block">Ingresar</span>
+                  <span className="font-bold flex items-center gap-0.5 text-slate-900 dark:text-stone-100">
+                    Mi cuenta <ChevronDown className="w-3 h-3 text-slate-400 dark:text-stone-500" />
                   </span>
                 </div>
                 <span className="lg:hidden font-bold">Ingresar</span>
@@ -529,7 +548,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
             {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
 
-          {/* Logo oficial Plazado.com */}
+          {/* Logo oficial Plazado.com / Imagen personalizada del Header */}
           <button 
             type="button"
             onClick={() => {
@@ -539,15 +558,26 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
             className="focus:outline-none flex items-center gap-2"
             title="Inicio Plazado.com"
           >
-            <div className="w-8 h-8 rounded-lg bg-[#008f51] flex items-center justify-center text-white shrink-0 shadow-2xs">
-              <svg viewBox="0 0 36 36" className="w-5 h-5 fill-none stroke-white stroke-[2.6]">
-                <path d="M11 13 C11 7.5, 25 7.5, 25 13" />
-                <path d="M7 14 L29 14 L27.5 31 C27.5 33, 25.5 34, 24 34 L12 34 C10.5 34, 8.5 33, 8.5 31 Z" fill="white" />
-              </svg>
-            </div>
-            <span className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none">
-              Plazado<span className="text-[#008f51]">.com</span>
-            </span>
+            {customHeaderImage && !headerImageError ? (
+              <img 
+                src={customHeaderImage} 
+                alt={systemSettings?.platformName || "PlazaDO.com"} 
+                className="h-8 max-h-9 w-auto max-w-[150px] object-contain"
+                onError={() => setHeaderImageError(true)}
+              />
+            ) : (
+              <>
+                <div className="w-8 h-8 rounded-lg bg-[#008f51] flex items-center justify-center text-white shrink-0 shadow-2xs">
+                  <svg viewBox="0 0 36 36" className="w-5 h-5 fill-none stroke-white stroke-[2.6]">
+                    <path d="M11 13 C11 7.5, 25 7.5, 25 13" />
+                    <path d="M7 14 L29 14 L27.5 31 C27.5 33, 25.5 34, 24 34 L12 34 C10.5 34, 8.5 33, 8.5 31 Z" fill="white" />
+                  </svg>
+                </div>
+                <span className="text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none">
+                  Plazado<span className="text-[#008f51]">.com</span>
+                </span>
+              </>
+            )}
           </button>
 
           {/* Acciones derechas: Tema Claro/Oscuro + 🛒 Carrito */}

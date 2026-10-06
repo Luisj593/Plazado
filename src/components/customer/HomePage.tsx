@@ -1,4 +1,4 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { DominicanFlag } from '../common/DominicanFlag';
 import { isProductPubliclyVisible, isStorePubliclyVisible } from '../../types';
@@ -24,7 +24,8 @@ import {
   MapPin,
   TrendingUp,
   Percent,
-  Plus
+  Plus,
+  Palette
 } from 'lucide-react';
 
 export const HomePage: React.FC = () => {
@@ -41,8 +42,18 @@ export const HomePage: React.FC = () => {
     addToCart,
     favorites,
     toggleFavoriteProduct,
-    setOpenPolicySlug
+    setOpenPolicySlug,
+    systemSettings,
+    currentUser,
+    setAdminActiveTab
   } = useApp();
+
+  const [heroImageError, setHeroImageError] = useState(false);
+
+  // Imagen del Header/Hero configurable por el Super Admin
+  const heroImageSrc = (!heroImageError && systemSettings?.headerBannerUrl)
+    ? systemSettings.headerBannerUrl
+    : "https://images.unsplash.com/photo-1483985988355-763728e1935b?w=900&auto=format&fit=crop&q=80";
 
   // Real Database Queries only — Never mock or fake data
   const approvedStores = useMemo(() => stores.filter(isStorePubliclyVisible), [stores]);
@@ -174,14 +185,31 @@ export const HomePage: React.FC = () => {
                 {/* Contenedor de la Imagen con badges superpuestos */}
                 <div className="relative w-full h-[280px] sm:h-[340px] lg:h-[390px] rounded-2xl overflow-hidden shadow-md border border-slate-200/80 dark:border-stone-800 group">
                   <img 
-                    src="https://images.unsplash.com/photo-1483985988355-763728e1935b?w=900&auto=format&fit=crop&q=80" 
+                    src={heroImageSrc} 
                     alt="Compras en Plazado.com República Dominicana" 
                     className="w-full h-full object-cover object-center group-hover:scale-102 transition-transform duration-500"
                     loading="eager"
+                    onError={() => setHeroImageError(true)}
                   />
                   
                   {/* Sutil gradiente para integrar badges */}
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent pointer-events-none" />
+
+                  {/* Acceso rápido para el Super Admin para cambiar la imagen del Header / Hero */}
+                  {currentUser?.role === 'SUPER_ADMIN' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdminActiveTab('branding');
+                        setCurrentView('admin_dashboard');
+                      }}
+                      className="absolute top-3 left-3 bg-stone-900/85 hover:bg-stone-900 text-white text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-md border border-stone-700 shadow-md flex items-center gap-1.5 z-30 transition-all cursor-pointer hover:border-emerald-500"
+                      title="Super Admin: Establecer imagen del Header / Hero"
+                    >
+                      <Palette className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Cambiar imagen Header</span>
+                    </button>
+                  )}
 
                   {/* Doodle 'Apoya tiendas Dominicanas ♡' */}
                   <div className="absolute top-3 right-3 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-md border border-slate-200 dark:border-stone-700 text-slate-900 dark:text-white text-xs font-bold flex items-center gap-1.5 animate-bounce-subtle z-20">

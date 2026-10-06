@@ -21,7 +21,8 @@ export const PlazaDoLogo: React.FC<PlazaDoLogoProps> = ({
   const { systemSettings } = useApp();
   const [imageError, setImageError] = useState(false);
 
-  const redColor = '#E31B44';
+  const brandGreen = '#008f51';
+  const textDark = inverted ? '#FFFFFF' : '#0F172A';
   const greyColor = inverted ? '#E2E8F0' : '#64748B';
   const sloganColor = inverted ? '#CBD5E1' : '#64748B';
 
@@ -94,7 +95,7 @@ export const PlazaDoLogo: React.FC<PlazaDoLogoProps> = ({
           <path
             d="M 24 50 Q 38 65, 52 50"
             fill="none"
-            stroke={redColor}
+            stroke={brandGreen}
             strokeWidth="6"
             strokeLinecap="round"
           />
@@ -121,7 +122,7 @@ export const PlazaDoLogo: React.FC<PlazaDoLogoProps> = ({
           fontWeight="900"
           fontSize="76"
           letterSpacing="-1.5"
-          fill={redColor}
+          fill={textDark}
         >
           Plaza
         </text>
@@ -131,14 +132,10 @@ export const PlazaDoLogo: React.FC<PlazaDoLogoProps> = ({
           x="235"
           y="76"
           fontFamily="system-ui, -apple-system, sans-serif"
-          fontWeight="600"
+          fontWeight="800"
           fontSize="76"
           letterSpacing="-1"
-          fill="none"
-          stroke={greyColor}
-          strokeWidth="4.5"
-          strokeLinejoin="round"
-          strokeLinecap="round"
+          fill={brandGreen}
         >
           do
         </text>
@@ -166,7 +163,7 @@ export const PlazaDoLogo: React.FC<PlazaDoLogoProps> = ({
           <path
             d="M 26 50 Q 40 65, 54 50"
             fill="none"
-            stroke={redColor}
+            stroke={brandGreen}
             strokeWidth="6"
             strokeLinecap="round"
           />
@@ -175,7 +172,7 @@ export const PlazaDoLogo: React.FC<PlazaDoLogoProps> = ({
     );
   }
 
-  // Full Variant with "Todo en un solo lugar" and red bar
+  // Full Variant with "Todo en un solo lugar" and green bar
   return (
     <svg
       viewBox="0 0 520 170"
@@ -194,24 +191,20 @@ export const PlazaDoLogo: React.FC<PlazaDoLogoProps> = ({
           fontWeight="900"
           fontSize="78"
           letterSpacing="-1.5"
-          fill={redColor}
+          fill={textDark}
         >
           Plaza
         </text>
 
-        {/* do outlined text */}
+        {/* do text */}
         <text
           x="245"
           y="78"
           fontFamily="system-ui, -apple-system, sans-serif"
-          fontWeight="600"
+          fontWeight="800"
           fontSize="78"
           letterSpacing="-1"
-          fill="none"
-          stroke={greyColor}
-          strokeWidth="4.5"
-          strokeLinejoin="round"
-          strokeLinecap="round"
+          fill={brandGreen}
         >
           do
         </text>
@@ -239,7 +232,7 @@ export const PlazaDoLogo: React.FC<PlazaDoLogoProps> = ({
           <path
             d="M 26 50 Q 40 65, 54 50"
             fill="none"
-            stroke={redColor}
+            stroke={brandGreen}
             strokeWidth="6"
             strokeLinecap="round"
           />
@@ -258,8 +251,8 @@ export const PlazaDoLogo: React.FC<PlazaDoLogoProps> = ({
           Todo en un solo lugar
         </text>
 
-        {/* Red accent line */}
-        <rect x="180" y="144" width="105" height="5.5" rx="2.75" fill={redColor} />
+        {/* Green accent line */}
+        <rect x="180" y="144" width="105" height="5.5" rx="2.75" fill={brandGreen} />
       </g>
     </svg>
   );

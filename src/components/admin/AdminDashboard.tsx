@@ -959,13 +959,13 @@ export const AdminDashboard: React.FC = () => {
                   onClick={() => setActiveTab('branding')}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
                     activeTab === 'branding'
-                      ? 'bg-red-600 text-white shadow-xs'
+                      ? 'bg-[#008f51] text-white shadow-xs'
                       : 'text-stone-700 hover:bg-stone-100'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
                     <Palette className="w-4 h-4" />
-                    <span>Logo & Favicon</span>
+                    <span>Identidad & Header</span>
                   </div>
                 </button>
 
@@ -2703,17 +2703,17 @@ export const AdminDashboard: React.FC = () => {
                 <Palette className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-bold text-sm text-stone-900">Identidad Visual: Logo y Favicon</h3>
-                <p className="text-xs text-stone-500">Configura el logotipo oficial de PlazaDO (fondos claros y oscuros) y el favicon de la pestaña del navegador.</p>
+                <h3 className="font-bold text-sm text-stone-900">Identidad Visual: Header, Hero y Favicon</h3>
+                <p className="text-xs text-stone-500">Configura la imagen del Header (fondos claros y oscuros), la imagen principal del Hero de la portada y el favicon.</p>
               </div>
             </div>
             <button
               type="button"
               id="btn-goto-branding-from-settings"
               onClick={() => setActiveTab('branding')}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 shrink-0"
+              className="px-4 py-2 bg-[#008f51] hover:bg-[#007a44] text-white rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer"
             >
-              <span>Configurar Logo & Favicon</span>
+              <span>Configurar Header & Identidad</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

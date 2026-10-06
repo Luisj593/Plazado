@@ -217,6 +217,8 @@ export const INITIAL_SETTINGS: SystemSettings = {
   logoDarkUrl: '',
   faviconType: 'default',
   faviconUrl: '/dominican-flag.svg',
+  headerBannerType: 'default',
+  headerBannerUrl: '',
   azulConfig: {
     merchantId: '3948102948',
     authKey: 'AZUL_AUTH_KEY_LIVE_PLAZADO_SECURE',
