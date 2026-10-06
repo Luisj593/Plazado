@@ -88,19 +88,20 @@ export const HomePage: React.FC = () => {
   }, [publishedProducts]);
 
   useEffect(() => {
-    if (heroProducts.length <= 1 || heroPaused) return;
+    if ((systemSettings?.homeHeroMode || 'slider') !== 'slider' || heroProducts.length <= 1 || heroPaused) return;
     const timer = window.setInterval(() => {
       setHeroSlideIndex(current => (current + 1) % heroProducts.length);
       setHeroImageError(false);
     }, 4500);
     return () => window.clearInterval(timer);
-  }, [heroProducts.length, heroPaused]);
+  }, [heroProducts.length, heroPaused, systemSettings?.homeHeroMode]);
 
   useEffect(() => {
     if (heroSlideIndex >= heroProducts.length) setHeroSlideIndex(0);
   }, [heroProducts.length, heroSlideIndex]);
 
-  const activeHeroProduct = heroProducts[heroSlideIndex];
+  const heroMode = systemSettings?.homeHeroMode || 'slider';
+  const activeHeroProduct = heroMode === 'slider' ? heroProducts[heroSlideIndex] : undefined;
 
   const activeCategories = (categories && categories.length > 0) ? categories : INITIAL_CATEGORIES;
   const mainCategories = activeCategories.filter(c => !c.parentId);
@@ -219,7 +220,7 @@ export const HomePage: React.FC = () => {
                 {/* Contenedor de la Imagen con badges superpuestos */}
                 <div className="relative w-full h-[190px] sm:h-[300px] lg:h-[390px] rounded-xl sm:rounded-2xl overflow-hidden shadow-md border border-slate-200/80 dark:border-stone-800 group">
                   <img 
-                    src={activeHeroProduct && !heroImageError ? activeHeroProduct.images[0] : heroImageSrc} 
+                    src={heroMode === 'slider' && activeHeroProduct && !heroImageError ? activeHeroProduct.images[0] : heroImageSrc} 
                     alt={activeHeroProduct ? activeHeroProduct.name : "Compras en Plazado.com República Dominicana"} 
                     className="w-full h-full object-contain bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-900 dark:to-black transition-all duration-700"
                     loading="eager"
@@ -247,7 +248,7 @@ export const HomePage: React.FC = () => {
                     </div>
                   )}
 
-                  {heroProducts.length > 1 && (
+                  {heroMode === 'slider' && heroProducts.length > 1 && (
                     <>
                       <button
                         type="button"
