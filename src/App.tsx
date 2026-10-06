@@ -103,7 +103,7 @@ const MarketplaceApp: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 selection:bg-emerald-500 selection:text-white font-sans antialiased transition-colors duration-200">
+    <div className="min-h-screen flex flex-col bg-white dark:bg-[#0c0a09] text-stone-900 dark:text-stone-100 selection:bg-red-600 selection:text-white font-sans antialiased transition-colors duration-200">
       
       {/* Dynamic Role Switcher Bar */}
       <RoleBar />
