@@ -3162,7 +3162,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       submitKycVerification,
 
       theme,
-      toggleTheme
+      toggleTheme,
+      setThemeMode
     }}>
       {children}
     </AppContext.Provider>
