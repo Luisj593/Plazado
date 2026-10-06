@@ -222,13 +222,13 @@ export const HomePage: React.FC = () => {
                   <img 
                     src={heroMode === 'slider' && activeHeroProduct && !heroImageError ? activeHeroProduct.images[0] : heroImageSrc} 
                     alt={activeHeroProduct ? activeHeroProduct.name : "Compras en Plazado.com República Dominicana"} 
-                    className="w-full h-full object-contain bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-900 dark:to-black transition-all duration-700"
+                    className="w-full h-full object-cover bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-900 dark:to-black transition-all duration-700"
                     loading="eager"
                     onError={() => setHeroImageError(true)}
                   />
                   
                   {activeHeroProduct && (
-                    <div className="absolute left-3 sm:left-5 bottom-14 sm:bottom-16 z-30 max-w-[82%] sm:max-w-[65%] rounded-2xl bg-black/80 px-4 py-3 text-left text-white backdrop-blur-lg border border-white/10 shadow-xl">
+                    <div className="absolute left-8 sm:left-12 bottom-10 sm:bottom-12 z-30 max-w-[78%] sm:max-w-[58%] rounded-2xl bg-black/45 px-5 py-4 text-left text-white backdrop-blur-md border border-white/15 shadow-xl">
                       <span className="block text-[10px] sm:text-[11px] uppercase tracking-[0.18em] font-black text-rose-300 mb-1">Producto destacado</span>
                       <span className="block truncate text-sm sm:text-base font-black">{activeHeroProduct.name}</span>
                       <div className="flex items-center gap-3 mt-1.5">
@@ -354,7 +354,7 @@ export const HomePage: React.FC = () => {
       {/* 3. FRANJA DE CONFIANZA (4 Columnas uniformes a todo lo ancho)   */}
       {/* ============================================================== */}
       <section>
-        <div className="bg-white dark:bg-stone-900 rounded-2xl border border-slate-200/80 dark:border-stone-800 p-4 sm:p-5 shadow-xs">
+        <div className="bg-white dark:bg-stone-900 rounded-2xl border border-slate-200/80 dark:border-stone-800 px-4 py-3 shadow-xs">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 dark:divide-stone-800">
             
             {/* 1. Compra segura */}
@@ -428,7 +428,7 @@ export const HomePage: React.FC = () => {
         
         {/* Cabecera */}
         <div className="flex items-center justify-between">
-          <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+          <h2 className="text-lg sm:text-xl font-black text-slate-950 dark:text-white tracking-tight">
             Categorías populares
           </h2>
 
@@ -498,7 +498,7 @@ export const HomePage: React.FC = () => {
         
         {/* Cabecera */}
         <div className="flex items-center justify-between">
-          <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+          <h2 className="text-lg sm:text-xl font-black text-slate-950 dark:text-white tracking-tight">
             Productos destacados
           </h2>
 
