@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+/* Theme root: el modo seleccionado controla el fondo completo de la aplicación */
+html, body, #root {
+  min-height: 100%;
+  background-color: #ffffff;
+}
+html:not(.dark) body,
+html:not(.dark) #root {
+  background-color: #ffffff !important;
+}
+html.dark,
+html.dark body,
+html.dark #root {
+  background-color: #0c0a09 !important;
+}
+
 /* Mobile Viewport & Touch Optimization */
 html, body {
   overflow-x: hidden;
