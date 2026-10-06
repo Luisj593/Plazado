@@ -151,13 +151,13 @@ export const HomePage: React.FC = () => {
   ];
 
   return (
-    <div className="max-w-[1440px] mx-auto px-0 sm:px-4 lg:px-6 space-y-4 sm:space-y-6 pb-12 sm:pb-16 overflow-x-hidden">
+    <div className="max-w-[1600px] mx-auto px-0 sm:px-3 lg:px-4 space-y-4 pb-10 sm:pb-14 overflow-x-hidden">
 
       {/* ============================================================== */}
       {/* 2. HERO PRINCIPAL — REPLICA VISUAL EXACTA DE LA REFERENCIA     */}
       {/* ============================================================== */}
       <section className="pt-2 sm:pt-4">
-        <div className="relative rounded-none sm:rounded-2xl overflow-hidden bg-gradient-to-br from-stone-950 via-black to-stone-900 dark:from-stone-950 dark:via-black dark:to-stone-900 border border-slate-200/90 dark:border-stone-800 shadow-xs min-h-[330px] sm:min-h-[400px] lg:h-[390px] flex items-center">
+        <div className="relative rounded-none sm:rounded-[20px] overflow-hidden bg-gradient-to-r from-black via-[#170005] to-[#360008] border border-stone-800 shadow-sm min-h-[330px] sm:min-h-[390px] lg:h-[390px] flex items-center">
           
           {/* Suaves elementos de luz y ambientación de marca */}
           <div className="absolute -right-16 -top-16 w-80 h-80 bg-rose-100/40 dark:bg-rose-900/20 rounded-full blur-3xl pointer-events-none" />
@@ -446,7 +446,7 @@ export const HomePage: React.FC = () => {
         </div>
 
         {/* Fila Horizontal de Tarjetas Visuales (Idéntica a la referencia) */}
-        <div className="grid grid-cols-4 sm:grid-cols-7 lg:grid-cols-10 xl:grid-cols-[repeat(14,minmax(0,1fr))] gap-2.5 sm:gap-3 overflow-x-auto pb-1 scrollbar-none">
+        <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-none">
           {visualCategories.map((item, idx) => {
             // Find if this category exists in real database categories
             const realCat = mainCategories.find(c => c.slug === item.slug || c.name.toLowerCase().includes(item.name.toLowerCase()));
@@ -457,7 +457,7 @@ export const HomePage: React.FC = () => {
                 key={idx}
                 type="button"
                 onClick={() => handleCategorySelect(targetSlug)}
-                className="bg-white dark:bg-stone-900 rounded-2xl border border-slate-200/70 dark:border-stone-800 p-3 sm:p-3.5 flex flex-col items-center justify-center text-center hover:border-[#f20544] dark:hover:border-rose-500 hover:shadow-md hover:-translate-y-0.5 transition-all group cursor-pointer aspect-square min-w-[80px]"
+                className="bg-white dark:bg-stone-900 rounded-xl border border-slate-200/70 dark:border-stone-800 px-3 py-2.5 flex flex-col items-center justify-center text-center hover:border-[#f20544] dark:hover:border-rose-500 hover:shadow-md hover:-translate-y-0.5 transition-all group cursor-pointer min-w-[96px] sm:min-w-[108px] h-[82px]"
                 title={`Explorar ${item.name}`}
               >
                 <span className="text-2xl sm:text-3xl mb-1.5 filter drop-shadow-2xs group-hover:scale-110 transition-transform">
@@ -477,7 +477,7 @@ export const HomePage: React.FC = () => {
               setSelectedCategorySlug(null);
               setCurrentView('catalog');
             }}
-            className="bg-slate-50 dark:bg-stone-800/60 hover:bg-white dark:hover:bg-stone-800 rounded-2xl border border-dashed border-slate-300 dark:border-stone-700 hover:border-[#f20544] dark:hover:border-rose-500 p-3 sm:p-3.5 flex flex-col items-center justify-center text-center transition-all group cursor-pointer aspect-square min-w-[80px]"
+            className="bg-slate-50 dark:bg-stone-800/60 hover:bg-white dark:hover:bg-stone-800 rounded-xl border border-dashed border-slate-300 dark:border-stone-700 hover:border-[#f20544] dark:hover:border-rose-500 px-3 py-2.5 flex flex-col items-center justify-center text-center transition-all group cursor-pointer min-w-[96px] sm:min-w-[108px] h-[82px]"
             title="Ver catálogo completo"
           >
             <span className="text-2xl mb-1.5 text-slate-400 dark:text-stone-500 group-hover:text-[#f20544] dark:group-hover:text-rose-400 group-hover:scale-110 transition-transform">
@@ -561,7 +561,7 @@ export const HomePage: React.FC = () => {
           /* Grid de 8 productos destacados en Desktop / Carrusel en móvil */
           <div
             ref={productsTrackRef}
-            className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 sm:gap-3.5 overflow-x-auto sm:overflow-visible pb-2 sm:pb-0"
+            className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 sm:gap-3 overflow-x-auto sm:overflow-visible pb-2 sm:pb-0"
           >
             {displayProducts.slice(0, 8).map(prod => {
               const store = stores.find(s => s.id === prod.storeId);
@@ -572,7 +572,7 @@ export const HomePage: React.FC = () => {
               return (
                 <div
                   key={prod.id}
-                  className="bg-white dark:bg-stone-900 rounded-2xl border border-slate-200/80 dark:border-stone-800 p-3 shadow-2xs hover:shadow-md hover:border-slate-300 dark:hover:border-stone-700 transition-all flex flex-col justify-between group"
+                  className="bg-white dark:bg-stone-900 rounded-xl border border-slate-200/80 dark:border-stone-800 p-2.5 shadow-2xs hover:shadow-md hover:border-[#f20544]/40 dark:hover:border-rose-700 transition-all flex flex-col justify-between group"
                 >
                   {/* Imagen del Producto en fondo blanco/limpio */}
                   <div 
@@ -739,9 +739,9 @@ export const HomePage: React.FC = () => {
           /* Grid de 6 tiendas horizontales como en la referencia */
           <div
             ref={storesTrackRef}
-            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-3.5 overflow-x-auto sm:overflow-visible pb-2 sm:pb-0"
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5 sm:gap-3 overflow-x-auto sm:overflow-visible pb-2 sm:pb-0"
           >
-            {approvedStores.slice(0, 6).map(store => {
+            {approvedStores.slice(0, 7).map(store => {
               const category = categories.find(c => c.id === store.categoryId);
               const categoryName = category?.name || 'Comercio General';
 
@@ -749,7 +749,7 @@ export const HomePage: React.FC = () => {
                 <div
                   key={store.id}
                   onClick={() => handleStoreSelect(store.slug || store.id)}
-                  className="bg-white dark:bg-stone-900 rounded-2xl border border-slate-200/80 dark:border-stone-800 p-3.5 shadow-2xs hover:shadow-md hover:border-slate-300 dark:hover:border-stone-700 transition-all flex items-center justify-between gap-3 group cursor-pointer"
+                  className="bg-white dark:bg-stone-900 rounded-xl border border-slate-200/80 dark:border-stone-800 p-2.5 shadow-2xs hover:shadow-md hover:border-[#f20544]/40 dark:hover:border-rose-700 transition-all flex flex-col items-start justify-between gap-2 group cursor-pointer"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     {/* Logo circular grande */}
