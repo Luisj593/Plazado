@@ -50,6 +50,7 @@ export const HomePage: React.FC = () => {
 
   const [heroImageError, setHeroImageError] = useState(false);
   const [heroSlideIndex, setHeroSlideIndex] = useState(0);
+  const [heroPaused, setHeroPaused] = useState(false);
 
   // Imagen del Header/Hero configurable por el Super Admin
   const heroImageSrc = (!heroImageError && systemSettings?.headerBannerUrl)
@@ -77,17 +78,23 @@ export const HomePage: React.FC = () => {
   // cada vez que cambia el catálogo. No crea productos ficticios.
   const heroProducts = useMemo(() => {
     const candidates = publishedProducts.filter(p => p.images && p.images.length > 0);
-    return [...candidates].sort(() => Math.random() - 0.5).slice(0, 8);
+    // Fisher-Yates para un orden aleatorio real por carga/cambio de catálogo.
+    const shuffled = [...candidates];
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled.slice(0, 10);
   }, [publishedProducts]);
 
   useEffect(() => {
-    if (heroProducts.length <= 1) return;
+    if (heroProducts.length <= 1 || heroPaused) return;
     const timer = window.setInterval(() => {
       setHeroSlideIndex(current => (current + 1) % heroProducts.length);
       setHeroImageError(false);
-    }, 5000);
+    }, 4500);
     return () => window.clearInterval(timer);
-  }, [heroProducts.length]);
+  }, [heroProducts.length, heroPaused]);
 
   useEffect(() => {
     if (heroSlideIndex >= heroProducts.length) setHeroSlideIndex(0);
@@ -202,33 +209,42 @@ export const HomePage: React.FC = () => {
 
               </div>
 
-              {/* ZONA DERECHA: Imagen comercial atractiva y luminosa & Floating Badges */}
-              <div className="lg:col-span-7 relative h-full flex items-center justify-center">
+              {/* ZONA DERECHA: Slider moderno de productos publicados */}
+              <div
+                className="lg:col-span-7 relative h-full flex items-center justify-center"
+                onMouseEnter={() => setHeroPaused(true)}
+                onMouseLeave={() => setHeroPaused(false)}
+              >
                 
                 {/* Contenedor de la Imagen con badges superpuestos */}
                 <div className="relative w-full h-[190px] sm:h-[300px] lg:h-[390px] rounded-xl sm:rounded-2xl overflow-hidden shadow-md border border-slate-200/80 dark:border-stone-800 group">
                   <img 
                     src={activeHeroProduct && !heroImageError ? activeHeroProduct.images[0] : heroImageSrc} 
                     alt={activeHeroProduct ? activeHeroProduct.name : "Compras en Plazado.com República Dominicana"} 
-                    className="w-full h-full object-cover object-center group-hover:scale-102 transition-transform duration-500"
+                    className="w-full h-full object-contain bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-900 dark:to-black transition-all duration-700"
                     loading="eager"
                     onError={() => setHeroImageError(true)}
                   />
                   
                   {activeHeroProduct && (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedProductId(activeHeroProduct.id)}
-                      className="absolute left-3 bottom-16 z-30 max-w-[75%] rounded-xl bg-black/75 px-3 py-2 text-left text-white backdrop-blur-md hover:bg-black/90 transition-colors"
-                      title="Ver producto"
-                    >
-                      <span className="block truncate text-xs sm:text-sm font-bold">{activeHeroProduct.name}</span>
-                      <span className="block text-[11px] sm:text-xs font-black text-rose-300 mt-0.5">
-                        RD$ {(activeHeroProduct.promoPrice && activeHeroProduct.promoPrice < activeHeroProduct.price
-                          ? activeHeroProduct.promoPrice
-                          : activeHeroProduct.price).toLocaleString()}
-                      </span>
-                    </button>
+                    <div className="absolute left-3 sm:left-5 bottom-14 sm:bottom-16 z-30 max-w-[82%] sm:max-w-[65%] rounded-2xl bg-black/80 px-4 py-3 text-left text-white backdrop-blur-lg border border-white/10 shadow-xl">
+                      <span className="block text-[10px] sm:text-[11px] uppercase tracking-[0.18em] font-black text-rose-300 mb-1">Producto destacado</span>
+                      <span className="block truncate text-sm sm:text-base font-black">{activeHeroProduct.name}</span>
+                      <div className="flex items-center gap-3 mt-1.5">
+                        <span className="text-sm sm:text-lg font-black text-white">
+                          RD$ {(activeHeroProduct.promoPrice && activeHeroProduct.promoPrice < activeHeroProduct.price
+                            ? activeHeroProduct.promoPrice
+                            : activeHeroProduct.price).toLocaleString()}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedProductId(activeHeroProduct.id)}
+                          className="rounded-full bg-[#f20544] hover:bg-[#d9043d] px-3 py-1.5 text-[11px] sm:text-xs font-black text-white transition-colors"
+                        >
+                          Ver producto
+                        </button>
+                      </div>
+                    </div>
                   )}
 
                   {heroProducts.length > 1 && (
