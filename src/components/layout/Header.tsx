@@ -2,7 +2,6 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { isStorePubliclyVisible } from '../../types';
 import { DominicanFlag } from '../common/DominicanFlag';
-import { PlazaDoLogo } from '../common/PlazaDoLogo';
 import { UserProfileModal } from '../common/UserProfileModal';
 import { CategoryIcon, getCategoryEmoji } from '../../utils/categoryIcons';
 import { INITIAL_CATEGORIES } from '../../data/initialData';
@@ -16,7 +15,6 @@ import {
   Menu, 
   X, 
   Package, 
-  Phone,
   ChevronDown,
   Layers,
   Sparkles,
@@ -120,12 +118,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200/90 shadow-xs">
       
       {/* ============================================================== */}
-      {/* 1. HEADER DESKTOP — NIVEL 1 (Desktop Only)                     */}
+      {/* 1. HEADER DESKTOP — NIVEL 1 (Desktop Max-Width 1440px)          */}
       {/* ============================================================== */}
       <div className="hidden md:block border-b border-slate-100 bg-white">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4 lg:gap-6">
+        <div className="max-w-[1440px] mx-auto px-4 lg:px-6 py-3 flex items-center justify-between gap-4 lg:gap-6">
           
-          {/* Izquierda: Logo oficial de Plazado.com */}
+          {/* Izquierda: Logo oficial Plazado.com con slogan */}
           <div className="flex items-center shrink-0">
             <button 
               id="header-logo-btn"
@@ -133,22 +131,66 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                 setCurrentView('home');
                 setSelectedCategorySlug(null);
               }}
-              className="text-left flex items-center gap-2 group focus:outline-none hover:opacity-95 transition-opacity"
-              title="PlazaDO.com — Inicio"
+              className="text-left flex items-center gap-2.5 group focus:outline-none hover:opacity-95 transition-opacity"
+              title="PlazaDO.com — Comprar y vender en todo RD"
             >
-              <PlazaDoLogo variant="compact" className="h-9 sm:h-10 w-auto" />
+              {/* Green Shopping Bag Logo */}
+              <div className="w-10 h-10 rounded-xl bg-[#008f51] flex items-center justify-center text-white shrink-0 shadow-xs">
+                <svg viewBox="0 0 36 36" className="w-6 h-6 fill-none stroke-white stroke-[2.6] stroke-linecap-round stroke-linejoin-round">
+                  <path d="M11 13 C11 7.5, 25 7.5, 25 13" />
+                  <path d="M7 14 L29 14 L27.5 31 C27.5 33, 25.5 34, 24 34 L12 34 C10.5 34, 8.5 33, 8.5 31 Z" fill="white" />
+                  <path d="M14 23 Q18 28, 22 23" stroke="#008f51" strokeWidth="2.5" />
+                </svg>
+              </div>
+
+              {/* Text: Plazado.com + Slogan */}
+              <div className="flex flex-col text-left">
+                <span className="text-2xl font-black text-slate-900 tracking-tight leading-none">
+                  Plazado<span className="text-[#008f51]">.com</span>
+                </span>
+                <span className="text-[11px] text-slate-500 font-medium tracking-tight mt-0.5 leading-none">
+                  Comprar y vender en todo RD
+                </span>
+              </div>
             </button>
           </div>
 
-          {/* Centro: Buscador grande profesional con selector y botón verde */}
+          {/* Centro: Buscador grande profesional con selector integrado y botón verde */}
           <form 
             onSubmit={handleSearchSubmit} 
             className="flex-1 max-w-2xl flex items-center relative group"
           >
-            <div className="w-full flex items-stretch bg-slate-50 hover:bg-white focus-within:bg-white border-2 border-slate-200 hover:border-slate-300 focus-within:border-emerald-600 focus-within:ring-4 focus-within:ring-emerald-500/10 rounded-xl transition-all shadow-2xs overflow-hidden">
+            <div className="w-full flex items-stretch bg-slate-50 hover:bg-white focus-within:bg-white border-2 border-slate-200 hover:border-slate-300 focus-within:border-[#008f51] focus-within:ring-4 focus-within:ring-emerald-500/10 rounded-xl transition-all shadow-2xs overflow-hidden">
               
-              {/* Selector de categorías */}
-              <div className="relative flex items-center bg-slate-100/70 border-r border-slate-200 shrink-0">
+              {/* Icono de búsqueda a la izquierda */}
+              <div className="pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <Search className="w-4 h-4" />
+              </div>
+
+              {/* Input de texto principal */}
+              <div className="relative flex-1 flex items-center">
+                <input 
+                  id="header-search-input"
+                  type="text" 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="¿Qué estás buscando?"
+                  className="w-full pl-2.5 pr-8 py-2.5 bg-transparent text-sm font-medium text-slate-900 placeholder:text-slate-400 placeholder:font-normal caret-[#008f51] outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors absolute right-2 top-1/2 -translate-y-1/2"
+                    title="Limpiar búsqueda"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Selector de categorías integrado a la derecha del input */}
+              <div className="relative flex items-center bg-slate-100/70 border-l border-slate-200 shrink-0">
                 <select
                   value={searchCategory}
                   onChange={(e) => setSearchCategory(e.target.value)}
@@ -165,47 +207,29 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                 <ChevronDown className="w-3.5 h-3.5 text-slate-500 pointer-events-none absolute right-2 top-1/2 -translate-y-1/2" />
               </div>
 
-              {/* Input de búsqueda principal */}
-              <div className="relative flex-1 flex items-center">
-                <input 
-                  id="header-search-input"
-                  type="text" 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="¿Qué estás buscando?"
-                  className="w-full pl-3.5 pr-8 py-2.5 bg-transparent text-sm font-medium text-slate-900 placeholder:text-slate-400 placeholder:font-normal caret-emerald-600 outline-none"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    className="p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors absolute right-2 top-1/2 -translate-y-1/2"
-                    title="Limpiar búsqueda"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
               {/* Botón verde Buscar */}
               <button 
                 type="submit"
                 id="header-search-submit-btn"
-                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs sm:text-sm transition-colors flex items-center gap-1.5 shrink-0 shadow-2xs"
+                className="px-6 py-2.5 bg-[#008f51] hover:bg-[#007a44] active:bg-[#006838] text-white font-bold text-sm transition-colors flex items-center gap-1.5 shrink-0 shadow-2xs cursor-pointer"
               >
-                <Search className="w-4 h-4" />
                 <span>Buscar</span>
               </button>
             </div>
           </form>
 
           {/* Derecha: Ubicación, Acceso / Mi Cuenta, Favoritos, Carrito */}
-          <div className="flex items-center gap-3 lg:gap-4 shrink-0">
+          <div className="flex items-center gap-3 lg:gap-5 shrink-0">
             
-            {/* Ubicación: República Dominicana */}
-            <div className="hidden xl:flex items-center gap-1.5 text-xs text-slate-600 font-medium bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200/80">
-              <DominicanFlag className="w-4 h-3 rounded-2xs border border-slate-300 shadow-2xs shrink-0" />
-              <span className="truncate">República Dominicana</span>
+            {/* Ubicación: Enviar a República Dominicana */}
+            <div className="hidden xl:flex items-center gap-1.5 text-xs text-slate-700 font-medium">
+              <MapPin className="w-4 h-4 text-[#008f51] shrink-0" />
+              <div className="leading-tight text-left">
+                <span className="text-[10px] text-slate-400 block font-normal">Enviar a</span>
+                <span className="font-bold flex items-center gap-1">
+                  República Dominicana <ChevronDown className="w-3 h-3 text-slate-400" />
+                </span>
+              </div>
             </div>
 
             {/* Acceso: "Ingresar" / "Mi cuenta" */}
@@ -220,36 +244,38 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                   <img
                     src={currentUser.avatar}
                     alt={currentUser.name}
-                    className="w-7 h-7 rounded-full object-cover border border-emerald-500 shadow-2xs"
+                    className="w-8 h-8 rounded-full object-cover border border-[#008f51] shadow-2xs"
                   />
                 ) : (
-                  <div className="w-7 h-7 rounded-full bg-emerald-100 border border-emerald-300 flex items-center justify-center text-emerald-800 font-bold text-xs">
-                    {currentUser.role === 'STORE_OWNER' ? <Store className="w-3.5 h-3.5" /> : currentUser.role === 'SUPER_ADMIN' ? <Shield className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
+                  <div className="w-8 h-8 rounded-full bg-emerald-100 border border-emerald-300 flex items-center justify-center text-[#008f51] font-bold text-xs">
+                    {currentUser.role === 'STORE_OWNER' ? <Store className="w-4 h-4" /> : currentUser.role === 'SUPER_ADMIN' ? <Shield className="w-4 h-4" /> : <User className="w-4 h-4" />}
                   </div>
                 )}
                 <div className="hidden lg:block leading-tight">
                   <span className="text-[10px] text-slate-400 block font-normal">Hola,</span>
-                  <span className="text-xs font-bold text-slate-800 group-hover:text-emerald-600 transition-colors truncate max-w-[100px] block">
-                    {currentUser.name.split(' ')[0]}
+                  <span className="text-xs font-bold text-slate-800 group-hover:text-[#008f51] transition-colors truncate max-w-[100px] flex items-center gap-0.5">
+                    {currentUser.name.split(' ')[0]} <ChevronDown className="w-3 h-3 text-slate-400" />
                   </span>
                 </div>
               </button>
             ) : (
-              <div className="flex items-center gap-1">
-                <button
-                  id="header-auth-login-btn"
-                  onClick={() => openAuthModal('login')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 transition-colors"
-                  title="Ingresar a mi cuenta"
-                >
-                  <User className="w-4 h-4 text-slate-500" />
-                  <div className="text-left leading-tight hidden lg:block">
-                    <span className="text-[10px] text-slate-400 font-normal block">Acceso</span>
-                    <span className="font-bold">Ingresar</span>
-                  </div>
-                  <span className="lg:hidden">Ingresar</span>
-                </button>
-              </div>
+              <button
+                id="header-auth-login-btn"
+                onClick={() => openAuthModal('login')}
+                className="flex items-center gap-2 text-xs font-semibold text-slate-700 hover:text-[#008f51] transition-colors p-1.5 rounded-xl hover:bg-slate-50"
+                title="Ingresar a mi cuenta"
+              >
+                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600">
+                  <User className="w-4 h-4" />
+                </div>
+                <div className="text-left leading-tight hidden lg:block">
+                  <span className="text-[10px] text-slate-400 font-normal block">Ingresar</span>
+                  <span className="font-bold flex items-center gap-0.5">
+                    Mi cuenta <ChevronDown className="w-3 h-3 text-slate-400" />
+                  </span>
+                </div>
+                <span className="lg:hidden font-bold">Ingresar</span>
+              </button>
             )}
 
             {/* Favoritos */}
@@ -263,34 +289,35 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                   setCurrentView('customer_portal');
                 }
               }}
-              className="p-2 rounded-xl hover:bg-slate-100 text-slate-700 hover:text-emerald-600 relative transition-colors"
+              className="flex items-center gap-1.5 p-2 rounded-xl hover:bg-slate-100 text-slate-700 hover:text-[#008f51] relative transition-colors"
               title="Mis Favoritos"
             >
-              <Heart className="w-5 h-5 stroke-[2]" />
-              {(favorites.productIds.length + favorites.storeIds.length) > 0 && (
-                <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white shadow-2xs">
-                  {favorites.productIds.length + favorites.storeIds.length}
-                </span>
-              )}
+              <div className="relative">
+                <Heart className="w-5 h-5 stroke-[2]" />
+                {(favorites.productIds.length + favorites.storeIds.length) > 0 && (
+                  <span className="absolute -top-1.5 -right-2 bg-[#008f51] text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white shadow-2xs">
+                    {favorites.productIds.length + favorites.storeIds.length}
+                  </span>
+                )}
+              </div>
+              <span className="hidden xl:inline text-xs font-bold text-slate-800">Favoritos</span>
             </button>
 
             {/* Carrito */}
             <button
               id="header-cart-btn"
               onClick={onOpenCart}
-              className="flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl shadow-xs transition-colors font-semibold text-xs sm:text-sm"
-              title="Ver Carrito de Compras"
+              className="flex items-center gap-2 px-3.5 py-2 hover:bg-slate-100 text-slate-800 rounded-xl transition-colors font-semibold text-xs sm:text-sm cursor-pointer border border-transparent hover:border-slate-200"
+              title="Ver Mi Carrito"
             >
               <div className="relative">
-                <ShoppingCart className="w-5 h-5" />
-                {cartTotal.itemsCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-slate-900 text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-white shadow-2xs">
-                    {cartTotal.itemsCount > 99 ? '99+' : cartTotal.itemsCount}
-                  </span>
-                )}
+                <ShoppingCart className="w-5 h-5 text-slate-800" />
+                <span className="absolute -top-2 -right-2.5 bg-[#008f51] text-white text-[10px] font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center border-2 border-white shadow-2xs">
+                  {cartTotal.itemsCount}
+                </span>
               </div>
-              <span className="font-bold hidden sm:inline">
-                RD$ {cartTotal.subtotal.toLocaleString()}
+              <span className="font-bold hidden sm:inline text-slate-800">
+                Mi carrito
               </span>
             </button>
 
@@ -301,22 +328,18 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
       {/* ============================================================== */}
       {/* 1. HEADER DESKTOP — NIVEL 2: BARRA DE NAVEGACIÓN               */}
       {/* ============================================================== */}
-      <div className="hidden md:block bg-slate-50/90 border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-10 text-xs">
+      <div className="hidden md:block bg-white border-b border-slate-200/80">
+        <div className="max-w-[1440px] mx-auto px-4 lg:px-6 flex items-center justify-between h-11 text-xs">
           
           {/* Navegación Principal */}
-          <div className="flex items-center gap-1 sm:gap-2 lg:gap-3 text-slate-700">
+          <div className="flex items-center gap-1 sm:gap-3 text-slate-700">
             
-            {/* ☰ Todas las categorías (Desplegable interactivo) */}
+            {/* ☰ Todas las categorías (Botón verde destacado) */}
             <div className="relative" ref={dropdownRef}>
               <button
                 type="button"
                 onClick={() => setCategoriesDropdownOpen(!categoriesDropdownOpen)}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-bold transition-colors ${
-                  categoriesDropdownOpen 
-                    ? 'bg-emerald-600 text-white shadow-2xs' 
-                    : 'text-slate-900 hover:bg-slate-200/70 hover:text-emerald-700'
-                }`}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-bold bg-[#008f51] hover:bg-[#007a44] text-white transition-colors shadow-2xs cursor-pointer"
                 title="Desplegar todas las categorías oficiales"
               >
                 <Menu className="w-4 h-4" />
@@ -333,9 +356,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                   <div className="max-h-80 overflow-y-auto space-y-0.5">
                     <button
                       onClick={() => handleCategoryClick(null)}
-                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 hover:bg-emerald-50 hover:text-emerald-700 transition-colors flex items-center gap-2.5"
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 hover:bg-emerald-50 hover:text-[#008f51] transition-colors flex items-center gap-2.5"
                     >
-                      <Layers className="w-4 h-4 text-emerald-600" />
+                      <Layers className="w-4 h-4 text-[#008f51]" />
                       <span>Todos los Productos</span>
                     </button>
                     {mainCategories.map(cat => (
@@ -344,8 +367,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                         onClick={() => handleCategoryClick(cat.slug)}
                         className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2.5 ${
                           selectedCategorySlug === cat.slug
-                            ? 'bg-emerald-50 text-emerald-700 font-bold'
-                            : 'text-slate-800 hover:bg-slate-100 hover:text-emerald-600'
+                            ? 'bg-emerald-50 text-[#008f51] font-bold'
+                            : 'text-slate-800 hover:bg-slate-100 hover:text-[#008f51]'
                         }`}
                       >
                         <span className="text-sm shrink-0">{getCategoryEmoji(cat)}</span>
@@ -364,7 +387,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                 setSearchQuery('oferta');
                 setCurrentView('catalog');
               }}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-semibold hover:bg-slate-200/70 hover:text-emerald-600 transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg font-semibold hover:bg-slate-100 hover:text-[#008f51] transition-colors text-slate-700"
             >
               <span>🔥</span>
               <span>Ofertas</span>
@@ -374,19 +397,14 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
             <button
               id="header-nav-stores-link"
               onClick={() => setCurrentView('stores')}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-bold transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-colors ${
                 currentView === 'stores' 
-                  ? 'bg-emerald-50 text-emerald-700' 
-                  : 'hover:bg-slate-200/70 hover:text-emerald-600'
+                  ? 'bg-emerald-50 text-[#008f51]' 
+                  : 'hover:bg-slate-100 hover:text-[#008f51] text-slate-700'
               }`}
             >
-              <Store className="w-3.5 h-3.5 text-emerald-600" />
+              <Store className="w-3.5 h-3.5 text-slate-500" />
               <span>Tiendas</span>
-              {publicStoresCount > 0 && (
-                <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
-                  {publicStoresCount}
-                </span>
-              )}
             </button>
 
             {/* 🏷️ Black Friday */}
@@ -396,23 +414,26 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                 setSearchQuery('black friday');
                 setCurrentView('catalog');
               }}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-semibold hover:bg-slate-200/70 hover:text-emerald-600 transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg font-semibold hover:bg-slate-100 hover:text-[#008f51] transition-colors text-slate-700"
             >
-              <span>🏷️</span>
+              <Tag className="w-3.5 h-3.5 text-rose-600" />
               <span>Black Friday</span>
             </button>
 
-            {/* 🆕 Nuevos productos */}
+            {/* 📦 Nuevos productos con pill 'Nuevo' */}
             <button
               onClick={() => {
                 setSelectedCategorySlug(null);
                 setSearchQuery('');
                 setCurrentView('catalog');
               }}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-semibold hover:bg-slate-200/70 hover:text-emerald-600 transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg font-semibold hover:bg-slate-100 hover:text-[#008f51] transition-colors text-slate-700"
             >
-              <span>🆕</span>
+              <Package className="w-3.5 h-3.5 text-slate-500" />
               <span>Nuevos productos</span>
+              <span className="bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full leading-tight ml-0.5">
+                Nuevo
+              </span>
             </button>
 
             {/* ❓ Ayuda */}
@@ -420,7 +441,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
               onClick={() => {
                 setOpenPolicySlug('terminos-condiciones');
               }}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-semibold text-slate-600 hover:text-emerald-600 hover:bg-slate-200/70 transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg font-semibold text-slate-600 hover:text-[#008f51] hover:bg-slate-100 transition-colors"
             >
               <HelpCircle className="w-3.5 h-3.5" />
               <span>Ayuda</span>
@@ -431,8 +452,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
           {/* Extremo Derecho: Vende en Plazado destacado */}
           <div className="flex items-center gap-2">
             
-            {/* Acceso para comercio o Super Admin según sesión activa */}
-            {currentUser?.role === 'SUPER_ADMIN' ? (
+            {/* Acceso para Super Admin si está autenticado */}
+            {currentUser?.role === 'SUPER_ADMIN' && (
               <button 
                 onClick={() => {
                   if (pendingStoresCount > 0) setAdminActiveTab('solicitudes');
@@ -448,26 +469,17 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                   </span>
                 )}
               </button>
-            ) : currentUser?.role === 'STORE_OWNER' ? (
-              <button
-                onClick={() => setCurrentView('store_dashboard')}
-                className="text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 font-bold px-2.5 py-1 rounded-lg text-xs flex items-center gap-1.5 transition-colors"
-              >
-                <Store className="w-3.5 h-3.5 text-amber-600" />
-                <span>Panel Mi Tienda</span>
-              </button>
-            ) : null}
+            )}
 
             {/* Botón Verde Destacado: Vende en Plazado */}
             <button
               id="header-sell-btn"
               onClick={() => setCurrentView('sell_with_us')}
-              className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg shadow-xs transition-colors flex items-center gap-1.5 group"
+              className="bg-[#008f51] hover:bg-[#007a44] active:bg-[#006838] text-white font-bold text-xs px-4 py-2 rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
               title="Vender en Plazado.com"
             >
               <Store className="w-3.5 h-3.5" />
               <span>Vende en Plazado</span>
-              <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
             </button>
           </div>
 
@@ -500,10 +512,18 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
               setCurrentView('home');
               setSelectedCategorySlug(null);
             }}
-            className="focus:outline-none flex items-center"
+            className="focus:outline-none flex items-center gap-2"
             title="Inicio Plazado.com"
           >
-            <PlazaDoLogo variant="compact" className="h-8 w-auto max-w-[170px]" />
+            <div className="w-8 h-8 rounded-lg bg-[#008f51] flex items-center justify-center text-white shrink-0 shadow-2xs">
+              <svg viewBox="0 0 36 36" className="w-5 h-5 fill-none stroke-white stroke-[2.6]">
+                <path d="M11 13 C11 7.5, 25 7.5, 25 13" />
+                <path d="M7 14 L29 14 L27.5 31 C27.5 33, 25.5 34, 24 34 L12 34 C10.5 34, 8.5 33, 8.5 31 Z" fill="white" />
+              </svg>
+            </div>
+            <span className="text-xl font-black text-slate-900 tracking-tight leading-none">
+              Plazado<span className="text-[#008f51]">.com</span>
+            </span>
           </button>
 
           {/* 🛒 Carrito con badge */}
@@ -515,7 +535,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
           >
             <ShoppingCart className="w-6 h-6" />
             {cartTotal.itemsCount > 0 && (
-              <span className="absolute 1 top-0.5 right-0.5 bg-emerald-600 text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white shadow-2xs">
+              <span className="absolute top-0.5 right-0.5 bg-[#008f51] text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white shadow-2xs">
                 {cartTotal.itemsCount > 99 ? '99+' : cartTotal.itemsCount}
               </span>
             )}
@@ -524,7 +544,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
 
         {/* Segunda línea: Buscador ocupando prácticamente todo el ancho */}
         <form onSubmit={handleSearchSubmit} className="relative mb-2">
-          <div className="flex items-center bg-slate-50 border border-slate-300 focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500/20 rounded-xl overflow-hidden shadow-2xs">
+          <div className="flex items-center bg-slate-50 border border-slate-300 focus-within:border-[#008f51] focus-within:ring-2 focus-within:ring-emerald-500/20 rounded-xl overflow-hidden shadow-2xs">
             <Search className="w-4 h-4 text-slate-400 ml-3 pointer-events-none shrink-0" />
             <input 
               type="text" 
@@ -544,7 +564,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
             )}
             <button 
               type="submit"
-              className="bg-emerald-600 text-white font-bold text-xs px-3.5 py-2 hover:bg-emerald-700 shrink-0 transition-colors"
+              className="bg-[#008f51] text-white font-bold text-xs px-3.5 py-2 hover:bg-[#007a44] shrink-0 transition-colors"
             >
               Buscar
             </button>
@@ -599,7 +619,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
 
           <button
             onClick={() => setCurrentView('sell_with_us')}
-            className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full font-bold flex items-center gap-1 shrink-0"
+            className="px-2.5 py-1 bg-emerald-50 text-[#008f51] border border-emerald-200 rounded-full font-bold flex items-center gap-1 shrink-0"
           >
             <span>Vender</span>
           </button>
@@ -623,7 +643,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
               }}
               className="p-2.5 text-xs font-bold rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center gap-1.5"
             >
-              <Layers className="w-4 h-4 text-emerald-600" />
+              <Layers className="w-4 h-4 text-[#008f51]" />
               <span>Todos los Productos</span>
             </button>
             <button
@@ -633,7 +653,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
               }}
               className="p-2.5 text-xs font-bold rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center justify-center gap-1.5"
             >
-              <Store className="w-4 h-4 text-emerald-600" />
+              <Store className="w-4 h-4 text-[#008f51]" />
               <span>Tiendas RD ({publicStoresCount})</span>
             </button>
           </div>
@@ -667,10 +687,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                       <img
                         src={currentUser.avatar}
                         alt={currentUser.name}
-                        className="w-8 h-8 rounded-full object-cover border border-emerald-500"
+                        className="w-8 h-8 rounded-full object-cover border border-[#008f51]"
                       />
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs">
+                      <div className="w-8 h-8 rounded-full bg-emerald-100 text-[#008f51] flex items-center justify-center font-bold text-xs">
                         <User className="w-4 h-4" />
                       </div>
                     )}
@@ -746,7 +766,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                       openAuthModal('register_select');
                       setMobileMenuOpen(false);
                     }}
-                    className="w-full py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl text-center shadow-xs"
+                    className="w-full py-2.5 text-xs font-bold text-white bg-[#008f51] hover:bg-[#007a44] rounded-xl text-center shadow-xs"
                   >
                     Registrarse
                   </button>
@@ -759,7 +779,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                   }}
                   className="w-full text-left px-3 py-2.5 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2"
                 >
-                  <Store className="w-4 h-4 text-emerald-600" />
+                  <Store className="w-4 h-4 text-[#008f51]" />
                   <span>¿Tienes una tienda? Vende en PlazaDO</span>
                 </button>
               </div>
@@ -767,15 +787,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
 
             {/* Ayuda y WhatsApp */}
             <div className="pt-2 flex items-center justify-between text-xs text-slate-600">
-              <a 
-                href={`https://wa.me/1${systemSettings.whatsappCommercial.replace(/[^0-9]/g, '')}`} 
-                target="_blank" 
-                rel="noreferrer"
-                className="flex items-center gap-1.5 text-emerald-700 font-semibold"
+              <button 
+                type="button"
+                onClick={() => {
+                  setOpenPolicySlug('terminos-condiciones');
+                  setMobileMenuOpen(false);
+                }}
+                className="text-emerald-700 font-semibold"
               >
-                <Phone className="w-3.5 h-3.5" />
-                <span>WhatsApp Soporte</span>
-              </a>
+                Ayuda & Soporte
+              </button>
 
               <button
                 type="button"
