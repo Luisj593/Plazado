@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { isStorePubliclyVisible } from '../../types';
 import { DominicanFlag } from '../common/DominicanFlag';
@@ -23,7 +23,12 @@ import {
   LogIn,
   UserPlus,
   Sun,
-  Moon
+  Moon,
+  Flame,
+  Tag,
+  HelpCircle,
+  MapPin,
+  ArrowRight
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -39,6 +44,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
     searchQuery, 
     setSearchQuery, 
     categories, 
+    selectedCategorySlug,
     setSelectedCategorySlug,
     favorites,
     systemSettings,
@@ -50,8 +56,30 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
     orders,
     orderMessages,
     theme,
-    toggleTheme
+    toggleTheme,
+    setOpenPolicySlug
   } = useApp();
+
+  const [searchCategory, setSearchCategory] = useState<string>('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [categoriesDropdownOpen, setCategoriesDropdownOpen] = useState(false);
+  const [isUserProfileOpen, setIsUserProfileOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close categories dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setCategoriesDropdownOpen(false);
+      }
+    };
+    if (categoriesDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [categoriesDropdownOpen]);
 
   const userOrderIds = useMemo(() => {
     if (!currentUser) return new Set<string>();
@@ -64,28 +92,24 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
   }, [orderMessages, userOrderIds, currentUser]);
 
   const publicStoresCount = stores.filter(isStorePubliclyVisible).length;
-
   const pendingStoresCount = stores.filter(s => s.status === 'PENDING' || s.status === 'IN_REVIEW').length;
-
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [categoriesDropdownOpen, setCategoriesDropdownOpen] = useState(false);
-  const [isUserProfileOpen, setIsUserProfileOpen] = useState(false);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim()) {
-      setCurrentView('catalog');
+    if (searchCategory) {
+      setSelectedCategorySlug(searchCategory);
     }
+    setCurrentView('catalog');
   };
 
-  const handleCategoryClick = (catSlug: string) => {
+  const handleCategoryClick = (catSlug: string | null) => {
     setSelectedCategorySlug(catSlug);
     setCurrentView('catalog');
     setCategoriesDropdownOpen(false);
     setMobileMenuOpen(false);
   };
 
-  // Main categories (guaranteed non-empty fallback)
+  // Main categories
   const activeCategories = (categories && categories.length > 0) ? categories : INITIAL_CATEGORIES;
   const mainCategories = activeCategories.filter(c => !c.parentId);
   const currentStore = currentUser?.role === 'STORE_OWNER' 
@@ -93,188 +117,140 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
     : null;
 
   return (
-    <header className="sticky top-0 z-40 bg-white border-b border-stone-200 shadow-xs">
-      {/* Top micro bar with Dominican notice and WhatsApp */}
-      <div className="bg-stone-50 border-b border-stone-100 py-1.5 px-4 text-xs text-stone-600">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 font-medium text-stone-800">
-              <DominicanFlag className="w-5 h-3.5 rounded-2xs shadow-2xs border border-stone-300 inline-block shrink-0" />
-              <span>República Dominicana</span>
-            </span>
-            <span className="text-stone-300 hidden sm:inline">|</span>
-            <span className="hidden sm:inline text-stone-500 font-normal">
-              “Muchas tiendas. Un solo lugar.”
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-4 text-stone-600">
-            <a 
-              href={`https://wa.me/1${systemSettings.whatsappCommercial.replace(/[^0-9]/g, '')}`} 
-              target="_blank" 
-              rel="noreferrer"
-              className="flex items-center gap-1.5 hover:text-red-600 transition-colors font-medium text-stone-700 text-[11px] sm:text-xs"
-            >
-              <Phone className="w-3 h-3 text-emerald-600 shrink-0" />
-              <span className="hidden sm:inline">WhatsApp Comercial: </span>
-              <span className="sm:hidden">WA: </span>
-              <span>{systemSettings.whatsappCommercial}</span>
-            </a>
-            
-            {currentUser?.role === 'SUPER_ADMIN' && (
-              <button 
-                onClick={() => {
-                  if (pendingStoresCount > 0) setAdminActiveTab('solicitudes');
-                  setCurrentView('admin_dashboard');
-                }}
-                className="text-red-600 font-semibold hover:underline hidden md:inline flex items-center gap-1.5"
-              >
-                <Shield className="w-3 h-3 inline" />
-                <span>Panel Super Admin</span>
-                {pendingStoresCount > 0 && (
-                  <span className="bg-amber-500 text-stone-950 font-black text-[10px] px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
-                    {pendingStoresCount} solicitud{pendingStoresCount > 1 ? 'es' : ''}
-                  </span>
-                )}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Main Navigation Bar */}
-      <div className="max-w-7xl mx-auto px-4 py-3">
-        <div className="flex items-center justify-between gap-3 md:gap-6">
+    <header className="sticky top-0 z-40 bg-white border-b border-slate-200/90 shadow-xs">
+      
+      {/* ============================================================== */}
+      {/* 1. HEADER DESKTOP — NIVEL 1 (Desktop Only)                     */}
+      {/* ============================================================== */}
+      <div className="hidden md:block border-b border-slate-100 bg-white">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4 lg:gap-6">
           
-          {/* Logo */}
-          <div className="flex items-center gap-3">
+          {/* Izquierda: Logo oficial de Plazado.com */}
+          <div className="flex items-center shrink-0">
             <button 
               id="header-logo-btn"
               onClick={() => {
                 setCurrentView('home');
                 setSelectedCategorySlug(null);
               }}
-              className="text-left flex items-center gap-2.5 group focus:outline-none hover:opacity-95 transition-opacity"
+              className="text-left flex items-center gap-2 group focus:outline-none hover:opacity-95 transition-opacity"
+              title="PlazaDO.com — Inicio"
             >
               <PlazaDoLogo variant="compact" className="h-9 sm:h-10 w-auto" />
-              <DominicanFlag className="w-5 h-3.5 rounded-2xs shadow-2xs border border-stone-200 hidden sm:inline-block shrink-0" />
             </button>
           </div>
 
-          {/* Search Bar */}
+          {/* Centro: Buscador grande profesional con selector y botón verde */}
           <form 
             onSubmit={handleSearchSubmit} 
-            className="flex-1 max-w-2xl hidden md:flex items-center relative group"
+            className="flex-1 max-w-2xl flex items-center relative group"
           >
-            <div className="relative w-full">
-              <input 
-                id="header-search-input"
-                type="text" 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar productos, marcas, tiendas en República Dominicana..."
-                className="w-full pl-11 pr-28 py-2.5 bg-stone-50 hover:bg-white focus:bg-white border-2 border-stone-200 hover:border-stone-300 focus:border-red-600 focus:ring-4 focus:ring-red-500/10 rounded-xl text-sm font-semibold text-stone-950 placeholder:text-stone-500 placeholder:font-normal caret-red-600 shadow-2xs transition-all outline-none"
-              />
-              <Search className="w-5 h-5 text-stone-500 group-focus-within:text-red-600 absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors pointer-events-none" />
+            <div className="w-full flex items-stretch bg-slate-50 hover:bg-white focus-within:bg-white border-2 border-slate-200 hover:border-slate-300 focus-within:border-emerald-600 focus-within:ring-4 focus-within:ring-emerald-500/10 rounded-xl transition-all shadow-2xs overflow-hidden">
               
-              <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              {/* Selector de categorías */}
+              <div className="relative flex items-center bg-slate-100/70 border-r border-slate-200 shrink-0">
+                <select
+                  value={searchCategory}
+                  onChange={(e) => setSearchCategory(e.target.value)}
+                  className="appearance-none bg-transparent pl-3 pr-7 py-2.5 text-xs font-semibold text-slate-700 hover:text-slate-900 focus:outline-none cursor-pointer"
+                  title="Filtrar por categoría"
+                >
+                  <option value="">Todas las categorías</option>
+                  {mainCategories.map(cat => (
+                    <option key={cat.id} value={cat.slug}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500 pointer-events-none absolute right-2 top-1/2 -translate-y-1/2" />
+              </div>
+
+              {/* Input de búsqueda principal */}
+              <div className="relative flex-1 flex items-center">
+                <input 
+                  id="header-search-input"
+                  type="text" 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="¿Qué estás buscando?"
+                  className="w-full pl-3.5 pr-8 py-2.5 bg-transparent text-sm font-medium text-slate-900 placeholder:text-slate-400 placeholder:font-normal caret-emerald-600 outline-none"
+                />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery('')}
-                    className="p-1 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-200 transition-colors"
+                    className="p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors absolute right-2 top-1/2 -translate-y-1/2"
                     title="Limpiar búsqueda"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 )}
-                <button 
-                  type="submit"
-                  id="header-search-submit-btn"
-                  className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors"
-                >
-                  Buscar
-                </button>
               </div>
+
+              {/* Botón verde Buscar */}
+              <button 
+                type="submit"
+                id="header-search-submit-btn"
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs sm:text-sm transition-colors flex items-center gap-1.5 shrink-0 shadow-2xs"
+              >
+                <Search className="w-4 h-4" />
+                <span>Buscar</span>
+              </button>
             </div>
           </form>
 
-          {/* Action Icons & Controls */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* Derecha: Ubicación, Acceso / Mi Cuenta, Favoritos, Carrito */}
+          <div className="flex items-center gap-3 lg:gap-4 shrink-0">
             
-            {/* Vende en PlazaDO / Portal Tienda */}
-            {currentUser?.role === 'STORE_OWNER' ? (
-              <button
-                id="header-store-dash-btn"
-                onClick={() => setCurrentView('store_dashboard')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                  currentView === 'store_dashboard' 
-                    ? 'bg-amber-500 text-white shadow-xs' 
-                    : 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300/60'
-                }`}
-              >
-                <Store className="w-4 h-4 text-amber-600" />
-                <span className="hidden lg:inline">Mi Tienda</span>
-              </button>
-            ) : currentUser?.role === 'SUPER_ADMIN' ? (
-              <button
-                id="header-admin-dash-btn"
-                onClick={() => {
-                  if (pendingStoresCount > 0) setAdminActiveTab('solicitudes');
-                  setCurrentView('admin_dashboard');
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                  currentView === 'admin_dashboard' 
-                    ? 'bg-rose-600 text-white shadow-xs' 
-                    : 'bg-rose-100 hover:bg-rose-200 text-rose-900 border border-rose-300/60'
-                }`}
-              >
-                <Shield className="w-4 h-4 text-rose-600" />
-                <span className="hidden lg:inline">Administración</span>
-                {pendingStoresCount > 0 && (
-                  <span className="bg-amber-500 text-stone-950 font-black text-[10px] px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
-                    {pendingStoresCount}
-                  </span>
-                )}
-              </button>
-            ) : !currentUser ? (
-              <button
-                id="header-sell-btn"
-                onClick={() => openAuthModal('register_store')}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-stone-100 hover:bg-stone-200 text-stone-800 transition-colors"
-                title="Registrar tienda comercial en PlazaDO"
-              >
-                <Store className="w-4 h-4 text-red-600" />
-                <span className="hidden sm:inline">Vende en PlazaDO</span>
-              </button>
-            ) : null}
+            {/* Ubicación: República Dominicana */}
+            <div className="hidden xl:flex items-center gap-1.5 text-xs text-slate-600 font-medium bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200/80">
+              <DominicanFlag className="w-4 h-3 rounded-2xs border border-slate-300 shadow-2xs shrink-0" />
+              <span className="truncate">República Dominicana</span>
+            </div>
 
-            {/* Customer Portal / Mis Pedidos */}
-            <button
-              id="header-customer-portal-btn"
-              onClick={() => {
-                if (!currentUser) {
-                  showNotification('Inicia sesión o regístrate para ver tus pedidos', 'info');
-                  openAuthModal('login');
-                } else {
-                  setCurrentView('customer_portal');
-                }
-              }}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors relative ${
-                currentView === 'customer_portal' 
-                  ? 'bg-red-50 text-red-700' 
-                  : 'hover:bg-stone-100 text-stone-700'
-              }`}
-              title="Mis Pedidos y Direcciones"
-            >
-              <Package className="w-4 h-4 text-stone-600" />
-              <span className="hidden md:inline">Mis Pedidos</span>
-              {customerUnreadChatCount > 0 && (
-                <span className="bg-red-600 text-white font-black text-[10px] px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
-                  {customerUnreadChatCount}
-                </span>
-              )}
-            </button>
+            {/* Acceso: "Ingresar" / "Mi cuenta" */}
+            {currentUser ? (
+              <button
+                id="header-user-profile-btn"
+                onClick={() => setIsUserProfileOpen(true)}
+                className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100 transition-colors text-left focus:outline-none group border border-transparent hover:border-slate-200"
+                title={`Mi cuenta: ${currentUser.name}`}
+              >
+                {currentUser.avatar ? (
+                  <img
+                    src={currentUser.avatar}
+                    alt={currentUser.name}
+                    className="w-7 h-7 rounded-full object-cover border border-emerald-500 shadow-2xs"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-emerald-100 border border-emerald-300 flex items-center justify-center text-emerald-800 font-bold text-xs">
+                    {currentUser.role === 'STORE_OWNER' ? <Store className="w-3.5 h-3.5" /> : currentUser.role === 'SUPER_ADMIN' ? <Shield className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
+                  </div>
+                )}
+                <div className="hidden lg:block leading-tight">
+                  <span className="text-[10px] text-slate-400 block font-normal">Hola,</span>
+                  <span className="text-xs font-bold text-slate-800 group-hover:text-emerald-600 transition-colors truncate max-w-[100px] block">
+                    {currentUser.name.split(' ')[0]}
+                  </span>
+                </div>
+              </button>
+            ) : (
+              <div className="flex items-center gap-1">
+                <button
+                  id="header-auth-login-btn"
+                  onClick={() => openAuthModal('login')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 transition-colors"
+                  title="Ingresar a mi cuenta"
+                >
+                  <User className="w-4 h-4 text-slate-500" />
+                  <div className="text-left leading-tight hidden lg:block">
+                    <span className="text-[10px] text-slate-400 font-normal block">Acceso</span>
+                    <span className="font-bold">Ingresar</span>
+                  </div>
+                  <span className="lg:hidden">Ingresar</span>
+                </button>
+              </div>
+            )}
 
             {/* Favoritos */}
             <button
@@ -287,150 +263,29 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                   setCurrentView('customer_portal');
                 }
               }}
-              className="p-2 rounded-lg hover:bg-stone-100 text-stone-700 relative transition-colors"
-              title="Favoritos"
+              className="p-2 rounded-xl hover:bg-slate-100 text-slate-700 hover:text-emerald-600 relative transition-colors"
+              title="Mis Favoritos"
             >
-              <Heart className="w-5 h-5" />
+              <Heart className="w-5 h-5 stroke-[2]" />
               {(favorites.productIds.length + favorites.storeIds.length) > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 bg-emerald-600 text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white shadow-2xs">
                   {favorites.productIds.length + favorites.storeIds.length}
                 </span>
               )}
             </button>
 
-            {/* Alternador de Modo Claro / Oscuro */}
-            <button
-              id="header-theme-toggle-btn"
-              type="button"
-              onClick={toggleTheme}
-              className="p-2 rounded-lg hover:bg-stone-100 text-stone-700 transition-colors"
-              title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-              aria-label="Alternar vista clara u oscura"
-            >
-              {theme === 'dark' ? (
-                <Sun className="w-5 h-5 text-amber-400 fill-amber-400" />
-              ) : (
-                <Moon className="w-5 h-5 text-stone-600" />
-              )}
-            </button>
-
-            {/* Sección de Usuario / Tienda según Registro */}
-            {currentUser ? (
-              <div className="flex items-center gap-1.5">
-                {currentUser.role === 'STORE_OWNER' ? (
-                  <button
-                    id="header-user-profile-btn"
-                    onClick={() => setIsUserProfileOpen(true)}
-                    className="flex items-center gap-2 p-1 pl-1.5 pr-2.5 rounded-full hover:bg-stone-100 border border-stone-200 transition-all text-left focus:outline-none"
-                    title={`Comercio: ${currentStore?.name || currentUser.name}`}
-                  >
-                    {currentUser.avatar ? (
-                      <img
-                        src={currentUser.avatar}
-                        alt={currentStore?.name || currentUser.name}
-                        className="w-7 h-7 rounded-full object-cover border border-amber-400"
-                      />
-                    ) : (
-                      <div className="w-7 h-7 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-700">
-                        <Store className="w-3.5 h-3.5" />
-                      </div>
-                    )}
-                    <div className="hidden xl:block">
-                      <p className="text-xs font-bold text-stone-900 leading-tight truncate max-w-[120px]">
-                        {currentStore?.name || currentUser.name}
-                      </p>
-                      <p className="text-[10px] text-amber-700 font-semibold leading-none">Comercio</p>
-                    </div>
-                  </button>
-                ) : currentUser.role === 'SUPER_ADMIN' ? (
-                  <button
-                    id="header-user-profile-btn"
-                    onClick={() => setIsUserProfileOpen(true)}
-                    className="flex items-center gap-2 p-1 pl-1.5 pr-2.5 rounded-full hover:bg-stone-100 border border-stone-200 transition-all text-left focus:outline-none"
-                    title={`Super Admin: ${currentUser.name}`}
-                  >
-                    {currentUser.avatar ? (
-                      <img
-                        src={currentUser.avatar}
-                        alt={currentUser.name}
-                        className="w-7 h-7 rounded-full object-cover border border-rose-400"
-                      />
-                    ) : (
-                      <div className="w-7 h-7 rounded-full bg-rose-100 border border-rose-300 flex items-center justify-center text-rose-700">
-                        <Shield className="w-3.5 h-3.5" />
-                      </div>
-                    )}
-                    <div className="hidden xl:block">
-                      <p className="text-xs font-bold text-stone-900 leading-tight truncate max-w-[120px]">
-                        {currentUser.name}
-                      </p>
-                      <p className="text-[10px] text-rose-700 font-semibold leading-none">Super Admin</p>
-                    </div>
-                  </button>
-                ) : (
-                  /* Cliente registrado */
-                  <button
-                    id="header-user-profile-btn"
-                    onClick={() => setIsUserProfileOpen(true)}
-                    className="flex items-center gap-2 p-1 pl-1.5 pr-2.5 rounded-full hover:bg-stone-100 border border-stone-200 transition-all text-left focus:outline-none"
-                    title={`Cliente: ${currentUser.name}`}
-                  >
-                    {currentUser.avatar ? (
-                      <img
-                        src={currentUser.avatar}
-                        alt={currentUser.name}
-                        className="w-7 h-7 rounded-full object-cover border border-stone-300"
-                      />
-                    ) : (
-                      <div className="w-7 h-7 rounded-full bg-stone-100 border border-stone-300 flex items-center justify-center text-stone-500">
-                        <User className="w-3.5 h-3.5" />
-                      </div>
-                    )}
-                    <div className="hidden xl:block">
-                      <p className="text-xs font-bold text-stone-900 leading-tight truncate max-w-[120px]">
-                        {currentUser.name}
-                      </p>
-                      <p className="text-[10px] text-blue-700 font-semibold leading-none">Cliente</p>
-                    </div>
-                  </button>
-                )}
-              </div>
-            ) : (
-              /* Usuario no registrado (Visitante / Tienda pública) */
-              <div className="flex items-center gap-1.5">
-                <button
-                  id="header-auth-login-btn"
-                  onClick={() => openAuthModal('login')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-stone-700 hover:text-stone-950 hover:bg-stone-100 transition-colors"
-                  title="Iniciar Sesión"
-                >
-                  <LogIn className="w-3.5 h-3.5 text-stone-600" />
-                  <span>Iniciar Sesión</span>
-                </button>
-
-                <button
-                  id="header-auth-register-btn"
-                  onClick={() => openAuthModal('register_select')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-red-600 hover:bg-red-700 shadow-xs transition-colors"
-                  title="Crear una cuenta nueva"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Registrarse</span>
-                </button>
-              </div>
-            )}
-
-            {/* Cart Trigger Button */}
+            {/* Carrito */}
             <button
               id="header-cart-btn"
               onClick={onOpenCart}
-              className="flex items-center gap-2 px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-xs transition-colors font-medium text-xs sm:text-sm"
+              className="flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl shadow-xs transition-colors font-semibold text-xs sm:text-sm"
+              title="Ver Carrito de Compras"
             >
               <div className="relative">
                 <ShoppingCart className="w-5 h-5" />
                 {cartTotal.itemsCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-stone-900 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-white">
-                    {cartTotal.itemsCount}
+                  <span className="absolute -top-2 -right-2 bg-slate-900 text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-white shadow-2xs">
+                    {cartTotal.itemsCount > 99 ? '99+' : cartTotal.itemsCount}
                   </span>
                 )}
               </div>
@@ -439,173 +294,390 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
               </span>
             </button>
 
-            {/* Mobile menu hamburger */}
+          </div>
+        </div>
+      </div>
+
+      {/* ============================================================== */}
+      {/* 1. HEADER DESKTOP — NIVEL 2: BARRA DE NAVEGACIÓN               */}
+      {/* ============================================================== */}
+      <div className="hidden md:block bg-slate-50/90 border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-10 text-xs">
+          
+          {/* Navegación Principal */}
+          <div className="flex items-center gap-1 sm:gap-2 lg:gap-3 text-slate-700">
+            
+            {/* ☰ Todas las categorías (Desplegable interactivo) */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                type="button"
+                onClick={() => setCategoriesDropdownOpen(!categoriesDropdownOpen)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-bold transition-colors ${
+                  categoriesDropdownOpen 
+                    ? 'bg-emerald-600 text-white shadow-2xs' 
+                    : 'text-slate-900 hover:bg-slate-200/70 hover:text-emerald-700'
+                }`}
+                title="Desplegar todas las categorías oficiales"
+              >
+                <Menu className="w-4 h-4" />
+                <span>Todas las categorías</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${categoriesDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {/* Menú Flotante de Categorías */}
+              {categoriesDropdownOpen && (
+                <div className="absolute top-full left-0 mt-1.5 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="text-[10px] uppercase font-bold text-slate-400 px-3 py-1 tracking-wider">
+                    Categorías de Plazado
+                  </div>
+                  <div className="max-h-80 overflow-y-auto space-y-0.5">
+                    <button
+                      onClick={() => handleCategoryClick(null)}
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 hover:bg-emerald-50 hover:text-emerald-700 transition-colors flex items-center gap-2.5"
+                    >
+                      <Layers className="w-4 h-4 text-emerald-600" />
+                      <span>Todos los Productos</span>
+                    </button>
+                    {mainCategories.map(cat => (
+                      <button
+                        key={cat.id}
+                        onClick={() => handleCategoryClick(cat.slug)}
+                        className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2.5 ${
+                          selectedCategorySlug === cat.slug
+                            ? 'bg-emerald-50 text-emerald-700 font-bold'
+                            : 'text-slate-800 hover:bg-slate-100 hover:text-emerald-600'
+                        }`}
+                      >
+                        <span className="text-sm shrink-0">{getCategoryEmoji(cat)}</span>
+                        <span className="truncate">{cat.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 🔥 Ofertas */}
             <button
-              id="header-mobile-toggle"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 md:hidden rounded-lg hover:bg-stone-100 text-stone-700"
+              onClick={() => {
+                setSelectedCategorySlug(null);
+                setSearchQuery('oferta');
+                setCurrentView('catalog');
+              }}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-semibold hover:bg-slate-200/70 hover:text-emerald-600 transition-colors"
             >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              <span>🔥</span>
+              <span>Ofertas</span>
+            </button>
+
+            {/* 🏪 Tiendas */}
+            <button
+              id="header-nav-stores-link"
+              onClick={() => setCurrentView('stores')}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-bold transition-colors ${
+                currentView === 'stores' 
+                  ? 'bg-emerald-50 text-emerald-700' 
+                  : 'hover:bg-slate-200/70 hover:text-emerald-600'
+              }`}
+            >
+              <Store className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Tiendas</span>
+              {publicStoresCount > 0 && (
+                <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                  {publicStoresCount}
+                </span>
+              )}
+            </button>
+
+            {/* 🏷️ Black Friday */}
+            <button
+              onClick={() => {
+                setSelectedCategorySlug(null);
+                setSearchQuery('black friday');
+                setCurrentView('catalog');
+              }}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-semibold hover:bg-slate-200/70 hover:text-emerald-600 transition-colors"
+            >
+              <span>🏷️</span>
+              <span>Black Friday</span>
+            </button>
+
+            {/* 🆕 Nuevos productos */}
+            <button
+              onClick={() => {
+                setSelectedCategorySlug(null);
+                setSearchQuery('');
+                setCurrentView('catalog');
+              }}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-semibold hover:bg-slate-200/70 hover:text-emerald-600 transition-colors"
+            >
+              <span>🆕</span>
+              <span>Nuevos productos</span>
+            </button>
+
+            {/* ❓ Ayuda */}
+            <button
+              onClick={() => {
+                setOpenPolicySlug('terminos-condiciones');
+              }}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-semibold text-slate-600 hover:text-emerald-600 hover:bg-slate-200/70 transition-colors"
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span>Ayuda</span>
             </button>
 
           </div>
+
+          {/* Extremo Derecho: Vende en Plazado destacado */}
+          <div className="flex items-center gap-2">
+            
+            {/* Acceso para comercio o Super Admin según sesión activa */}
+            {currentUser?.role === 'SUPER_ADMIN' ? (
+              <button 
+                onClick={() => {
+                  if (pendingStoresCount > 0) setAdminActiveTab('solicitudes');
+                  setCurrentView('admin_dashboard');
+                }}
+                className="text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 font-bold px-2.5 py-1 rounded-lg text-xs flex items-center gap-1.5 transition-colors"
+              >
+                <Shield className="w-3.5 h-3.5 text-rose-600" />
+                <span>Super Admin</span>
+                {pendingStoresCount > 0 && (
+                  <span className="bg-amber-500 text-stone-950 font-black text-[10px] px-1.5 py-0.2 rounded-full animate-pulse shadow-xs">
+                    {pendingStoresCount}
+                  </span>
+                )}
+              </button>
+            ) : currentUser?.role === 'STORE_OWNER' ? (
+              <button
+                onClick={() => setCurrentView('store_dashboard')}
+                className="text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 font-bold px-2.5 py-1 rounded-lg text-xs flex items-center gap-1.5 transition-colors"
+              >
+                <Store className="w-3.5 h-3.5 text-amber-600" />
+                <span>Panel Mi Tienda</span>
+              </button>
+            ) : null}
+
+            {/* Botón Verde Destacado: Vende en Plazado */}
+            <button
+              id="header-sell-btn"
+              onClick={() => setCurrentView('sell_with_us')}
+              className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg shadow-xs transition-colors flex items-center gap-1.5 group"
+              title="Vender en Plazado.com"
+            >
+              <Store className="w-3.5 h-3.5" />
+              <span>Vende en Plazado</span>
+              <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      {/* ============================================================== */}
+      {/* 10. HEADER MÓVIL (Mobile Viewport Only)                         */}
+      {/* ============================================================== */}
+      <div className="md:hidden px-3 pt-2 pb-2 bg-white">
+        
+        {/* Primera línea: ☰ | Logo Plazado.com | 🛒 */}
+        <div className="flex items-center justify-between gap-2 pb-2">
+          
+          {/* ☰ Botón menú lateral */}
+          <button
+            id="mobile-drawer-toggle"
+            type="button"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-2 -ml-1 text-slate-700 hover:text-slate-900 active:scale-95 transition-transform"
+            aria-label="Abrir menú"
+          >
+            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
+
+          {/* Logo oficial Plazado.com */}
+          <button 
+            type="button"
+            onClick={() => {
+              setCurrentView('home');
+              setSelectedCategorySlug(null);
+            }}
+            className="focus:outline-none flex items-center"
+            title="Inicio Plazado.com"
+          >
+            <PlazaDoLogo variant="compact" className="h-8 w-auto max-w-[170px]" />
+          </button>
+
+          {/* 🛒 Carrito con badge */}
+          <button
+            type="button"
+            onClick={onOpenCart}
+            className="p-2 -mr-1 text-slate-700 hover:text-emerald-700 relative active:scale-95 transition-transform"
+            aria-label="Ver carrito"
+          >
+            <ShoppingCart className="w-6 h-6" />
+            {cartTotal.itemsCount > 0 && (
+              <span className="absolute 1 top-0.5 right-0.5 bg-emerald-600 text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white shadow-2xs">
+                {cartTotal.itemsCount > 99 ? '99+' : cartTotal.itemsCount}
+              </span>
+            )}
+          </button>
         </div>
 
-        {/* Mobile Search Bar */}
-        <div className="mt-2.5 md:hidden">
-          <form onSubmit={handleSearchSubmit} className="relative group">
+        {/* Segunda línea: Buscador ocupando prácticamente todo el ancho */}
+        <form onSubmit={handleSearchSubmit} className="relative mb-2">
+          <div className="flex items-center bg-slate-50 border border-slate-300 focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500/20 rounded-xl overflow-hidden shadow-2xs">
+            <Search className="w-4 h-4 text-slate-400 ml-3 pointer-events-none shrink-0" />
             <input 
               type="text" 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar productos, marcas y tiendas..."
-              className="w-full pl-10 pr-24 py-2.5 bg-stone-50 hover:bg-white focus:bg-white border-2 border-stone-200 hover:border-stone-300 focus:border-red-600 focus:ring-4 focus:ring-red-500/10 rounded-xl text-sm font-semibold text-stone-950 placeholder:text-stone-500 placeholder:font-normal caret-red-600 outline-none transition-all shadow-2xs"
+              placeholder="¿Qué estás buscando?"
+              className="w-full px-2.5 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 outline-none bg-transparent"
             />
-            <Search className="w-4 h-4 text-stone-500 group-focus-within:text-red-600 absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors pointer-events-none" />
-            <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="p-1 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-200 transition-colors"
-                  title="Limpiar búsqueda"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-              <button 
-                type="submit"
-                className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors"
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="p-1 mr-1 text-slate-400 hover:text-slate-700"
               >
-                Buscar
+                <X className="w-3.5 h-3.5" />
               </button>
-            </div>
-          </form>
+            )}
+            <button 
+              type="submit"
+              className="bg-emerald-600 text-white font-bold text-xs px-3.5 py-2 hover:bg-emerald-700 shrink-0 transition-colors"
+            >
+              Buscar
+            </button>
+          </div>
+        </form>
+
+        {/* Tercera línea: Accesos horizontales táctiles */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none text-xs whitespace-nowrap">
+          <button
+            onClick={() => {
+              setSelectedCategorySlug(null);
+              setSearchQuery('oferta');
+              setCurrentView('catalog');
+            }}
+            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-full font-medium text-slate-700 flex items-center gap-1 shrink-0"
+          >
+            <span>🔥</span>
+            <span>Ofertas</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentView('stores')}
+            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-full font-medium text-slate-700 flex items-center gap-1 shrink-0"
+          >
+            <span>🏪</span>
+            <span>Tiendas</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setSelectedCategorySlug(null);
+              setSearchQuery('black friday');
+              setCurrentView('catalog');
+            }}
+            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-full font-medium text-slate-700 flex items-center gap-1 shrink-0"
+          >
+            <span>🏷️</span>
+            <span>Black Friday</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setSelectedCategorySlug(null);
+              setSearchQuery('');
+              setCurrentView('catalog');
+            }}
+            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-full font-medium text-slate-700 flex items-center gap-1 shrink-0"
+          >
+            <span>🆕</span>
+            <span>Nuevos</span>
+          </button>
+
+          <button
+            onClick={() => setCurrentView('sell_with_us')}
+            className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full font-bold flex items-center gap-1 shrink-0"
+          >
+            <span>Vender</span>
+          </button>
         </div>
+
       </div>
 
-      {/* Categories Bar */}
-      <div className="bg-stone-100/70 border-t border-stone-200 hidden md:block">
-        <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
-          <div className="flex items-center gap-1 overflow-x-auto py-1.5 scrollbar-none text-xs font-medium text-stone-700">
-            <button 
+      {/* ============================================================== */}
+      {/* DRAWER MENU MÓVIL EXTENDIDO                                   */}
+      {/* ============================================================== */}
+      {mobileMenuOpen && (
+        <div className="md:hidden bg-white border-b border-slate-200 px-4 py-4 space-y-4 animate-in slide-in-from-top-2 duration-150">
+          
+          {/* Acceso Rápido Productos & Tiendas */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
               onClick={() => {
                 setSelectedCategorySlug(null);
                 setCurrentView('catalog');
-              }}
-              className={`px-3 py-1.5 rounded-md hover:bg-white hover:text-red-600 hover:shadow-xs transition-all flex items-center gap-1 font-semibold ${
-                currentView === 'catalog' ? 'bg-white text-red-600 shadow-xs' : 'text-stone-900'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5 text-red-600" />
-              <span>Todos los Productos</span>
-            </button>
-
-            <button 
-              id="header-nav-stores-btn"
-              onClick={() => setCurrentView('stores')}
-              className={`px-3 py-1.5 rounded-md hover:bg-white hover:text-red-600 hover:shadow-xs transition-all flex items-center gap-1.5 font-bold ${
-                currentView === 'stores' ? 'bg-white text-red-600 shadow-xs' : 'text-stone-900'
-              }`}
-            >
-              <Store className="w-3.5 h-3.5 text-red-600" />
-              <span>Tiendas RD</span>
-              <span className="bg-red-100 text-red-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                {publicStoresCount}
-              </span>
-            </button>
-
-            {mainCategories.map(cat => (
-              <button
-                key={cat.id}
-                onClick={() => handleCategoryClick(cat.slug)}
-                className={`px-3 py-1.5 rounded-md transition-all whitespace-nowrap flex items-center gap-1.5 ${
-                  cat.slug === 'mascotas' 
-                    ? 'font-bold text-amber-900 bg-amber-100/80 hover:bg-amber-200' 
-                    : 'hover:bg-white hover:text-red-600 hover:shadow-xs font-semibold'
-                }`}
-              >
-                <CategoryIcon category={cat} className="w-3.5 h-3.5 text-stone-600 shrink-0" />
-                <span>{cat.name}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-3 text-xs text-stone-500">
-            <button 
-              id="header-nav-stores-directory-link"
-              onClick={() => setCurrentView('stores')}
-              className={`font-semibold py-1 flex items-center gap-1 transition-colors ${
-                currentView === 'stores' ? 'text-red-600' : 'text-stone-700 hover:text-red-600'
-              }`}
-            >
-              <Store className="w-3.5 h-3.5 text-red-600" />
-              <span>Directorio de Tiendas</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Mobile Drawer Menu */}
-      {mobileMenuOpen && (
-        <div className="md:hidden bg-white border-b border-stone-200 px-4 py-4 space-y-3">
-          <div className="grid grid-cols-2 gap-2 pb-2 border-b border-stone-100">
-            <button
-              onClick={() => {
-                setCurrentView('catalog');
                 setMobileMenuOpen(false);
               }}
-              className="p-2.5 text-xs font-bold rounded-xl bg-stone-100 text-stone-800 flex items-center gap-1.5"
+              className="p-2.5 text-xs font-bold rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center gap-1.5"
             >
-              <Layers className="w-4 h-4 text-red-600" />
-              <span>Productos</span>
+              <Layers className="w-4 h-4 text-emerald-600" />
+              <span>Todos los Productos</span>
             </button>
             <button
               onClick={() => {
                 setCurrentView('stores');
                 setMobileMenuOpen(false);
               }}
-              className="p-2.5 text-xs font-bold rounded-xl bg-red-50 text-red-700 border border-red-200 flex items-center gap-1.5"
+              className="p-2.5 text-xs font-bold rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center justify-center gap-1.5"
             >
-              <Store className="w-4 h-4 text-red-600" />
-              <span>Tiendas ({publicStoresCount})</span>
+              <Store className="w-4 h-4 text-emerald-600" />
+              <span>Tiendas RD ({publicStoresCount})</span>
             </button>
           </div>
 
-          <div className="font-bold text-xs uppercase tracking-wider text-stone-400">Categorías</div>
-          <div className="grid grid-cols-2 gap-2">
-            {mainCategories.map(cat => (
-              <button
-                key={cat.id}
-                onClick={() => handleCategoryClick(cat.slug)}
-                className="text-left px-3 py-2 text-xs font-medium rounded-lg bg-stone-50 hover:bg-stone-100 text-stone-800 flex items-center gap-2"
-              >
-                <span className="text-sm shrink-0">{getCategoryEmoji(cat)}</span>
-                <span className="truncate">{cat.name}</span>
-              </button>
-            ))}
+          {/* Categorías populares en el drawer */}
+          <div>
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+              Explorar Categorías
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {mainCategories.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => handleCategoryClick(cat.slug)}
+                  className="text-left px-3 py-2 text-xs font-medium rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-800 flex items-center gap-2"
+                >
+                  <span className="text-base shrink-0">{getCategoryEmoji(cat)}</span>
+                  <span className="truncate">{cat.name}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="border-t border-stone-100 pt-3 space-y-2">
+          {/* Cuenta / Auth en Móvil */}
+          <div className="border-t border-slate-100 pt-3 space-y-2">
             {currentUser ? (
-              <>
-                <div className="p-3 bg-stone-50 rounded-xl border border-stone-200 flex items-center justify-between">
+              <div className="space-y-2">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     {currentUser.avatar ? (
                       <img
                         src={currentUser.avatar}
                         alt={currentUser.name}
-                        className="w-9 h-9 rounded-full object-cover border border-stone-300"
+                        className="w-8 h-8 rounded-full object-cover border border-emerald-500"
                       />
                     ) : (
-                      <div className="w-9 h-9 rounded-full bg-stone-100 border border-stone-300 flex items-center justify-center text-stone-500">
-                        <User className="w-4 h-4 text-stone-400" />
+                      <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs">
+                        <User className="w-4 h-4" />
                       </div>
                     )}
                     <div>
-                      <p className="text-xs font-bold text-stone-900">{currentUser.name}</p>
-                      <p className="text-[10px] text-stone-500">
-                        {currentUser.role === 'SUPER_ADMIN' ? '🛡️ Super Admin' : currentUser.role === 'STORE_OWNER' ? '🏪 Comercio' : '👤 Cliente'}
+                      <p className="text-xs font-bold text-slate-900">{currentUser.name}</p>
+                      <p className="text-[10px] text-slate-500">
+                        {currentUser.role === 'SUPER_ADMIN' ? 'Super Admin' : currentUser.role === 'STORE_OWNER' ? 'Comercio' : 'Cliente'}
                       </p>
                     </div>
                   </div>
@@ -626,7 +698,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                       setCurrentView('store_dashboard');
                       setMobileMenuOpen(false);
                     }}
-                    className="w-full text-left px-3 py-2.5 text-xs font-bold text-amber-900 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2"
+                    className="w-full text-left px-3 py-2 text-xs font-bold text-amber-900 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2"
                   >
                     <Store className="w-4 h-4 text-amber-600" />
                     <span>Ir a Mi Panel de Tienda</span>
@@ -639,7 +711,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                       setCurrentView('admin_dashboard');
                       setMobileMenuOpen(false);
                     }}
-                    className="w-full text-left px-3 py-2.5 text-xs font-bold text-rose-900 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2"
+                    className="w-full text-left px-3 py-2 text-xs font-bold text-rose-900 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2"
                   >
                     <Shield className="w-4 h-4 text-rose-600" />
                     <span>Ir a Panel Super Admin</span>
@@ -651,45 +723,32 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                     setCurrentView('customer_portal');
                     setMobileMenuOpen(false);
                   }}
-                  className="w-full text-left px-3 py-2 text-xs font-medium text-stone-800 bg-stone-50 rounded-lg flex items-center gap-2"
+                  className="w-full text-left px-3 py-2 text-xs font-medium text-slate-800 bg-slate-50 rounded-xl flex items-center gap-2"
                 >
-                  <Package className="w-4 h-4 text-stone-600" />
+                  <Package className="w-4 h-4 text-slate-600" />
                   <span>Mis Pedidos y Direcciones</span>
                 </button>
-
-                <button
-                  onClick={() => {
-                    setIsUserProfileOpen(true);
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs font-medium text-stone-800 bg-stone-50 rounded-lg flex items-center gap-2"
-                >
-                  <User className="w-4 h-4 text-red-600" />
-                  <span>Mi Cuenta y Perfil</span>
-                </button>
-              </>
+              </div>
             ) : (
-              <>
+              <div className="space-y-2">
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => {
                       openAuthModal('login');
                       setMobileMenuOpen(false);
                     }}
-                    className="w-full text-center px-3 py-2 text-xs font-semibold text-stone-800 bg-stone-100 hover:bg-stone-200 rounded-lg flex items-center justify-center gap-1.5"
+                    className="w-full py-2.5 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl text-center"
                   >
-                    <LogIn className="w-3.5 h-3.5" />
-                    <span>Iniciar Sesión</span>
+                    Iniciar Sesión
                   </button>
                   <button
                     onClick={() => {
                       openAuthModal('register_select');
                       setMobileMenuOpen(false);
                     }}
-                    className="w-full text-center px-3 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg flex items-center justify-center gap-1.5"
+                    className="w-full py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl text-center shadow-xs"
                   >
-                    <UserPlus className="w-3.5 h-3.5" />
-                    <span>Registrarse</span>
+                    Registrarse
                   </button>
                 </div>
 
@@ -698,49 +757,47 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                     setCurrentView('sell_with_us');
                     setMobileMenuOpen(false);
                   }}
-                  className="w-full text-left px-3 py-2 text-xs font-bold text-red-600 bg-red-50 rounded-lg flex items-center gap-2"
+                  className="w-full text-left px-3 py-2.5 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2"
                 >
-                  <Store className="w-4 h-4" />
+                  <Store className="w-4 h-4 text-emerald-600" />
                   <span>¿Tienes una tienda? Vende en PlazaDO</span>
                 </button>
-
-                <button
-                  onClick={() => {
-                    showNotification('Inicia sesión para consultar tus pedidos', 'info');
-                    openAuthModal('login');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs font-medium text-stone-800 bg-stone-50 rounded-lg flex items-center gap-2"
-                >
-                  <Package className="w-4 h-4 text-stone-600" />
-                  <span>Mis Pedidos (Iniciar sesión)</span>
-                </button>
-              </>
+              </div>
             )}
 
-            {/* Mobile Theme Toggle */}
-            <div className="pt-3 border-t border-stone-200 flex items-center justify-between">
-              <span className="text-xs font-medium text-stone-600 flex items-center gap-2">
-                {theme === 'dark' ? <Moon className="w-4 h-4 text-amber-400" /> : <Sun className="w-4 h-4 text-amber-500" />}
-                <span>Vista: <strong>{theme === 'dark' ? 'Oscura' : 'Clara'}</strong></span>
-              </span>
+            {/* Ayuda y WhatsApp */}
+            <div className="pt-2 flex items-center justify-between text-xs text-slate-600">
+              <a 
+                href={`https://wa.me/1${systemSettings.whatsappCommercial.replace(/[^0-9]/g, '')}`} 
+                target="_blank" 
+                rel="noreferrer"
+                className="flex items-center gap-1.5 text-emerald-700 font-semibold"
+              >
+                <Phone className="w-3.5 h-3.5" />
+                <span>WhatsApp Soporte</span>
+              </a>
+
               <button
                 type="button"
                 onClick={toggleTheme}
-                className="px-3 py-1 rounded-lg border border-stone-300 text-xs font-bold text-stone-700 bg-stone-100 hover:bg-stone-200"
+                className="flex items-center gap-1.5 text-slate-600 font-medium"
               >
-                Cambiar a {theme === 'dark' ? 'Clara' : 'Oscura'}
+                {theme === 'dark' ? <Moon className="w-3.5 h-3.5 text-amber-500" /> : <Sun className="w-3.5 h-3.5 text-amber-500" />}
+                <span>{theme === 'dark' ? 'Modo Oscuro' : 'Modo Claro'}</span>
               </button>
             </div>
+
           </div>
+
         </div>
       )}
 
-      {/* User Profile Modal */}
+      {/* Modal de perfil de usuario */}
       <UserProfileModal
         isOpen={isUserProfileOpen}
         onClose={() => setIsUserProfileOpen(false)}
       />
+
     </header>
   );
 };

@@ -122,7 +122,7 @@ const MarketplaceApp: React.FC = () => {
       <Header onOpenCart={() => setIsCartOpen(true)} />
 
       {/* Main Viewport Content with mobile bottom nav compensation */}
-      <main className="flex-1 pb-16 md:pb-0">
+      <main className="flex-1 pb-20 md:pb-0">
         {currentView === 'home' && <HomePage />}
         {currentView === 'catalog' && <SearchCatalogPage />}
         {currentView === 'stores' && <StoresDirectoryPage />}

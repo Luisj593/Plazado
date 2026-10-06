@@ -2,24 +2,23 @@ import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Home, 
-  Search, 
+  LayoutGrid, 
   Store, 
-  ShoppingCart, 
+  Heart, 
   User, 
-  Shield, 
-  Package
+  Shield 
 } from 'lucide-react';
 
 interface MobileNavBarProps {
-  onOpenCart: () => void;
+  onOpenCart?: () => void;
 }
 
-export const MobileNavBar: React.FC<MobileNavBarProps> = ({ onOpenCart }) => {
+export const MobileNavBar: React.FC<MobileNavBarProps> = () => {
   const { 
     currentView, 
     setCurrentView, 
     currentUser, 
-    cartTotal, 
+    favorites,
     openAuthModal,
     setSelectedCategorySlug
   } = useApp();
@@ -36,19 +35,33 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ onOpenCart }) => {
     }
   };
 
+  const handleFavoritesClick = () => {
+    if (!currentUser) {
+      openAuthModal('login');
+    } else {
+      setCurrentView('customer_portal');
+    }
+  };
+
+  const isHomeActive = currentView === 'home';
+  const isCategoriesActive = currentView === 'catalog';
+  const isStoresActive = currentView === 'stores' || currentView === 'store_public';
+  const isFavoritesActive = currentView === 'customer_portal' && !isStoresActive;
   const isAccountActive = 
-    currentView === 'customer_portal' || 
     currentView === 'store_dashboard' || 
-    currentView === 'admin_dashboard';
+    currentView === 'admin_dashboard' || 
+    (currentView === 'customer_portal' && isFavoritesActive);
+
+  const favCount = (favorites.productIds.length + favorites.storeIds.length);
 
   return (
     <nav 
-      aria-label="Navegación móvil inferior"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-stone-200/90 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] safe-area-bottom select-none"
+      aria-label="Navegación móvil inferior fija"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] safe-area-bottom select-none"
     >
       <div className="grid grid-cols-5 h-14 items-center max-w-lg mx-auto px-1">
         
-        {/* 1. Inicio */}
+        {/* 1. 🏠 Inicio */}
         <button
           type="button"
           onClick={() => {
@@ -56,89 +69,94 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ onOpenCart }) => {
             setCurrentView('home');
           }}
           className={`flex flex-col items-center justify-center h-full w-full py-1 text-center transition-colors active:scale-95 ${
-            currentView === 'home' 
-              ? 'text-red-600 font-bold' 
-              : 'text-stone-500 hover:text-stone-800 font-medium'
+            isHomeActive 
+              ? 'text-emerald-600 font-bold' 
+              : 'text-slate-500 hover:text-slate-800 font-medium'
           }`}
         >
-          <Home className={`w-5 h-5 ${currentView === 'home' ? 'stroke-[2.5]' : 'stroke-2'}`} />
+          <Home className={`w-5 h-5 ${isHomeActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
           <span className="text-[10px] tracking-tight mt-0.5">Inicio</span>
         </button>
 
-        {/* 2. Catálogo / Explorar */}
+        {/* 2. ▦ Categorías */}
         <button
           type="button"
           onClick={() => {
+            setSelectedCategorySlug(null);
             setCurrentView('catalog');
           }}
           className={`flex flex-col items-center justify-center h-full w-full py-1 text-center transition-colors active:scale-95 ${
-            currentView === 'catalog' 
-              ? 'text-red-600 font-bold' 
-              : 'text-stone-500 hover:text-stone-800 font-medium'
+            isCategoriesActive 
+              ? 'text-emerald-600 font-bold' 
+              : 'text-slate-500 hover:text-slate-800 font-medium'
           }`}
         >
-          <Search className={`w-5 h-5 ${currentView === 'catalog' ? 'stroke-[2.5]' : 'stroke-2'}`} />
-          <span className="text-[10px] tracking-tight mt-0.5">Catálogo</span>
+          <LayoutGrid className={`w-5 h-5 ${isCategoriesActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
+          <span className="text-[10px] tracking-tight mt-0.5">Categorías</span>
         </button>
 
-        {/* 3. Tiendas */}
+        {/* 3. 🏪 Tiendas */}
         <button
           type="button"
           onClick={() => {
             setCurrentView('stores');
           }}
           className={`flex flex-col items-center justify-center h-full w-full py-1 text-center transition-colors active:scale-95 ${
-            currentView === 'stores' || currentView === 'store_public'
-              ? 'text-red-600 font-bold' 
-              : 'text-stone-500 hover:text-stone-800 font-medium'
+            isStoresActive 
+              ? 'text-emerald-600 font-bold' 
+              : 'text-slate-500 hover:text-slate-800 font-medium'
           }`}
         >
-          <Store className={`w-5 h-5 ${currentView === 'stores' || currentView === 'store_public' ? 'stroke-[2.5]' : 'stroke-2'}`} />
+          <Store className={`w-5 h-5 ${isStoresActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
           <span className="text-[10px] tracking-tight mt-0.5">Tiendas</span>
         </button>
 
-        {/* 4. Carrito con Badge en tiempo real */}
+        {/* 4. ♡ Favoritos */}
         <button
           type="button"
-          onClick={onOpenCart}
-          className="flex flex-col items-center justify-center h-full w-full py-1 text-center text-stone-500 hover:text-stone-800 font-medium relative transition-colors active:scale-95"
+          onClick={handleFavoritesClick}
+          className={`flex flex-col items-center justify-center h-full w-full py-1 text-center transition-colors active:scale-95 relative ${
+            isFavoritesActive && currentView === 'customer_portal'
+              ? 'text-emerald-600 font-bold' 
+              : 'text-slate-500 hover:text-slate-800 font-medium'
+          }`}
         >
           <div className="relative">
-            <ShoppingCart className="w-5 h-5 stroke-2" />
-            {cartTotal.itemsCount > 0 && (
-              <span className="absolute -top-1.5 -right-2 bg-red-600 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-white animate-in zoom-in-50">
-                {cartTotal.itemsCount > 99 ? '99+' : cartTotal.itemsCount}
+            <Heart className={`w-5 h-5 ${isFavoritesActive && currentView === 'customer_portal' ? 'stroke-[2.5] fill-emerald-600' : 'stroke-2'}`} />
+            {favCount > 0 && (
+              <span className="absolute -top-1 -right-2 bg-emerald-600 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-white">
+                {favCount > 99 ? '99+' : favCount}
               </span>
             )}
           </div>
-          <span className="text-[10px] tracking-tight mt-0.5">Carrito</span>
+          <span className="text-[10px] tracking-tight mt-0.5">Favoritos</span>
         </button>
 
-        {/* 5. Mi Cuenta / Perfil / Login */}
+        {/* 5. 👤 Cuenta */}
         <button
           type="button"
           onClick={handleAccountClick}
           className={`flex flex-col items-center justify-center h-full w-full py-1 text-center transition-colors active:scale-95 ${
             isAccountActive 
-              ? 'text-red-600 font-bold' 
-              : 'text-stone-500 hover:text-stone-800 font-medium'
+              ? 'text-emerald-600 font-bold' 
+              : 'text-slate-500 hover:text-slate-800 font-medium'
           }`}
         >
           {currentUser?.role === 'SUPER_ADMIN' ? (
-            <Shield className={`w-5 h-5 ${isAccountActive ? 'text-rose-600 stroke-[2.5]' : 'stroke-2'}`} />
+            <Shield className={`w-5 h-5 ${isAccountActive ? 'text-emerald-600 stroke-[2.5]' : 'stroke-2'}`} />
           ) : currentUser?.role === 'STORE_OWNER' ? (
-            <Store className={`w-5 h-5 ${isAccountActive ? 'text-amber-600 stroke-[2.5]' : 'stroke-2'}`} />
+            <Store className={`w-5 h-5 ${isAccountActive ? 'text-emerald-600 stroke-[2.5]' : 'stroke-2'}`} />
           ) : (
-            <User className={`w-5 h-5 ${isAccountActive ? 'text-red-600 stroke-[2.5]' : 'stroke-2'}`} />
+            <User className={`w-5 h-5 ${isAccountActive ? 'text-emerald-600 stroke-[2.5]' : 'stroke-2'}`} />
           )}
           <span className="text-[10px] tracking-tight mt-0.5 truncate max-w-[55px]">
             {!currentUser 
-              ? 'Ingresar' 
+              ? 'Cuenta' 
               : currentUser.role === 'SUPER_ADMIN' 
               ? 'Admin' 
               : currentUser.role === 'STORE_OWNER' 
               ? 'Mi Tienda' 
-              : 'Perfil'}
+              : 'Cuenta'}
           </span>
         </button>
 

@@ -216,6 +216,7 @@ class StoresDatabase {
       ownerId: storeInput.ownerId || existing?.ownerId || (storeInput as any).owner_id || `owner-${id}`,
       owner_id: storeInput.ownerId || existing?.owner_id || (storeInput as any).owner_id || `owner-${id}`,
       name: storeInput.name.trim(),
+      ownerName: storeInput.ownerName || existing?.ownerName || 'Comercio Registrado',
       email: storeInput.email || existing?.email || '',
       phone: storeInput.phone || existing?.phone || '',
       whatsapp: storeInput.whatsapp || existing?.whatsapp || storeInput.phone || '',
