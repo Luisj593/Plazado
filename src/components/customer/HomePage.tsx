@@ -218,7 +218,7 @@ export const HomePage: React.FC = () => {
               >
                 
                 {/* Contenedor de la Imagen con badges superpuestos */}
-                <div className="relative w-full h-[190px] sm:h-[300px] lg:h-[390px] rounded-xl sm:rounded-2xl overflow-hidden shadow-md border border-slate-200/80 dark:border-stone-800 group">
+                <div className="relative w-full h-[240px] sm:h-[340px] lg:h-[390px] overflow-hidden shadow-md border-l border-slate-200/30 dark:border-stone-800 group">
                   <img 
                     src={heroMode === 'slider' && activeHeroProduct && !heroImageError ? activeHeroProduct.images[0] : heroImageSrc} 
                     alt={activeHeroProduct ? activeHeroProduct.name : "Compras en Plazado.com República Dominicana"} 
@@ -227,27 +227,6 @@ export const HomePage: React.FC = () => {
                     onError={() => setHeroImageError(true)}
                   />
                   
-                  {activeHeroProduct && (
-                    <div className="absolute left-8 sm:left-12 bottom-10 sm:bottom-12 z-30 max-w-[78%] sm:max-w-[58%] rounded-2xl bg-black/45 px-5 py-4 text-left text-white backdrop-blur-md border border-white/15 shadow-xl">
-                      <span className="block text-[10px] sm:text-[11px] uppercase tracking-[0.18em] font-black text-rose-300 mb-1">Producto destacado</span>
-                      <span className="block truncate text-sm sm:text-base font-black">{activeHeroProduct.name}</span>
-                      <div className="flex items-center gap-3 mt-1.5">
-                        <span className="text-sm sm:text-lg font-black text-white">
-                          RD$ {(activeHeroProduct.promoPrice && activeHeroProduct.promoPrice < activeHeroProduct.price
-                            ? activeHeroProduct.promoPrice
-                            : activeHeroProduct.price).toLocaleString()}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedProductId(activeHeroProduct.id)}
-                          className="rounded-full bg-[#f20544] hover:bg-[#d9043d] px-3 py-1.5 text-[11px] sm:text-xs font-black text-white transition-colors"
-                        >
-                          Ver producto
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
                   {heroMode === 'slider' && heroProducts.length > 1 && (
                     <>
                       <button
@@ -289,8 +268,7 @@ export const HomePage: React.FC = () => {
                     </>
                   )}
 
-                  {/* Sutil gradiente para integrar badges */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent pointer-events-none" />
+                  {/* Imagen limpia: sin mensajes ni tarjetas flotantes sobre el producto */}
 
                   {/* Acceso rápido para el Super Admin para cambiar la imagen del Header / Hero */}
                   {currentUser?.role === 'SUPER_ADMIN' && (
@@ -308,37 +286,7 @@ export const HomePage: React.FC = () => {
                     </button>
                   )}
 
-                  {/* Doodle 'Apoya tiendas Dominicanas ♡' */}
-                  <div className="absolute top-3 right-3 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-md border border-slate-200 dark:border-stone-700 text-slate-900 dark:text-white text-xs font-bold flex items-center gap-1.5 animate-bounce-subtle z-20">
-                    <span>Apoya tiendas Dominicanas</span>
-                    <span className="text-rose-500">♡</span>
-                    <DominicanFlag className="w-4 h-3 rounded-2xs inline-block" />
-                  </div>
 
-                  {/* Badges de confianza sobre la imagen */}
-                  <div className="absolute bottom-3 left-3 right-3 grid grid-cols-2 gap-2 z-20">
-                    {/* Badge 1: Productos de tiendas en RD */}
-                    <div className="bg-white/95 dark:bg-stone-900/95 backdrop-blur-md rounded-xl p-2.5 shadow-md border border-slate-200/80 dark:border-stone-700 flex items-center gap-2.5 hover:-translate-y-0.5 transition-transform text-left">
-                      <div className="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-950/50 text-[#f20544] dark:text-rose-400 flex items-center justify-center shrink-0">
-                        <Truck className="w-4 h-4 stroke-[2.2]" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-bold text-slate-900 dark:text-white truncate">Tiendas en RD</p>
-                        <p className="text-[10px] text-slate-500 dark:text-stone-400 truncate">Envío local</p>
-                      </div>
-                    </div>
-
-                    {/* Badge 2: Pago seguro */}
-                    <div className="bg-white/95 dark:bg-stone-900/95 backdrop-blur-md rounded-xl p-2.5 shadow-md border border-slate-200/80 dark:border-stone-700 flex items-center gap-2.5 hover:-translate-y-0.5 transition-transform text-left">
-                      <div className="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-950/50 text-[#f20544] dark:text-rose-400 flex items-center justify-center shrink-0">
-                        <ShieldCheck className="w-4 h-4 stroke-[2.2]" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-bold text-slate-900 dark:text-white truncate">Pago seguro</p>
-                        <p className="text-[10px] text-slate-500 dark:text-stone-400 truncate">Protegido</p>
-                      </div>
-                    </div>
-                  </div>
 
                 </div>
 
