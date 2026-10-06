@@ -57,7 +57,7 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = () => {
   return (
     <nav 
       aria-label="Navegación móvil inferior fija"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] safe-area-bottom select-none"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md border-t border-slate-200/90 dark:border-stone-800 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] safe-area-bottom select-none transition-colors duration-150"
     >
       <div className="grid grid-cols-5 h-14 items-center max-w-lg mx-auto px-1">
         
@@ -70,8 +70,8 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = () => {
           }}
           className={`flex flex-col items-center justify-center h-full w-full py-1 text-center transition-colors active:scale-95 ${
             isHomeActive 
-              ? 'text-emerald-600 font-bold' 
-              : 'text-slate-500 hover:text-slate-800 font-medium'
+              ? 'text-[#008f51] dark:text-emerald-400 font-bold' 
+              : 'text-slate-500 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-200 font-medium'
           }`}
         >
           <Home className={`w-5 h-5 ${isHomeActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
@@ -87,8 +87,8 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = () => {
           }}
           className={`flex flex-col items-center justify-center h-full w-full py-1 text-center transition-colors active:scale-95 ${
             isCategoriesActive 
-              ? 'text-emerald-600 font-bold' 
-              : 'text-slate-500 hover:text-slate-800 font-medium'
+              ? 'text-[#008f51] dark:text-emerald-400 font-bold' 
+              : 'text-slate-500 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-200 font-medium'
           }`}
         >
           <LayoutGrid className={`w-5 h-5 ${isCategoriesActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
@@ -103,8 +103,8 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = () => {
           }}
           className={`flex flex-col items-center justify-center h-full w-full py-1 text-center transition-colors active:scale-95 ${
             isStoresActive 
-              ? 'text-emerald-600 font-bold' 
-              : 'text-slate-500 hover:text-slate-800 font-medium'
+              ? 'text-[#008f51] dark:text-emerald-400 font-bold' 
+              : 'text-slate-500 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-200 font-medium'
           }`}
         >
           <Store className={`w-5 h-5 ${isStoresActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
@@ -117,14 +117,14 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = () => {
           onClick={handleFavoritesClick}
           className={`flex flex-col items-center justify-center h-full w-full py-1 text-center transition-colors active:scale-95 relative ${
             isFavoritesActive && currentView === 'customer_portal'
-              ? 'text-emerald-600 font-bold' 
-              : 'text-slate-500 hover:text-slate-800 font-medium'
+              ? 'text-[#008f51] dark:text-emerald-400 font-bold' 
+              : 'text-slate-500 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-200 font-medium'
           }`}
         >
           <div className="relative">
-            <Heart className={`w-5 h-5 ${isFavoritesActive && currentView === 'customer_portal' ? 'stroke-[2.5] fill-emerald-600' : 'stroke-2'}`} />
+            <Heart className={`w-5 h-5 ${isFavoritesActive && currentView === 'customer_portal' ? 'stroke-[2.5] fill-[#008f51] dark:fill-emerald-400' : 'stroke-2'}`} />
             {favCount > 0 && (
-              <span className="absolute -top-1 -right-2 bg-emerald-600 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-white">
+              <span className="absolute -top-1 -right-2 bg-[#008f51] text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-white dark:border-stone-900">
                 {favCount > 99 ? '99+' : favCount}
               </span>
             )}
@@ -138,16 +138,16 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = () => {
           onClick={handleAccountClick}
           className={`flex flex-col items-center justify-center h-full w-full py-1 text-center transition-colors active:scale-95 ${
             isAccountActive 
-              ? 'text-emerald-600 font-bold' 
-              : 'text-slate-500 hover:text-slate-800 font-medium'
+              ? 'text-[#008f51] dark:text-emerald-400 font-bold' 
+              : 'text-slate-500 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-200 font-medium'
           }`}
         >
           {currentUser?.role === 'SUPER_ADMIN' ? (
-            <Shield className={`w-5 h-5 ${isAccountActive ? 'text-emerald-600 stroke-[2.5]' : 'stroke-2'}`} />
+            <Shield className={`w-5 h-5 ${isAccountActive ? 'text-[#008f51] dark:text-emerald-400 stroke-[2.5]' : 'stroke-2'}`} />
           ) : currentUser?.role === 'STORE_OWNER' ? (
-            <Store className={`w-5 h-5 ${isAccountActive ? 'text-emerald-600 stroke-[2.5]' : 'stroke-2'}`} />
+            <Store className={`w-5 h-5 ${isAccountActive ? 'text-[#008f51] dark:text-emerald-400 stroke-[2.5]' : 'stroke-2'}`} />
           ) : (
-            <User className={`w-5 h-5 ${isAccountActive ? 'text-emerald-600 stroke-[2.5]' : 'stroke-2'}`} />
+            <User className={`w-5 h-5 ${isAccountActive ? 'text-[#008f51] dark:text-emerald-400 stroke-[2.5]' : 'stroke-2'}`} />
           )}
           <span className="text-[10px] tracking-tight mt-0.5 truncate max-w-[55px]">
             {!currentUser 

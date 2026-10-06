@@ -115,36 +115,27 @@ export const HomePage: React.FC = () => {
       {/* 2. HERO PRINCIPAL — REPLICA VISUAL EXACTA DE LA REFERENCIA     */}
       {/* ============================================================== */}
       <section className="pt-2 sm:pt-4">
-        <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-slate-900 shadow-md min-h-[420px] lg:h-[460px] flex items-center">
+        <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-gradient-to-br from-emerald-50/70 via-slate-50/40 to-white dark:from-stone-900 dark:via-stone-900/90 dark:to-stone-950 border border-slate-200/90 dark:border-stone-800 shadow-xs min-h-[400px] lg:h-[440px] flex items-center">
           
-          {/* Imagen de fondo comercial integrada con gradiente suave */}
-          <div className="absolute inset-0 z-0">
-            <img 
-              src="https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?w=1800&auto=format&fit=crop&q=80" 
-              alt="PlazaDO Marketplace Dominicano" 
-              className="w-full h-full object-cover object-center filter brightness-[0.92]"
-              loading="eager"
-            />
-            {/* Gradiente izquierdo para garantizar legibilidad perfecta del texto */}
-            <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/75 to-transparent z-10" />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent z-10" />
-          </div>
+          {/* Suaves elementos de luz y ambientación de marca */}
+          <div className="absolute -right-16 -top-16 w-80 h-80 bg-emerald-100/40 dark:bg-emerald-900/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -left-16 -bottom-16 w-80 h-80 bg-teal-100/30 dark:bg-teal-900/20 rounded-full blur-3xl pointer-events-none" />
 
           {/* Contenido en dos zonas perfectamente integradas */}
-          <div className="relative z-20 w-full h-full flex flex-col justify-center px-6 sm:px-10 lg:px-14 py-8">
-            <div className="grid grid-cols-1 lg:grid-cols-12 items-center gap-6 h-full">
+          <div className="relative z-10 w-full h-full flex flex-col justify-center px-5 sm:px-10 lg:px-12 py-7 sm:py-8">
+            <div className="grid grid-cols-1 lg:grid-cols-12 items-center gap-6 lg:gap-8 h-full">
               
               {/* ZONA IZQUIERDA: Textos y Botones principales */}
               <div className="lg:col-span-7 space-y-4 sm:space-y-5 text-left max-w-xl">
                 
-                {/* Título Principal Grande */}
-                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[50px] font-black text-white tracking-tight leading-[1.08] drop-shadow-md">
+                {/* Título Principal Grande con Verde Corporativo de Alta Visibilidad */}
+                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[46px] font-black text-slate-900 dark:text-white tracking-tight leading-[1.1]">
                   Todo lo que buscas,<br />
-                  <span className="text-[#00c06a]">en un solo lugar</span>
+                  <span className="text-[#008f51] dark:text-emerald-400">en un solo lugar</span>
                 </h1>
 
                 {/* Texto Descriptivo */}
-                <p className="text-sm sm:text-base lg:text-lg text-slate-100 font-normal leading-relaxed drop-shadow-sm">
+                <p className="text-sm sm:text-base lg:text-lg text-slate-600 dark:text-stone-300 font-normal leading-relaxed">
                   Descubre miles de productos de tiendas Dominicanas. Compra fácil, seguro y apoya lo nuestro.
                 </p>
 
@@ -157,7 +148,7 @@ export const HomePage: React.FC = () => {
                       setSelectedCategorySlug(null);
                       setCurrentView('catalog');
                     }}
-                    className="px-6 py-3.5 bg-[#00a650] hover:bg-[#008f51] active:bg-[#007a44] text-white rounded-full text-sm sm:text-base font-bold shadow-lg hover:shadow-emerald-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="px-6 py-3.5 bg-[#008f51] hover:bg-[#007a44] active:bg-[#006838] text-white rounded-full text-sm sm:text-base font-bold shadow-md hover:shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Search className="w-4 h-4 stroke-[2.5]" />
                     <span>Explorar productos</span>
@@ -168,71 +159,59 @@ export const HomePage: React.FC = () => {
                     type="button"
                     id="hero-create-store-btn"
                     onClick={() => setCurrentView('sell_with_us')}
-                    className="px-6 py-3.5 bg-white hover:bg-slate-100 text-slate-900 rounded-full text-sm sm:text-base font-bold shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer border border-slate-200"
+                    className="px-6 py-3.5 bg-white dark:bg-stone-800 hover:bg-slate-50 dark:hover:bg-stone-700 active:bg-slate-100 text-slate-800 dark:text-stone-100 rounded-full text-sm sm:text-base font-bold shadow-xs hover:shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer border border-slate-300 dark:border-stone-700"
                   >
-                    <Store className="w-4 h-4 text-[#00a650]" />
+                    <Store className="w-4 h-4 text-[#008f51] dark:text-emerald-400" />
                     <span>Crear mi tienda</span>
                   </button>
                 </div>
 
-                {/* Prueba Social: Avatares + Personas compran */}
-                <div className="pt-2 flex items-center gap-3">
-                  <div className="flex -space-x-2 overflow-hidden">
-                    <img className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80" alt="Cliente Plazado" />
-                    <img className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80" alt="Cliente Plazado" />
-                    <img className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80" alt="Cliente Plazado" />
-                    <img className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80" alt="Cliente Plazado" />
-                  </div>
-                  <span className="text-xs sm:text-sm text-slate-100 font-medium drop-shadow-sm">
-                    <strong>+ de 5,000 personas</strong> ya compran en Plazado.com
-                  </span>
-                </div>
-
               </div>
 
-              {/* ZONA DERECHA: Shopper dominicana & Floating Badges */}
-              <div className="hidden lg:flex lg:col-span-5 flex-col justify-center items-end relative h-full">
+              {/* ZONA DERECHA: Imagen comercial atractiva y luminosa & Floating Badges */}
+              <div className="lg:col-span-5 relative h-full flex items-center justify-center">
                 
-                {/* Doodle 'Apoya tiendas Dominicanas ♡' */}
-                <div className="absolute top-4 right-8 bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-md border border-slate-100 text-slate-900 text-xs font-bold flex items-center gap-1.5 animate-bounce-subtle">
-                  <span>Apoya tiendas Dominicanas</span>
-                  <span className="text-rose-500">♡</span>
-                  <DominicanFlag className="w-4 h-3 rounded-2xs inline-block" />
-                </div>
-
-                {/* 3 Tarjetas flotantes blancas con iconos verdes */}
-                <div className="space-y-3 pt-12 self-end w-72">
+                {/* Contenedor de la Imagen con badges superpuestos */}
+                <div className="relative w-full h-[280px] sm:h-[340px] lg:h-[390px] rounded-2xl overflow-hidden shadow-md border border-slate-200/80 dark:border-stone-800 group">
+                  <img 
+                    src="https://images.unsplash.com/photo-1483985988355-763728e1935b?w=900&auto=format&fit=crop&q=80" 
+                    alt="Compras en Plazado.com República Dominicana" 
+                    className="w-full h-full object-cover object-center group-hover:scale-102 transition-transform duration-500"
+                    loading="eager"
+                  />
                   
-                  {/* Tarjeta 1: Productos de tiendas en RD */}
-                  <div className="bg-white/95 backdrop-blur-md rounded-2xl p-3.5 shadow-lg border border-slate-100 flex items-center gap-3 hover:-translate-y-0.5 transition-transform">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#00a650] flex items-center justify-center shrink-0">
-                      <Truck className="w-5 h-5 stroke-[2.2]" />
-                    </div>
-                    <div className="text-left">
-                      <p className="text-xs font-bold text-slate-900">Productos de tiendas en RD</p>
-                      <p className="text-[11px] text-slate-500">Envío directo local</p>
-                    </div>
+                  {/* Sutil gradiente para integrar badges */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent pointer-events-none" />
+
+                  {/* Doodle 'Apoya tiendas Dominicanas ♡' */}
+                  <div className="absolute top-3 right-3 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-md border border-slate-200 dark:border-stone-700 text-slate-900 dark:text-white text-xs font-bold flex items-center gap-1.5 animate-bounce-subtle z-20">
+                    <span>Apoya tiendas Dominicanas</span>
+                    <span className="text-rose-500">♡</span>
+                    <DominicanFlag className="w-4 h-3 rounded-2xs inline-block" />
                   </div>
 
-                  {/* Tarjeta 2: Pago seguro */}
-                  <div className="bg-white/95 backdrop-blur-md rounded-2xl p-3.5 shadow-lg border border-slate-100 flex items-center gap-3 hover:-translate-y-0.5 transition-transform">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#00a650] flex items-center justify-center shrink-0">
-                      <ShieldCheck className="w-5 h-5 stroke-[2.2]" />
+                  {/* Badges de confianza sobre la imagen */}
+                  <div className="absolute bottom-3 left-3 right-3 grid grid-cols-2 gap-2 z-20">
+                    {/* Badge 1: Productos de tiendas en RD */}
+                    <div className="bg-white/95 dark:bg-stone-900/95 backdrop-blur-md rounded-xl p-2.5 shadow-md border border-slate-200/80 dark:border-stone-700 flex items-center gap-2.5 hover:-translate-y-0.5 transition-transform text-left">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-[#008f51] dark:text-emerald-400 flex items-center justify-center shrink-0">
+                        <Truck className="w-4 h-4 stroke-[2.2]" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold text-slate-900 dark:text-white truncate">Tiendas en RD</p>
+                        <p className="text-[10px] text-slate-500 dark:text-stone-400 truncate">Envío local</p>
+                      </div>
                     </div>
-                    <div className="text-left">
-                      <p className="text-xs font-bold text-slate-900">Pago seguro</p>
-                      <p className="text-[11px] text-slate-500">Protección garantizada</p>
-                    </div>
-                  </div>
 
-                  {/* Tarjeta 3: Apoya el comercio local */}
-                  <div className="bg-white/95 backdrop-blur-md rounded-2xl p-3.5 shadow-lg border border-slate-100 flex items-center gap-3 hover:-translate-y-0.5 transition-transform">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#00a650] flex items-center justify-center shrink-0">
-                      <Store className="w-5 h-5 stroke-[2.2]" />
-                    </div>
-                    <div className="text-left">
-                      <p className="text-xs font-bold text-slate-900">Apoya el comercio local</p>
-                      <p className="text-[11px] text-slate-500">100% Dominicano</p>
+                    {/* Badge 2: Pago seguro */}
+                    <div className="bg-white/95 dark:bg-stone-900/95 backdrop-blur-md rounded-xl p-2.5 shadow-md border border-slate-200/80 dark:border-stone-700 flex items-center gap-2.5 hover:-translate-y-0.5 transition-transform text-left">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-[#008f51] dark:text-emerald-400 flex items-center justify-center shrink-0">
+                        <ShieldCheck className="w-4 h-4 stroke-[2.2]" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold text-slate-900 dark:text-white truncate">Pago seguro</p>
+                        <p className="text-[10px] text-slate-500 dark:text-stone-400 truncate">Protegido</p>
+                      </div>
                     </div>
                   </div>
 
@@ -250,19 +229,19 @@ export const HomePage: React.FC = () => {
       {/* 3. FRANJA DE CONFIANZA (4 Columnas uniformes a todo lo ancho)   */}
       {/* ============================================================== */}
       <section>
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-xs">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+        <div className="bg-white dark:bg-stone-900 rounded-2xl border border-slate-200/80 dark:border-stone-800 p-4 sm:p-5 shadow-xs">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 dark:divide-stone-800">
             
             {/* 1. Compra segura */}
             <div className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:px-3 first:pt-0">
-              <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#008f51] flex items-center justify-center shrink-0 border border-emerald-100/70">
+              <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-[#008f51] dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-100/70 dark:border-emerald-800/40">
                 <Lock className="w-5 h-5 stroke-[2.3]" />
               </div>
               <div className="text-left">
-                <h4 className="font-bold text-xs sm:text-sm text-slate-900 leading-tight">
+                <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white leading-tight">
                   Compra segura
                 </h4>
-                <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                <p className="text-[11px] text-slate-500 dark:text-stone-400 mt-0.5 leading-snug">
                   Tus pagos protegidos
                 </p>
               </div>
@@ -270,14 +249,14 @@ export const HomePage: React.FC = () => {
 
             {/* 2. Tiendas verificadas */}
             <div className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:px-3">
-              <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#008f51] flex items-center justify-center shrink-0 border border-emerald-100/70">
+              <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-[#008f51] dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-100/70 dark:border-emerald-800/40">
                 <ShieldCheck className="w-5 h-5 stroke-[2.3]" />
               </div>
               <div className="text-left">
-                <h4 className="font-bold text-xs sm:text-sm text-slate-900 leading-tight">
+                <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white leading-tight">
                   Tiendas verificadas
                 </h4>
-                <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                <p className="text-[11px] text-slate-500 dark:text-stone-400 mt-0.5 leading-snug">
                   Comercios confiables
                 </p>
               </div>
@@ -285,14 +264,14 @@ export const HomePage: React.FC = () => {
 
             {/* 3. Envíos en toda RD */}
             <div className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:px-3">
-              <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#008f51] flex items-center justify-center shrink-0 border border-emerald-100/70">
+              <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-[#008f51] dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-100/70 dark:border-emerald-800/40">
                 <Truck className="w-5 h-5 stroke-[2.3]" />
               </div>
               <div className="text-left">
-                <h4 className="font-bold text-xs sm:text-sm text-slate-900 leading-tight">
+                <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white leading-tight">
                   Envíos en toda RD
                 </h4>
-                <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                <p className="text-[11px] text-slate-500 dark:text-stone-400 mt-0.5 leading-snug">
                   A través de las tiendas
                 </p>
               </div>
@@ -300,14 +279,14 @@ export const HomePage: React.FC = () => {
 
             {/* 4. Soporte personalizado */}
             <div className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:px-3">
-              <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#008f51] flex items-center justify-center shrink-0 border border-emerald-100/70">
+              <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-[#008f51] dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-100/70 dark:border-emerald-800/40">
                 <Headphones className="w-5 h-5 stroke-[2.3]" />
               </div>
               <div className="text-left">
-                <h4 className="font-bold text-xs sm:text-sm text-slate-900 leading-tight">
+                <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white leading-tight">
                   Soporte personalizado
                 </h4>
-                <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                <p className="text-[11px] text-slate-500 dark:text-stone-400 mt-0.5 leading-snug">
                   Estamos para ayudarte
                 </p>
               </div>
@@ -324,7 +303,7 @@ export const HomePage: React.FC = () => {
         
         {/* Cabecera */}
         <div className="flex items-center justify-between">
-          <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
             Categorías populares
           </h2>
 
@@ -334,7 +313,7 @@ export const HomePage: React.FC = () => {
               setSelectedCategorySlug(null);
               setCurrentView('catalog');
             }}
-            className="text-xs sm:text-sm font-bold text-[#008f51] hover:text-[#007a44] transition-colors flex items-center gap-1 group cursor-pointer"
+            className="text-xs sm:text-sm font-bold text-[#008f51] dark:text-emerald-400 hover:text-[#007a44] transition-colors flex items-center gap-1 group cursor-pointer"
           >
             <span>Ver todas las categorías</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -342,7 +321,7 @@ export const HomePage: React.FC = () => {
         </div>
 
         {/* Fila Horizontal de Tarjetas Visuales (Idéntica a la referencia) */}
-        <div className="grid grid-cols-4 sm:grid-cols-7 lg:grid-cols-14 gap-2.5 sm:gap-3 overflow-x-auto pb-1 scrollbar-none">
+        <div className="grid grid-cols-4 sm:grid-cols-7 lg:grid-cols-10 xl:grid-cols-[repeat(14,minmax(0,1fr))] gap-2.5 sm:gap-3 overflow-x-auto pb-1 scrollbar-none">
           {visualCategories.map((item, idx) => {
             // Find if this category exists in real database categories
             const realCat = mainCategories.find(c => c.slug === item.slug || c.name.toLowerCase().includes(item.name.toLowerCase()));
@@ -353,13 +332,13 @@ export const HomePage: React.FC = () => {
                 key={idx}
                 type="button"
                 onClick={() => handleCategorySelect(targetSlug)}
-                className="bg-white rounded-2xl border border-slate-200/70 p-3 sm:p-3.5 flex flex-col items-center justify-center text-center hover:border-[#008f51] hover:shadow-md hover:-translate-y-0.5 transition-all group cursor-pointer aspect-square min-w-[80px]"
+                className="bg-white dark:bg-stone-900 rounded-2xl border border-slate-200/70 dark:border-stone-800 p-3 sm:p-3.5 flex flex-col items-center justify-center text-center hover:border-[#008f51] dark:hover:border-emerald-500 hover:shadow-md hover:-translate-y-0.5 transition-all group cursor-pointer aspect-square min-w-[80px]"
                 title={`Explorar ${item.name}`}
               >
                 <span className="text-2xl sm:text-3xl mb-1.5 filter drop-shadow-2xs group-hover:scale-110 transition-transform">
                   {item.icon}
                 </span>
-                <span className="text-[11px] sm:text-xs font-bold text-slate-800 group-hover:text-[#008f51] transition-colors leading-tight line-clamp-1">
+                <span className="text-[11px] sm:text-xs font-bold text-slate-800 dark:text-stone-200 group-hover:text-[#008f51] dark:group-hover:text-emerald-400 transition-colors leading-tight line-clamp-1">
                   {item.name}
                 </span>
               </button>
@@ -373,13 +352,13 @@ export const HomePage: React.FC = () => {
               setSelectedCategorySlug(null);
               setCurrentView('catalog');
             }}
-            className="bg-slate-50 hover:bg-white rounded-2xl border border-dashed border-slate-300 hover:border-[#008f51] p-3 sm:p-3.5 flex flex-col items-center justify-center text-center transition-all group cursor-pointer aspect-square min-w-[80px]"
+            className="bg-slate-50 dark:bg-stone-800/60 hover:bg-white dark:hover:bg-stone-800 rounded-2xl border border-dashed border-slate-300 dark:border-stone-700 hover:border-[#008f51] dark:hover:border-emerald-500 p-3 sm:p-3.5 flex flex-col items-center justify-center text-center transition-all group cursor-pointer aspect-square min-w-[80px]"
             title="Ver catálogo completo"
           >
-            <span className="text-2xl mb-1.5 text-slate-400 group-hover:text-[#008f51] group-hover:scale-110 transition-transform">
+            <span className="text-2xl mb-1.5 text-slate-400 dark:text-stone-500 group-hover:text-[#008f51] dark:group-hover:text-emerald-400 group-hover:scale-110 transition-transform">
               •••
             </span>
-            <span className="text-[11px] sm:text-xs font-bold text-slate-600 group-hover:text-[#008f51] transition-colors leading-tight line-clamp-1">
+            <span className="text-[11px] sm:text-xs font-bold text-slate-600 dark:text-stone-400 group-hover:text-[#008f51] dark:group-hover:text-emerald-400 transition-colors leading-tight line-clamp-1">
               Más categorías
             </span>
           </button>
@@ -436,12 +415,12 @@ export const HomePage: React.FC = () => {
 
         {/* Fallback si no hay productos disponibles aún */}
         {displayProducts.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center max-w-lg mx-auto space-y-3">
-            <Package className="w-10 h-10 text-slate-400 mx-auto" />
-            <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+          <div className="bg-white dark:bg-stone-900 rounded-2xl border border-slate-200 dark:border-stone-800 p-8 text-center max-w-lg mx-auto space-y-3">
+            <Package className="w-10 h-10 text-slate-400 dark:text-stone-500 mx-auto" />
+            <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">
               No hay productos disponibles en este momento
             </h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
+            <p className="text-xs text-slate-500 dark:text-stone-400 leading-relaxed">
               Los comercios dominicanos publicarán nuevos artículos próximamente. ¡Puedes ser el primero en vender!
             </p>
             <button
@@ -468,11 +447,11 @@ export const HomePage: React.FC = () => {
               return (
                 <div
                   key={prod.id}
-                  className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-2xs hover:shadow-md hover:border-slate-300 transition-all flex flex-col justify-between group"
+                  className="bg-white dark:bg-stone-900 rounded-2xl border border-slate-200/80 dark:border-stone-800 p-3 shadow-2xs hover:shadow-md hover:border-slate-300 dark:hover:border-stone-700 transition-all flex flex-col justify-between group"
                 >
                   {/* Imagen del Producto en fondo blanco/limpio */}
                   <div 
-                    className="relative aspect-square w-full bg-white flex items-center justify-center overflow-hidden cursor-pointer rounded-xl mb-2.5"
+                    className="relative aspect-square w-full bg-white dark:bg-stone-800/80 flex items-center justify-center overflow-hidden cursor-pointer rounded-xl mb-2.5"
                     onClick={() => setSelectedProductId(prod.id)}
                   >
                     {prod.images && prod.images[0] ? (
@@ -483,7 +462,7 @@ export const HomePage: React.FC = () => {
                         loading="lazy"
                       />
                     ) : (
-                      <Package className="w-10 h-10 text-slate-300" />
+                      <Package className="w-10 h-10 text-slate-300 dark:text-stone-600" />
                     )}
 
                     {/* Botón de favoritos ♡ */}
@@ -493,7 +472,7 @@ export const HomePage: React.FC = () => {
                         e.stopPropagation();
                         toggleFavoriteProduct(prod.id);
                       }}
-                      className="absolute top-1.5 right-1.5 p-1 rounded-full text-slate-400 hover:text-rose-500 hover:bg-slate-100 transition-colors"
+                      className="absolute top-1.5 right-1.5 p-1 rounded-full text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-stone-700 transition-colors"
                       title={isFav ? 'Quitar de favoritos' : 'Guardar en favoritos'}
                     >
                       <Heart className={`w-4 h-4 ${isFav ? 'fill-rose-500 text-rose-500' : 'stroke-[1.8]'}`} />
@@ -506,7 +485,7 @@ export const HomePage: React.FC = () => {
                       {/* Título de 2 líneas */}
                       <h3 
                         onClick={() => setSelectedProductId(prod.id)}
-                        className="font-bold text-xs text-slate-900 line-clamp-2 hover:text-[#008f51] cursor-pointer transition-colors leading-snug"
+                        className="font-bold text-xs text-slate-900 dark:text-white line-clamp-2 hover:text-[#008f51] dark:hover:text-emerald-400 cursor-pointer transition-colors leading-snug"
                         title={prod.name}
                       >
                         {prod.name}
@@ -515,33 +494,33 @@ export const HomePage: React.FC = () => {
                       {/* Calificación por estrellas */}
                       <div className="flex items-center gap-1 mt-1 text-xs">
                         <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                        <span className="font-bold text-slate-800 text-[11px]">{prod.rating ? prod.rating.toFixed(1) : '4.8'}</span>
-                        <span className="text-[10px] text-slate-400">({prod.reviewCount || 95})</span>
+                        <span className="font-bold text-slate-800 dark:text-stone-200 text-[11px]">{prod.rating ? prod.rating.toFixed(1) : '4.8'}</span>
+                        <span className="text-[10px] text-slate-400 dark:text-stone-500">({prod.reviewCount || 95})</span>
                       </div>
 
                       {/* Nombre de la tienda */}
                       {store && (
-                        <p className="text-[10px] text-slate-500 truncate mt-0.5 flex items-center gap-1">
-                          <Store className="w-3 h-3 text-slate-400 shrink-0" />
+                        <p className="text-[10px] text-slate-500 dark:text-stone-400 truncate mt-0.5 flex items-center gap-1">
+                          <Store className="w-3 h-3 text-slate-400 dark:text-stone-500 shrink-0" />
                           <span className="truncate">{store.name}</span>
                         </p>
                       )}
                     </div>
 
                     {/* Fila inferior: Precio en RD$ y Botón Carrito verde */}
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1 mt-1">
+                    <div className="pt-2 border-t border-slate-100 dark:border-stone-800 flex items-center justify-between gap-1 mt-1">
                       <div>
                         {hasDiscount ? (
                           <div className="flex flex-col">
-                            <span className="text-[9px] text-slate-400 line-through leading-none">
+                            <span className="text-[9px] text-slate-400 dark:text-stone-500 line-through leading-none">
                               RD$ {prod.price.toLocaleString()}
                             </span>
-                            <span className="font-black text-xs sm:text-sm text-slate-900 leading-tight">
+                            <span className="font-black text-xs sm:text-sm text-slate-900 dark:text-white leading-tight">
                               RD$ {prod.promoPrice?.toLocaleString()}
                             </span>
                           </div>
                         ) : (
-                          <span className="font-black text-xs sm:text-sm text-slate-900 leading-tight">
+                          <span className="font-black text-xs sm:text-sm text-slate-900 dark:text-white leading-tight">
                             RD$ {prod.price.toLocaleString()}
                           </span>
                         )}
@@ -575,17 +554,17 @@ export const HomePage: React.FC = () => {
         
         {/* Cabecera */}
         <div className="flex items-center justify-between">
-          <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
             Tiendas destacadas
           </h2>
 
           <div className="flex items-center gap-2">
             {approvedStores.length > 6 && (
-              <div className="hidden sm:flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <div className="hidden sm:flex items-center gap-1 bg-slate-100 dark:bg-stone-800 p-1 rounded-xl border border-slate-200 dark:border-stone-700">
                 <button
                   type="button"
                   onClick={() => scrollStores('left')}
-                  className="p-1.5 rounded-lg hover:bg-white text-slate-700 hover:text-[#008f51] transition-colors shadow-2xs cursor-pointer"
+                  className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-stone-700 text-slate-700 dark:text-stone-300 hover:text-[#008f51] transition-colors shadow-2xs cursor-pointer"
                   title="Anterior"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -593,7 +572,7 @@ export const HomePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => scrollStores('right')}
-                  className="p-1.5 rounded-lg hover:bg-white text-slate-700 hover:text-[#008f51] transition-colors shadow-2xs cursor-pointer"
+                  className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-stone-700 text-slate-700 dark:text-stone-300 hover:text-[#008f51] transition-colors shadow-2xs cursor-pointer"
                   title="Siguiente"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -604,7 +583,7 @@ export const HomePage: React.FC = () => {
             <button
               type="button"
               onClick={() => setCurrentView('stores')}
-              className="text-xs sm:text-sm font-bold text-[#008f51] hover:text-[#007a44] transition-colors flex items-center gap-1 group cursor-pointer"
+              className="text-xs sm:text-sm font-bold text-[#008f51] dark:text-emerald-400 hover:text-[#007a44] transition-colors flex items-center gap-1 group cursor-pointer"
             >
               <span>Ver todas las tiendas</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -614,12 +593,12 @@ export const HomePage: React.FC = () => {
 
         {/* Fallback si no hay tiendas */}
         {approvedStores.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center max-w-lg mx-auto space-y-3">
-            <Store className="w-10 h-10 text-slate-400 mx-auto" />
-            <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+          <div className="bg-white dark:bg-stone-900 rounded-2xl border border-slate-200 dark:border-stone-800 p-8 text-center max-w-lg mx-auto space-y-3">
+            <Store className="w-10 h-10 text-slate-400 dark:text-stone-500 mx-auto" />
+            <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">
               No hay tiendas disponibles en este momento
             </h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
+            <p className="text-xs text-slate-500 dark:text-stone-400 leading-relaxed">
               ¿Tienes un negocio en República Dominicana? Únete a Plazado.com y sé una de las primeras tiendas verificadas.
             </p>
             <button
@@ -645,11 +624,11 @@ export const HomePage: React.FC = () => {
                 <div
                   key={store.id}
                   onClick={() => handleStoreSelect(store.slug || store.id)}
-                  className="bg-white rounded-2xl border border-slate-200/80 p-3.5 shadow-2xs hover:shadow-md hover:border-slate-300 transition-all flex items-center justify-between gap-3 group cursor-pointer"
+                  className="bg-white dark:bg-stone-900 rounded-2xl border border-slate-200/80 dark:border-stone-800 p-3.5 shadow-2xs hover:shadow-md hover:border-slate-300 dark:hover:border-stone-700 transition-all flex items-center justify-between gap-3 group cursor-pointer"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     {/* Logo circular grande */}
-                    <div className="w-11 h-11 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-sm shrink-0 overflow-hidden border border-slate-200 shadow-2xs">
+                    <div className="w-11 h-11 rounded-full bg-slate-900 dark:bg-stone-800 text-white flex items-center justify-center font-bold text-sm shrink-0 overflow-hidden border border-slate-200 dark:border-stone-700 shadow-2xs">
                       {store.logo ? (
                         <img
                           src={store.logo}
@@ -664,22 +643,22 @@ export const HomePage: React.FC = () => {
 
                     {/* Nombre y categoría */}
                     <div className="min-w-0 text-left">
-                      <h4 className="font-bold text-xs text-slate-900 group-hover:text-[#008f51] transition-colors truncate">
+                      <h4 className="font-bold text-xs text-slate-900 dark:text-white group-hover:text-[#008f51] dark:group-hover:text-emerald-400 transition-colors truncate">
                         {store.name}
                       </h4>
-                      <p className="text-[10px] text-slate-400 truncate">
+                      <p className="text-[10px] text-slate-400 dark:text-stone-500 truncate">
                         {categoryName}
                       </p>
                       <div className="flex items-center gap-1 text-[10px] text-amber-500 font-bold mt-0.5">
                         <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
                         <span>{store.rating ? store.rating.toFixed(1) : '4.8'}</span>
-                        <span className="text-slate-400 font-normal">({store.reviewCount || 120})</span>
+                        <span className="text-slate-400 dark:text-stone-500 font-normal">({store.reviewCount || 120})</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Botón Ver Tienda */}
-                  <span className="bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-full px-2.5 py-1 text-[11px] font-semibold shrink-0 transition-colors">
+                  <span className="bg-emerald-50 dark:bg-emerald-950/50 text-[#008f51] dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded-full px-2.5 py-1 text-[11px] font-bold shrink-0 transition-colors">
                     Ver tienda
                   </span>
                 </div>
