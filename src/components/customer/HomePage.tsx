@@ -120,33 +120,33 @@ export const HomePage: React.FC = () => {
   ];
 
   return (
-    <div className="max-w-[1440px] mx-auto px-4 lg:px-6 space-y-7 sm:space-y-9 pb-12 sm:pb-16 overflow-x-hidden">
+    <div className="max-w-[1440px] mx-auto px-0 sm:px-4 lg:px-6 space-y-4 sm:space-y-6 pb-12 sm:pb-16 overflow-x-hidden">
 
       {/* ============================================================== */}
       {/* 2. HERO PRINCIPAL — REPLICA VISUAL EXACTA DE LA REFERENCIA     */}
       {/* ============================================================== */}
       <section className="pt-2 sm:pt-4">
-        <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-gradient-to-br from-emerald-50/70 via-slate-50/40 to-white dark:from-stone-900 dark:via-stone-900/90 dark:to-stone-950 border border-slate-200/90 dark:border-stone-800 shadow-xs min-h-[400px] lg:h-[440px] flex items-center">
+        <div className="relative rounded-none sm:rounded-2xl overflow-hidden bg-gradient-to-br from-stone-950 via-black to-stone-900 dark:from-stone-950 dark:via-black dark:to-stone-900 border border-slate-200/90 dark:border-stone-800 shadow-xs min-h-[330px] sm:min-h-[400px] lg:h-[390px] flex items-center">
           
           {/* Suaves elementos de luz y ambientación de marca */}
-          <div className="absolute -right-16 -top-16 w-80 h-80 bg-emerald-100/40 dark:bg-emerald-900/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -right-16 -top-16 w-80 h-80 bg-rose-100/40 dark:bg-rose-900/20 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute -left-16 -bottom-16 w-80 h-80 bg-teal-100/30 dark:bg-teal-900/20 rounded-full blur-3xl pointer-events-none" />
 
           {/* Contenido en dos zonas perfectamente integradas */}
           <div className="relative z-10 w-full h-full flex flex-col justify-center px-5 sm:px-10 lg:px-12 py-7 sm:py-8">
-            <div className="grid grid-cols-1 lg:grid-cols-12 items-center gap-6 lg:gap-8 h-full">
+            <div className="grid grid-cols-1 lg:grid-cols-12 items-center gap-3 lg:gap-8 h-full">
               
               {/* ZONA IZQUIERDA: Textos y Botones principales */}
-              <div className="lg:col-span-7 space-y-4 sm:space-y-5 text-left max-w-xl">
+              <div className="lg:col-span-5 space-y-3 sm:space-y-5 text-left max-w-xl">
                 
                 {/* Título Principal Grande con Verde Corporativo de Alta Visibilidad */}
-                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[46px] font-black text-slate-900 dark:text-white tracking-tight leading-[1.1]">
+                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[46px] font-black text-white tracking-tight leading-[1.05]">
                   Todo lo que buscas,<br />
-                  <span className="text-[#008f51] dark:text-emerald-400">en un solo lugar</span>
+                  <span className="text-[#f20544] dark:text-rose-400">en un solo lugar</span>
                 </h1>
 
                 {/* Texto Descriptivo */}
-                <p className="text-sm sm:text-base lg:text-lg text-slate-600 dark:text-stone-300 font-normal leading-relaxed">
+                <p className="text-sm sm:text-base lg:text-lg text-stone-200 font-normal leading-relaxed">
                   Descubre miles de productos de tiendas Dominicanas. Compra fácil, seguro y apoya lo nuestro.
                 </p>
 
@@ -159,7 +159,7 @@ export const HomePage: React.FC = () => {
                       setSelectedCategorySlug(null);
                       setCurrentView('catalog');
                     }}
-                    className="px-6 py-3.5 bg-[#008f51] hover:bg-[#007a44] active:bg-[#006838] text-white rounded-full text-sm sm:text-base font-bold shadow-md hover:shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="px-6 py-3.5 bg-[#f20544] hover:bg-[#d9043d] active:bg-[#b90334] text-white rounded-full text-sm sm:text-base font-bold shadow-md hover:shadow-rose-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Search className="w-4 h-4 stroke-[2.5]" />
                     <span>Explorar productos</span>
@@ -172,7 +172,7 @@ export const HomePage: React.FC = () => {
                     onClick={() => setCurrentView('sell_with_us')}
                     className="px-6 py-3.5 bg-white dark:bg-stone-800 hover:bg-slate-50 dark:hover:bg-stone-700 active:bg-slate-100 text-slate-800 dark:text-stone-100 rounded-full text-sm sm:text-base font-bold shadow-xs hover:shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer border border-slate-300 dark:border-stone-700"
                   >
-                    <Store className="w-4 h-4 text-[#008f51] dark:text-emerald-400" />
+                    <Store className="w-4 h-4 text-[#f20544] dark:text-rose-400" />
                     <span>Crear mi tienda</span>
                   </button>
                 </div>
@@ -180,10 +180,10 @@ export const HomePage: React.FC = () => {
               </div>
 
               {/* ZONA DERECHA: Imagen comercial atractiva y luminosa & Floating Badges */}
-              <div className="lg:col-span-5 relative h-full flex items-center justify-center">
+              <div className="lg:col-span-7 relative h-full flex items-center justify-center">
                 
                 {/* Contenedor de la Imagen con badges superpuestos */}
-                <div className="relative w-full h-[280px] sm:h-[340px] lg:h-[390px] rounded-2xl overflow-hidden shadow-md border border-slate-200/80 dark:border-stone-800 group">
+                <div className="relative w-full h-[190px] sm:h-[300px] lg:h-[390px] rounded-xl sm:rounded-2xl overflow-hidden shadow-md border border-slate-200/80 dark:border-stone-800 group">
                   <img 
                     src={heroImageSrc} 
                     alt="Compras en Plazado.com República Dominicana" 
@@ -203,10 +203,10 @@ export const HomePage: React.FC = () => {
                         setAdminActiveTab('branding');
                         setCurrentView('admin_dashboard');
                       }}
-                      className="absolute top-3 left-3 bg-stone-900/85 hover:bg-stone-900 text-white text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-md border border-stone-700 shadow-md flex items-center gap-1.5 z-30 transition-all cursor-pointer hover:border-emerald-500"
+                      className="absolute top-3 left-3 bg-stone-900/85 hover:bg-stone-900 text-white text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-md border border-stone-700 shadow-md flex items-center gap-1.5 z-30 transition-all cursor-pointer hover:border-rose-500"
                       title="Super Admin: Establecer imagen del Header / Hero"
                     >
-                      <Palette className="w-3.5 h-3.5 text-emerald-400" />
+                      <Palette className="w-3.5 h-3.5 text-rose-400" />
                       <span>Cambiar imagen Header</span>
                     </button>
                   )}
@@ -222,7 +222,7 @@ export const HomePage: React.FC = () => {
                   <div className="absolute bottom-3 left-3 right-3 grid grid-cols-2 gap-2 z-20">
                     {/* Badge 1: Productos de tiendas en RD */}
                     <div className="bg-white/95 dark:bg-stone-900/95 backdrop-blur-md rounded-xl p-2.5 shadow-md border border-slate-200/80 dark:border-stone-700 flex items-center gap-2.5 hover:-translate-y-0.5 transition-transform text-left">
-                      <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-[#008f51] dark:text-emerald-400 flex items-center justify-center shrink-0">
+                      <div className="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-950/50 text-[#f20544] dark:text-rose-400 flex items-center justify-center shrink-0">
                         <Truck className="w-4 h-4 stroke-[2.2]" />
                       </div>
                       <div className="min-w-0">
@@ -233,7 +233,7 @@ export const HomePage: React.FC = () => {
 
                     {/* Badge 2: Pago seguro */}
                     <div className="bg-white/95 dark:bg-stone-900/95 backdrop-blur-md rounded-xl p-2.5 shadow-md border border-slate-200/80 dark:border-stone-700 flex items-center gap-2.5 hover:-translate-y-0.5 transition-transform text-left">
-                      <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-[#008f51] dark:text-emerald-400 flex items-center justify-center shrink-0">
+                      <div className="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-950/50 text-[#f20544] dark:text-rose-400 flex items-center justify-center shrink-0">
                         <ShieldCheck className="w-4 h-4 stroke-[2.2]" />
                       </div>
                       <div className="min-w-0">
@@ -262,7 +262,7 @@ export const HomePage: React.FC = () => {
             
             {/* 1. Compra segura */}
             <div className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:px-3 first:pt-0">
-              <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-[#008f51] dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-100/70 dark:border-emerald-800/40">
+              <div className="w-11 h-11 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-[#f20544] dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-100/70 dark:border-rose-800/40">
                 <Lock className="w-5 h-5 stroke-[2.3]" />
               </div>
               <div className="text-left">
@@ -277,7 +277,7 @@ export const HomePage: React.FC = () => {
 
             {/* 2. Tiendas verificadas */}
             <div className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:px-3">
-              <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-[#008f51] dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-100/70 dark:border-emerald-800/40">
+              <div className="w-11 h-11 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-[#f20544] dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-100/70 dark:border-rose-800/40">
                 <ShieldCheck className="w-5 h-5 stroke-[2.3]" />
               </div>
               <div className="text-left">
@@ -292,7 +292,7 @@ export const HomePage: React.FC = () => {
 
             {/* 3. Envíos en toda RD */}
             <div className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:px-3">
-              <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-[#008f51] dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-100/70 dark:border-emerald-800/40">
+              <div className="w-11 h-11 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-[#f20544] dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-100/70 dark:border-rose-800/40">
                 <Truck className="w-5 h-5 stroke-[2.3]" />
               </div>
               <div className="text-left">
@@ -307,7 +307,7 @@ export const HomePage: React.FC = () => {
 
             {/* 4. Soporte personalizado */}
             <div className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:px-3">
-              <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-[#008f51] dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-100/70 dark:border-emerald-800/40">
+              <div className="w-11 h-11 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-[#f20544] dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-100/70 dark:border-rose-800/40">
                 <Headphones className="w-5 h-5 stroke-[2.3]" />
               </div>
               <div className="text-left">
@@ -341,7 +341,7 @@ export const HomePage: React.FC = () => {
               setSelectedCategorySlug(null);
               setCurrentView('catalog');
             }}
-            className="text-xs sm:text-sm font-bold text-[#008f51] dark:text-emerald-400 hover:text-[#007a44] transition-colors flex items-center gap-1 group cursor-pointer"
+            className="text-xs sm:text-sm font-bold text-[#f20544] dark:text-rose-400 hover:text-[#d9043d] transition-colors flex items-center gap-1 group cursor-pointer"
           >
             <span>Ver todas las categorías</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -360,13 +360,13 @@ export const HomePage: React.FC = () => {
                 key={idx}
                 type="button"
                 onClick={() => handleCategorySelect(targetSlug)}
-                className="bg-white dark:bg-stone-900 rounded-2xl border border-slate-200/70 dark:border-stone-800 p-3 sm:p-3.5 flex flex-col items-center justify-center text-center hover:border-[#008f51] dark:hover:border-emerald-500 hover:shadow-md hover:-translate-y-0.5 transition-all group cursor-pointer aspect-square min-w-[80px]"
+                className="bg-white dark:bg-stone-900 rounded-2xl border border-slate-200/70 dark:border-stone-800 p-3 sm:p-3.5 flex flex-col items-center justify-center text-center hover:border-[#f20544] dark:hover:border-rose-500 hover:shadow-md hover:-translate-y-0.5 transition-all group cursor-pointer aspect-square min-w-[80px]"
                 title={`Explorar ${item.name}`}
               >
                 <span className="text-2xl sm:text-3xl mb-1.5 filter drop-shadow-2xs group-hover:scale-110 transition-transform">
                   {item.icon}
                 </span>
-                <span className="text-[11px] sm:text-xs font-bold text-slate-800 dark:text-stone-200 group-hover:text-[#008f51] dark:group-hover:text-emerald-400 transition-colors leading-tight line-clamp-1">
+                <span className="text-[11px] sm:text-xs font-bold text-slate-800 dark:text-stone-200 group-hover:text-[#f20544] dark:group-hover:text-rose-400 transition-colors leading-tight line-clamp-1">
                   {item.name}
                 </span>
               </button>
@@ -380,13 +380,13 @@ export const HomePage: React.FC = () => {
               setSelectedCategorySlug(null);
               setCurrentView('catalog');
             }}
-            className="bg-slate-50 dark:bg-stone-800/60 hover:bg-white dark:hover:bg-stone-800 rounded-2xl border border-dashed border-slate-300 dark:border-stone-700 hover:border-[#008f51] dark:hover:border-emerald-500 p-3 sm:p-3.5 flex flex-col items-center justify-center text-center transition-all group cursor-pointer aspect-square min-w-[80px]"
+            className="bg-slate-50 dark:bg-stone-800/60 hover:bg-white dark:hover:bg-stone-800 rounded-2xl border border-dashed border-slate-300 dark:border-stone-700 hover:border-[#f20544] dark:hover:border-rose-500 p-3 sm:p-3.5 flex flex-col items-center justify-center text-center transition-all group cursor-pointer aspect-square min-w-[80px]"
             title="Ver catálogo completo"
           >
-            <span className="text-2xl mb-1.5 text-slate-400 dark:text-stone-500 group-hover:text-[#008f51] dark:group-hover:text-emerald-400 group-hover:scale-110 transition-transform">
+            <span className="text-2xl mb-1.5 text-slate-400 dark:text-stone-500 group-hover:text-[#f20544] dark:group-hover:text-rose-400 group-hover:scale-110 transition-transform">
               •••
             </span>
-            <span className="text-[11px] sm:text-xs font-bold text-slate-600 dark:text-stone-400 group-hover:text-[#008f51] dark:group-hover:text-emerald-400 transition-colors leading-tight line-clamp-1">
+            <span className="text-[11px] sm:text-xs font-bold text-slate-600 dark:text-stone-400 group-hover:text-[#f20544] dark:group-hover:text-rose-400 transition-colors leading-tight line-clamp-1">
               Más categorías
             </span>
           </button>
@@ -411,7 +411,7 @@ export const HomePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => scrollProducts('left')}
-                  className="p-1.5 rounded-lg hover:bg-white text-slate-700 hover:text-[#008f51] transition-colors shadow-2xs cursor-pointer"
+                  className="p-1.5 rounded-lg hover:bg-white text-slate-700 hover:text-[#f20544] transition-colors shadow-2xs cursor-pointer"
                   title="Anterior"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -419,7 +419,7 @@ export const HomePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => scrollProducts('right')}
-                  className="p-1.5 rounded-lg hover:bg-white text-slate-700 hover:text-[#008f51] transition-colors shadow-2xs cursor-pointer"
+                  className="p-1.5 rounded-lg hover:bg-white text-slate-700 hover:text-[#f20544] transition-colors shadow-2xs cursor-pointer"
                   title="Siguiente"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -433,7 +433,7 @@ export const HomePage: React.FC = () => {
                 setSelectedCategorySlug(null);
                 setCurrentView('catalog');
               }}
-              className="text-xs sm:text-sm font-bold text-[#008f51] hover:text-[#007a44] transition-colors flex items-center gap-1 group cursor-pointer"
+              className="text-xs sm:text-sm font-bold text-[#f20544] hover:text-[#d9043d] transition-colors flex items-center gap-1 group cursor-pointer"
             >
               <span>Ver más productos</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -454,7 +454,7 @@ export const HomePage: React.FC = () => {
             <button
               type="button"
               onClick={() => setCurrentView('sell_with_us')}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#008f51] hover:bg-[#007a44] text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#f20544] hover:bg-[#d9043d] text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
             >
               <span>Publicar como comercio</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -513,7 +513,7 @@ export const HomePage: React.FC = () => {
                       {/* Título de 2 líneas */}
                       <h3 
                         onClick={() => setSelectedProductId(prod.id)}
-                        className="font-bold text-xs text-slate-900 dark:text-white line-clamp-2 hover:text-[#008f51] dark:hover:text-emerald-400 cursor-pointer transition-colors leading-snug"
+                        className="font-bold text-xs text-slate-900 dark:text-white line-clamp-2 hover:text-[#f20544] dark:hover:text-rose-400 cursor-pointer transition-colors leading-snug"
                         title={prod.name}
                       >
                         {prod.name}
@@ -558,7 +558,7 @@ export const HomePage: React.FC = () => {
                         type="button"
                         onClick={() => addToCart(prod.id, prod.storeId, 1)}
                         disabled={isOutOfStock}
-                        className="p-2 bg-[#008f51] hover:bg-[#007a44] active:bg-[#006838] disabled:opacity-40 text-white rounded-xl font-bold transition-colors shadow-2xs cursor-pointer shrink-0"
+                        className="p-2 bg-[#f20544] hover:bg-[#d9043d] active:bg-[#b90334] disabled:opacity-40 text-white rounded-xl font-bold transition-colors shadow-2xs cursor-pointer shrink-0"
                         title="Agregar al carrito"
                       >
                         <ShoppingCart className="w-3.5 h-3.5" />
@@ -592,7 +592,7 @@ export const HomePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => scrollStores('left')}
-                  className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-stone-700 text-slate-700 dark:text-stone-300 hover:text-[#008f51] transition-colors shadow-2xs cursor-pointer"
+                  className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-stone-700 text-slate-700 dark:text-stone-300 hover:text-[#f20544] transition-colors shadow-2xs cursor-pointer"
                   title="Anterior"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -600,7 +600,7 @@ export const HomePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => scrollStores('right')}
-                  className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-stone-700 text-slate-700 dark:text-stone-300 hover:text-[#008f51] transition-colors shadow-2xs cursor-pointer"
+                  className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-stone-700 text-slate-700 dark:text-stone-300 hover:text-[#f20544] transition-colors shadow-2xs cursor-pointer"
                   title="Siguiente"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -611,7 +611,7 @@ export const HomePage: React.FC = () => {
             <button
               type="button"
               onClick={() => setCurrentView('stores')}
-              className="text-xs sm:text-sm font-bold text-[#008f51] dark:text-emerald-400 hover:text-[#007a44] transition-colors flex items-center gap-1 group cursor-pointer"
+              className="text-xs sm:text-sm font-bold text-[#f20544] dark:text-rose-400 hover:text-[#d9043d] transition-colors flex items-center gap-1 group cursor-pointer"
             >
               <span>Ver todas las tiendas</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -632,7 +632,7 @@ export const HomePage: React.FC = () => {
             <button
               type="button"
               onClick={() => setCurrentView('sell_with_us')}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#008f51] hover:bg-[#007a44] text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#f20544] hover:bg-[#d9043d] text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
             >
               <span>Crear mi tienda</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -671,7 +671,7 @@ export const HomePage: React.FC = () => {
 
                     {/* Nombre y categoría */}
                     <div className="min-w-0 text-left">
-                      <h4 className="font-bold text-xs text-slate-900 dark:text-white group-hover:text-[#008f51] dark:group-hover:text-emerald-400 transition-colors truncate">
+                      <h4 className="font-bold text-xs text-slate-900 dark:text-white group-hover:text-[#f20544] dark:group-hover:text-rose-400 transition-colors truncate">
                         {store.name}
                       </h4>
                       <p className="text-[10px] text-slate-400 dark:text-stone-500 truncate">
@@ -686,7 +686,7 @@ export const HomePage: React.FC = () => {
                   </div>
 
                   {/* Botón Ver Tienda */}
-                  <span className="bg-emerald-50 dark:bg-emerald-950/50 text-[#008f51] dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded-full px-2.5 py-1 text-[11px] font-bold shrink-0 transition-colors">
+                  <span className="bg-rose-50 dark:bg-rose-950/50 text-[#f20544] dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 rounded-full px-2.5 py-1 text-[11px] font-bold shrink-0 transition-colors">
                     Ver tienda
                   </span>
                 </div>
@@ -701,7 +701,7 @@ export const HomePage: React.FC = () => {
       {/* 7. CTA VERDE "¿TIENES UNA TIENDA?" — REPLICA EXACTA            */}
       {/* ============================================================== */}
       <section>
-        <div className="rounded-2xl sm:rounded-3xl bg-[#008f51] text-white p-5 sm:p-7 shadow-md flex flex-col lg:flex-row items-center justify-between gap-6">
+        <div className="rounded-xl sm:rounded-2xl bg-gradient-to-r from-[#e6003d] via-[#ff174f] to-[#f20544] text-white p-5 sm:p-7 shadow-md flex flex-col lg:flex-row items-center justify-between gap-6">
           
           {/* Zona Izquierda: Icono + Título + Subtítulo */}
           <div className="flex items-center gap-4 text-left w-full lg:w-auto">
@@ -712,7 +712,7 @@ export const HomePage: React.FC = () => {
               <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-tight">
                 ¿Tienes una tienda?
               </h3>
-              <p className="text-xs sm:text-sm text-emerald-100 mt-0.5 leading-snug">
+              <p className="text-xs sm:text-sm text-rose-100 mt-0.5 leading-snug">
                 Vende en Plazado.com y llega a más clientes en toda República Dominicana
               </p>
             </div>
@@ -722,22 +722,22 @@ export const HomePage: React.FC = () => {
           <div className="flex flex-wrap items-center justify-start lg:justify-center gap-2 sm:gap-3 text-xs font-semibold text-white w-full lg:w-auto">
             
             <div className="flex items-center gap-1.5 bg-white/15 px-3 py-1.5 rounded-full backdrop-blur-2xs border border-white/10">
-              <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+              <CheckCircle2 className="w-4 h-4 text-rose-200" />
               <span>Registro gratis</span>
             </div>
 
             <div className="flex items-center gap-1.5 bg-white/15 px-3 py-1.5 rounded-full backdrop-blur-2xs border border-white/10">
-              <Percent className="w-4 h-4 text-emerald-200" />
+              <Percent className="w-4 h-4 text-rose-200" />
               <span>0.5% de comisión por venta</span>
             </div>
 
             <div className="flex items-center gap-1.5 bg-white/15 px-3 py-1.5 rounded-full backdrop-blur-2xs border border-white/10">
-              <Store className="w-4 h-4 text-emerald-200" />
+              <Store className="w-4 h-4 text-rose-200" />
               <span>Tu propia tienda virtual</span>
             </div>
 
             <div className="flex items-center gap-1.5 bg-white/15 px-3 py-1.5 rounded-full backdrop-blur-2xs border border-white/10">
-              <TrendingUp className="w-4 h-4 text-emerald-200" />
+              <TrendingUp className="w-4 h-4 text-rose-200" />
               <span>Herramientas para crecer</span>
             </div>
 

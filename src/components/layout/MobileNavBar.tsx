@@ -70,7 +70,7 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = () => {
           }}
           className={`flex flex-col items-center justify-center h-full w-full py-1 text-center transition-colors active:scale-95 ${
             isHomeActive 
-              ? 'text-[#008f51] dark:text-emerald-400 font-bold' 
+              ? 'text-[#f20544] dark:text-rose-400 font-bold' 
               : 'text-slate-500 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-200 font-medium'
           }`}
         >
@@ -87,7 +87,7 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = () => {
           }}
           className={`flex flex-col items-center justify-center h-full w-full py-1 text-center transition-colors active:scale-95 ${
             isCategoriesActive 
-              ? 'text-[#008f51] dark:text-emerald-400 font-bold' 
+              ? 'text-[#f20544] dark:text-rose-400 font-bold' 
               : 'text-slate-500 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-200 font-medium'
           }`}
         >
@@ -103,7 +103,7 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = () => {
           }}
           className={`flex flex-col items-center justify-center h-full w-full py-1 text-center transition-colors active:scale-95 ${
             isStoresActive 
-              ? 'text-[#008f51] dark:text-emerald-400 font-bold' 
+              ? 'text-[#f20544] dark:text-rose-400 font-bold' 
               : 'text-slate-500 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-200 font-medium'
           }`}
         >
@@ -117,14 +117,14 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = () => {
           onClick={handleFavoritesClick}
           className={`flex flex-col items-center justify-center h-full w-full py-1 text-center transition-colors active:scale-95 relative ${
             isFavoritesActive && currentView === 'customer_portal'
-              ? 'text-[#008f51] dark:text-emerald-400 font-bold' 
+              ? 'text-[#f20544] dark:text-rose-400 font-bold' 
               : 'text-slate-500 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-200 font-medium'
           }`}
         >
           <div className="relative">
-            <Heart className={`w-5 h-5 ${isFavoritesActive && currentView === 'customer_portal' ? 'stroke-[2.5] fill-[#008f51] dark:fill-emerald-400' : 'stroke-2'}`} />
+            <Heart className={`w-5 h-5 ${isFavoritesActive && currentView === 'customer_portal' ? 'stroke-[2.5] fill-[#f20544] dark:fill-rose-400' : 'stroke-2'}`} />
             {favCount > 0 && (
-              <span className="absolute -top-1 -right-2 bg-[#008f51] text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-white dark:border-stone-900">
+              <span className="absolute -top-1 -right-2 bg-[#f20544] text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-white dark:border-stone-900">
                 {favCount > 99 ? '99+' : favCount}
               </span>
             )}
@@ -138,16 +138,16 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = () => {
           onClick={handleAccountClick}
           className={`flex flex-col items-center justify-center h-full w-full py-1 text-center transition-colors active:scale-95 ${
             isAccountActive 
-              ? 'text-[#008f51] dark:text-emerald-400 font-bold' 
+              ? 'text-[#f20544] dark:text-rose-400 font-bold' 
               : 'text-slate-500 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-200 font-medium'
           }`}
         >
           {currentUser?.role === 'SUPER_ADMIN' ? (
-            <Shield className={`w-5 h-5 ${isAccountActive ? 'text-[#008f51] dark:text-emerald-400 stroke-[2.5]' : 'stroke-2'}`} />
+            <Shield className={`w-5 h-5 ${isAccountActive ? 'text-[#f20544] dark:text-rose-400 stroke-[2.5]' : 'stroke-2'}`} />
           ) : currentUser?.role === 'STORE_OWNER' ? (
-            <Store className={`w-5 h-5 ${isAccountActive ? 'text-[#008f51] dark:text-emerald-400 stroke-[2.5]' : 'stroke-2'}`} />
+            <Store className={`w-5 h-5 ${isAccountActive ? 'text-[#f20544] dark:text-rose-400 stroke-[2.5]' : 'stroke-2'}`} />
           ) : (
-            <User className={`w-5 h-5 ${isAccountActive ? 'text-[#008f51] dark:text-emerald-400 stroke-[2.5]' : 'stroke-2'}`} />
+            <User className={`w-5 h-5 ${isAccountActive ? 'text-[#f20544] dark:text-rose-400 stroke-[2.5]' : 'stroke-2'}`} />
           )}
           <span className="text-[10px] tracking-tight mt-0.5 truncate max-w-[55px]">
             {!currentUser 
