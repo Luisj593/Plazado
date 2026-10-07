@@ -514,6 +514,80 @@ export class FirestoreRepository {
     }
   }
 
+  /**
+   * Read-only production integrity diagnostic. It never creates, updates or deletes
+   * Firestore documents and returns only counts/IDs required to diagnose persistence.
+   */
+  public async getIntegrityDiagnostic(memoryState?: { users?: User[]; stores?: Store[]; products?: Product[]; orders?: Order[] }): Promise<any> {
+    if (!this.db) throw new Error('Firestore no está configurado');
+    const names = ['users', 'stores', 'products', 'orders', 'stores_backup', 'users_backup', 'stores_backup_history', 'users_backup_history'] as const;
+    const snaps = await Promise.all(names.map(name => getDocs(collection(this.db!, name))));
+    const byName: Record<string, any> = {};
+    names.forEach((name, i) => { byName[name] = snaps[i]; });
+
+    const users = byName.users.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    const stores = byName.stores.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    const products = byName.products.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    const orders = byName.orders.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    const userIds = new Set(users.map((u: any) => u.id));
+    const storeIds = new Set(stores.map((s: any) => s.id));
+    const storeOwnerIds = new Set(stores.map((s: any) => s.ownerId || s.owner_id).filter(Boolean));
+
+    const storeWithoutOwner = stores
+      .filter((s: any) => (s.ownerId || s.owner_id) && !userIds.has(s.ownerId || s.owner_id))
+      .map((s: any) => s.id);
+    const storeUsersWithoutStore = users
+      .filter((u: any) => u.role === 'STORE_OWNER' && u.storeId && !storeIds.has(u.storeId))
+      .map((u: any) => u.id);
+    const productsWithoutStore = products.filter((p: any) => p.storeId && !storeIds.has(p.storeId)).map((p: any) => p.id);
+    const ordersWithoutStore = orders.filter((o: any) => o.storeId && !storeIds.has(o.storeId)).map((o: any) => o.id);
+    const ordersWithoutCustomer = orders.filter((o: any) => o.customerId && !userIds.has(o.customerId)).map((o: any) => o.id);
+
+    const duplicateEmails = Array.from(users.reduce((m: Map<string, number>, u: any) => {
+      const key = String(u.email || '').trim().toLowerCase();
+      if (key) m.set(key, (m.get(key) || 0) + 1);
+      return m;
+    }, new Map<string, number>()).entries()).filter(([, count]) => count > 1).map(([email]) => email);
+
+    const memoryCounts = memoryState ? {
+      users: memoryState.users?.length || 0,
+      stores: memoryState.stores?.length || 0,
+      products: memoryState.products?.length || 0,
+      orders: memoryState.orders?.length || 0
+    } : undefined;
+    const firestoreCounts = { users: users.length, stores: stores.length, products: products.length, orders: orders.length };
+
+    return {
+      mode: 'READ_ONLY',
+      databaseId: this.databaseId,
+      checkedAt: new Date().toISOString(),
+      firestoreCounts,
+      memoryCounts,
+      countDifferences: memoryCounts ? {
+        users: memoryCounts.users - firestoreCounts.users,
+        stores: memoryCounts.stores - firestoreCounts.stores,
+        products: memoryCounts.products - firestoreCounts.products,
+        orders: memoryCounts.orders - firestoreCounts.orders
+      } : undefined,
+      backups: {
+        storesCurrent: byName.stores_backup.size,
+        usersCurrent: byName.users_backup.size,
+        storesHistory: byName.stores_backup_history.size,
+        usersHistory: byName.users_backup_history.size
+      },
+      integrity: {
+        duplicateUserEmails: duplicateEmails,
+        storesWithoutExistingOwner: storeWithoutOwner,
+        storeOwnersWithoutExistingStore: storeUsersWithoutStore,
+        productsWithoutExistingStore: productsWithoutStore,
+        ordersWithoutExistingStore: ordersWithoutStore,
+        ordersWithoutExistingCustomer: ordersWithoutCustomer
+      },
+      healthy: duplicateEmails.length === 0 && storeWithoutOwner.length === 0 && storeUsersWithoutStore.length === 0 &&
+        productsWithoutStore.length === 0 && ordersWithoutStore.length === 0 && ordersWithoutCustomer.length === 0
+    };
+  }
+
   public async deleteStore(storeId: string): Promise<void> {
     if (!this.db) return;
     try {
