@@ -30,6 +30,8 @@ export const PersistenceSettingsTab: React.FC = () => {
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [isSyncingCloud, setIsSyncingCloud] = useState(false);
   const [restoringFile, setRestoringFile] = useState<string | null>(null);
+  const [diagnostic, setDiagnostic] = useState<any>(null);
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
 
   const fetchStatus = async () => {
     try {
@@ -63,6 +65,23 @@ export const PersistenceSettingsTab: React.FC = () => {
       showNotification(err.message || 'Error de conexión con Google Cloud', 'error');
     } finally {
       setIsSyncingCloud(false);
+    }
+  };
+
+  const handleFirestoreDiagnostic = async () => {
+    try {
+      setIsDiagnosing(true);
+      const res = await api.getFirestoreDiagnostic();
+      if (res?.success) {
+        setDiagnostic(res.diagnostic);
+        showNotification(res.diagnostic?.healthy ? 'Diagnóstico completado: integridad correcta.' : 'Diagnóstico completado: se detectaron diferencias que deben revisarse.', res.diagnostic?.healthy ? 'success' : 'error');
+      } else {
+        showNotification('No se pudo ejecutar el diagnóstico de Firestore', 'error');
+      }
+    } catch (err: any) {
+      showNotification(err.message || 'Error ejecutando diagnóstico de Firestore', 'error');
+    } finally {
+      setIsDiagnosing(false);
     }
   };
 
@@ -228,6 +247,50 @@ export const PersistenceSettingsTab: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Firestore read-only integrity diagnostic */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-2xs p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-extrabold text-stone-900 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-blue-600" />
+              <span>Diagnóstico de Integridad de Firestore</span>
+            </h3>
+            <p className="text-xs text-stone-500 mt-1">Consulta la base real en modo solo lectura. No crea, modifica ni elimina registros.</p>
+          </div>
+          <button onClick={handleFirestoreDiagnostic} disabled={isDiagnosing}
+            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 disabled:opacity-50">
+            <Database className="w-4 h-4" />
+            <span>{isDiagnosing ? 'Analizando Firestore...' : 'Ejecutar Diagnóstico'}</span>
+          </button>
+        </div>
+        {diagnostic && (
+          <div className="space-y-4">
+            <div className={`rounded-xl border p-4 ${diagnostic.healthy ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+              <div className="font-black text-sm">{diagnostic.healthy ? 'Integridad correcta' : 'Se detectaron diferencias'}</div>
+              <div className="text-xs mt-1">Base: {diagnostic.databaseId} · {new Date(diagnostic.checkedAt).toLocaleString()}</div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              {['users','stores','products','orders'].map(key => (
+                <div key={key} className="rounded-xl bg-stone-50 border border-stone-100 p-3">
+                  <div className="uppercase text-[10px] font-bold text-stone-500">{key}</div>
+                  <div className="font-black text-lg text-stone-900">{diagnostic.firestoreCounts?.[key] ?? 0}</div>
+                  <div className="text-[10px] text-stone-500">Firestore · Memoria {diagnostic.memoryCounts?.[key] ?? 0}</div>
+                </div>
+              ))}
+            </div>
+            <div className="text-xs bg-stone-50 border border-stone-100 rounded-xl p-4 space-y-1">
+              <div className="font-bold text-stone-800">Respaldos: {diagnostic.backups?.storesCurrent ?? 0} tiendas / {diagnostic.backups?.usersCurrent ?? 0} usuarios · Históricos: {diagnostic.backups?.storesHistory ?? 0} / {diagnostic.backups?.usersHistory ?? 0}</div>
+              <div>Correos duplicados: {diagnostic.integrity?.duplicateUserEmails?.length ?? 0}</div>
+              <div>Tiendas sin propietario válido: {diagnostic.integrity?.storesWithoutExistingOwner?.length ?? 0}</div>
+              <div>Propietarios sin tienda: {diagnostic.integrity?.storeOwnersWithoutExistingStore?.length ?? 0}</div>
+              <div>Productos sin tienda: {diagnostic.integrity?.productsWithoutExistingStore?.length ?? 0}</div>
+              <div>Pedidos sin tienda: {diagnostic.integrity?.ordersWithoutExistingStore?.length ?? 0}</div>
+              <div>Pedidos sin cliente: {diagnostic.integrity?.ordersWithoutExistingCustomer?.length ?? 0}</div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Persistence Metrics */}
