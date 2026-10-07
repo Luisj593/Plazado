@@ -518,17 +518,23 @@ async function startServer() {
   });
 
   app.post('/api/categories', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const cat = db.addCategory(req.body);
     res.json({ success: true, category: cat, version: db.getVersion() });
   });
 
   app.put('/api/categories/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const cat = db.updateCategory(req.params.id, req.body);
     if (!cat) return res.status(404).json({ success: false, message: 'Category not found' });
     res.json({ success: true, category: cat, version: db.getVersion() });
   });
 
   app.delete('/api/categories/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const result = db.deleteCategory(req.params.id);
     if (!result.success) {
       return res.status(400).json({ success: false, message: result.message || 'No se pudo eliminar la categoría' });
@@ -537,6 +543,8 @@ async function startServer() {
   });
 
   app.post('/api/categories/merge', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const { sourceId, targetId } = req.body;
     const ok = db.mergeCategories(sourceId, targetId);
     res.json({ success: ok, version: db.getVersion() });
@@ -674,6 +682,8 @@ async function startServer() {
   });
 
   app.post('/api/advertising/campaigns', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     try {
       const ad = db.addAdvertisement(req.body);
       res.json({ success: true, ad, version: db.getVersion() });
@@ -683,6 +693,8 @@ async function startServer() {
   });
 
   app.put('/api/advertising/campaigns/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     try {
       const ad = db.updateAdvertisement(req.params.id, req.body);
       if (!ad) return res.status(404).json({ success: false, message: 'Publicidad no encontrada' });
@@ -693,11 +705,15 @@ async function startServer() {
   });
 
   app.patch('/api/advertising/campaigns/:id/toggle', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const ok = db.toggleAdvertisementStatus(req.params.id);
     res.json({ success: ok, version: db.getVersion() });
   });
 
   app.delete('/api/advertising/campaigns/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const ok = db.deleteAdvertisement(req.params.id);
     res.json({ success: ok, version: db.getVersion() });
   });
@@ -707,6 +723,8 @@ async function startServer() {
   });
 
   app.post('/api/advertising/placements', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const placement = db.saveAdPlacement(req.body);
     res.json({ success: true, placement, version: db.getVersion() });
   });
@@ -729,17 +747,23 @@ async function startServer() {
   });
 
   app.post('/api/banners', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const b = db.addBanner(req.body);
     res.json({ success: true, banner: b, version: db.getVersion() });
   });
 
   app.put('/api/banners/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const b = db.updateBanner(req.params.id, req.body);
     if (!b) return res.status(404).json({ success: false, message: 'Banner not found' });
     res.json({ success: true, banner: b, version: db.getVersion() });
   });
 
   app.delete('/api/banners/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const ok = db.deleteBanner(req.params.id);
     res.json({ success: ok, version: db.getVersion() });
   });
