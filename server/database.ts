@@ -458,8 +458,9 @@ class GlobalDatabase {
       console.log('[GlobalDatabase] Connecting directly to Firestore Production Database (dazzling-spirit-271219)...');
       const firestoreData = await firestoreRepo.loadFullState();
       if (!firestoreData) {
-        console.warn('[GlobalDatabase] Firestore state returned null, keeping current state.');
-        return;
+        this.firestoreSyncStatus = 'ERROR';
+        console.error('[GlobalDatabase] Firestore state unavailable; memory users were NOT synchronized.');
+        throw new Error('No se pudo leer el estado completo de Firestore. No se modificaron usuarios.');
       }
 
       let updated = false;
