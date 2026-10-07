@@ -187,16 +187,15 @@ async function startServer() {
   }
 
   console.log('[PlazaDO] Initializing Firestore Production synchronization as primary source of truth...');
+  // Do not race Firestore against a timeout and then start Cloud SQL concurrently.
+  // That race allowed Cloud SQL to re-inject stale users while Firestore was still loading.
   try {
-    await Promise.race([
-      db.initFirestoreSync(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore initial load timeout (15s) - Continuing with cached production state and syncing in background')), 15000))
-    ]);
+    await db.initFirestoreSync();
   } catch (err: any) {
     console.warn('[PlazaDO] Firestore sync warning on startup:', err.message || err);
   }
 
-  console.log('[PlazaDO] Initializing Cloud SQL synchronization in background...');
+  console.log('[PlazaDO] Initializing Cloud SQL synchronization after Firestore authority is established...');
   db.initCloudSqlSync().catch((err: any) => {
     console.error('[PlazaDO] Cloud SQL sync background warning:', err);
   });
