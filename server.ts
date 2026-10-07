@@ -432,8 +432,18 @@ async function startServer() {
   });
 
   app.post('/api/products', (req: Request, res: Response) => {
+    const caller = getAuthenticatedUser(req);
+    if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
+    if (caller.role !== 'SUPER_ADMIN' && caller.role !== 'STORE_OWNER') {
+      return res.status(403).json({ success: false, message: 'No autorizado para crear productos' });
+    }
     try {
-      const productData = req.body;
+      const productData = { ...req.body };
+      if (caller.role === 'STORE_OWNER') {
+        if (!caller.storeId) return res.status(403).json({ success: false, message: 'Usuario sin tienda asignada' });
+        // Never trust a storeId supplied by the client.
+        productData.storeId = caller.storeId;
+      }
       const newProd = db.addProduct(productData);
       res.json({ success: true, product: newProd, version: db.getVersion() });
     } catch (err: any) {
@@ -442,17 +452,34 @@ async function startServer() {
   });
 
   app.put('/api/products/:id', (req: Request, res: Response) => {
-    const updated = db.updateProduct(req.params.id, req.body);
-    if (!updated) return res.status(404).json({ success: false, message: 'Product not found' });
+    const caller = getAuthenticatedUser(req);
+    if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
+    const existing = db.getProducts().find((p: any) => p.id === req.params.id);
+    if (!existing) return res.status(404).json({ success: false, message: 'Product not found' });
+    if (caller.role !== 'SUPER_ADMIN' && (caller.role !== 'STORE_OWNER' || caller.storeId !== existing.storeId)) {
+      return res.status(403).json({ success: false, message: 'No puedes modificar productos de otra tienda' });
+    }
+    const safeBody = { ...req.body };
+    if (caller.role !== 'SUPER_ADMIN') safeBody.storeId = existing.storeId;
+    const updated = db.updateProduct(req.params.id, safeBody);
     res.json({ success: true, product: updated, version: db.getVersion() });
   });
 
   app.delete('/api/products/:id', (req: Request, res: Response) => {
+    const caller = getAuthenticatedUser(req);
+    if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
+    const existing = db.getProducts().find((p: any) => p.id === req.params.id);
+    if (!existing) return res.status(404).json({ success: false, message: 'Product not found' });
+    if (caller.role !== 'SUPER_ADMIN' && (caller.role !== 'STORE_OWNER' || caller.storeId !== existing.storeId)) {
+      return res.status(403).json({ success: false, message: 'No puedes eliminar productos de otra tienda' });
+    }
     const ok = db.deleteProduct(req.params.id);
     res.json({ success: ok, version: db.getVersion() });
   });
 
   app.post('/api/products/clean-test', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const cleaned = db.cleanTestProducts();
     res.json({ success: true, cleanedCount: cleaned, version: db.getVersion() });
   });
