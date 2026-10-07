@@ -2833,6 +2833,10 @@ class GlobalDatabase {
     this.addAuditLog('USER_CREATED', user.id, undefined, `Usuario creado: ${user.name} (${user.email})`);
     this.commit();
 
+    // Firestore is the production source of truth: every new account must be
+    // persisted there immediately so it survives Railway redeployments.
+    firestoreRepo.saveUser(user).catch(err => console.error('[Firestore] Error syncing createUser:', err));
+
     cloudSqlRepo.createUser({
       id: user.id,
       name: user.name,
