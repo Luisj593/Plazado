@@ -189,6 +189,43 @@ export class FirestoreRepository {
     }
   }
 
+  // Keep exactly five recoverable versions per production record:
+  // 1 current backup + up to 4 historical backups. Oldest history is deleted automatically.
+  private async rotateBackupVersion(type: 'store' | 'user', recordId: string, nextData: any): Promise<void> {
+    if (!this.db) return;
+    const currentCollection = type === 'store' ? 'stores_backup' : 'users_backup';
+    const historyCollection = type === 'store' ? 'stores_backup_history' : 'users_backup_history';
+    const currentRef = doc(this.db, currentCollection, recordId);
+    const currentSnap = await getDoc(currentRef);
+    const now = new Date().toISOString();
+
+    if (currentSnap.exists()) {
+      const previous = currentSnap.data() as any;
+      const versionTime = previous.backupUpdatedAt || previous.updatedAt || now;
+      const historyId = `${recordId}__${Date.now()}__${crypto.randomUUID()}`;
+      await setDoc(doc(this.db, historyCollection, historyId), {
+        ...previous,
+        originalRecordId: recordId,
+        backupCreatedAt: versionTime
+      });
+
+      const historySnap = await getDocs(collection(this.db, historyCollection));
+      const versions = historySnap.docs
+        .filter(d => (d.data() as any).originalRecordId === recordId)
+        .sort((a, b) => String((b.data() as any).backupCreatedAt || '').localeCompare(String((a.data() as any).backupCreatedAt || '')));
+
+      // Current backup + four history versions = five total copies.
+      for (const oldVersion of versions.slice(4)) {
+        await deleteDoc(oldVersion.ref);
+      }
+    }
+
+    await setDoc(currentRef, {
+      ...nextData,
+      backupUpdatedAt: now
+    }, { merge: false });
+  }
+
   // --- AUTOMATIC PRODUCTION BACKUP / RECOVERY ---
   // Durable safety copies live in separate Firestore collections and are never used
   // to replace valid live records. Missing live stores/users are restored by ID only.
@@ -226,17 +263,11 @@ export class FirestoreRepository {
 
       // Then refresh backups from every currently valid live record.
       for (const liveDoc of storesSnap.docs) {
-        await setDoc(doc(this.db, 'stores_backup', liveDoc.id), {
-          ...liveDoc.data(),
-          backupUpdatedAt: now
-        }, { merge: true });
+        await this.rotateBackupVersion('store', liveDoc.id, liveDoc.data());
         result.backedUpStores++;
       }
       for (const liveDoc of usersSnap.docs) {
-        await setDoc(doc(this.db, 'users_backup', liveDoc.id), {
-          ...liveDoc.data(),
-          backupUpdatedAt: now
-        }, { merge: true });
+        await this.rotateBackupVersion('user', liveDoc.id, liveDoc.data());
         result.backedUpUsers++;
       }
 
@@ -253,16 +284,12 @@ export class FirestoreRepository {
     if (!this.db || !store.id) return;
     try {
       const ref = doc(this.db, 'stores', store.id);
-      const backupRef = doc(this.db, 'stores_backup', store.id);
       const protectedStore = {
         ...store,
         updatedAt: new Date().toISOString()
       };
       await setDoc(ref, protectedStore, { merge: true });
-      await setDoc(backupRef, {
-        ...protectedStore,
-        backupUpdatedAt: new Date().toISOString()
-      }, { merge: true });
+      await this.rotateBackupVersion('store', store.id, protectedStore);
     } catch (e) {
       console.error(`[FirestoreRepository] Error saving store ${store.id}:`, e);
     }
@@ -318,16 +345,12 @@ export class FirestoreRepository {
     if (!this.db || !user.id) return;
     try {
       const ref = doc(this.db, 'users', user.id);
-      const backupRef = doc(this.db, 'users_backup', user.id);
       const protectedUser = {
         ...user,
         updatedAt: new Date().toISOString()
       };
       await setDoc(ref, protectedUser, { merge: true });
-      await setDoc(backupRef, {
-        ...protectedUser,
-        backupUpdatedAt: new Date().toISOString()
-      }, { merge: true });
+      await this.rotateBackupVersion('user', user.id, protectedUser);
     } catch (e) {
       console.error(`[FirestoreRepository] Error saving user ${user.id}:`, e);
     }
