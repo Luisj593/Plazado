@@ -623,7 +623,7 @@ class GlobalDatabase {
       // 2. USERS: Firestore is authoritative in production.
       // Cloud SQL may keep a secondary copy, but it must never re-inject stale users
       // into application memory after Firestore has completed its startup load.
-      if (this.firestoreSyncStatus !== 'CONNECTED') {
+      if (!process.env.FIREBASE_SERVICE_ACCOUNT && !process.env.FIREBASE_PROJECT_ID) {
         for (const u of this.memoryData.users) {
           if (!sqlUsers.some(su => su.id === u.id || (su.email && su.email.toLowerCase() === u.email.toLowerCase()))) {
             await cloudSqlRepo.createUser({
