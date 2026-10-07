@@ -465,6 +465,10 @@ export const api = {
     return request('/api/admin/persistence/status');
   },
 
+  async getFirestoreDiagnostic(): Promise<{ success: boolean; diagnostic: any }> {
+    return request('/api/admin/persistence/firestore-diagnostic');
+  },
+
   async syncFirestore(): Promise<{ success: boolean; message: string; persistence: any }> {
     return request('/api/admin/persistence/sync-firestore', { method: 'POST' });
   },
