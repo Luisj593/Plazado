@@ -2703,6 +2703,31 @@ async function startServer() {
     }
   });
 
+  // One-time controlled reconciliation: persist only users that already exist in
+  // application memory but are missing from Firestore. Never deletes or overwrites
+  // existing Firestore users. Super Admin only.
+  app.post('/api/admin/persistence/reconcile-missing-users', async (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+    try {
+      const diagnostic = await firestoreRepo.getIntegrityDiagnostic({ users: db.getUsers() });
+      if (diagnostic.unavailableCoreCollections?.includes('users')) {
+        return res.status(503).json({ success: false, message: 'No se pudo leer la colección users de Firestore.' });
+      }
+      const firestoreState = await firestoreRepo.loadFullState();
+      if (!firestoreState) return res.status(503).json({ success: false, message: 'Firestore no disponible.' });
+      const firestoreIds = new Set(firestoreState.users.map((u: any) => u.id));
+      const firestoreEmails = new Set(firestoreState.users.map((u: any) => String(u.email || '').toLowerCase()));
+      const missing = db.getUsers().filter((u: any) =>
+        u.id && !firestoreIds.has(u.id) && !firestoreEmails.has(String(u.email || '').toLowerCase())
+      );
+      for (const user of missing) await firestoreRepo.saveUser(user);
+      res.json({ success: true, persisted: missing.length, userIds: missing.map((u: any) => u.id) });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'No fue posible reconciliar usuarios.' });
+    }
+  });
+
   // --- DEDICATED STORES DATABASE REGISTRY STATUS ---
   app.get('/api/admin/stores-database/status', (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
