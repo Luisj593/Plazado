@@ -2120,19 +2120,21 @@ async function startServer() {
       }
 
       const updateData = { ...req.body };
+      // Credential changes use the dedicated password endpoint, which verifies the current password.
+      delete updateData.password;
+      delete updateData.newPassword;
+      delete updateData.passwordHash;
+      delete updateData.verification;
+      delete updateData.isEmailVerified;
+      delete updateData.storeId;
+      delete updateData.createdAt;
       if (caller.role !== 'SUPER_ADMIN') {
         delete updateData.role;
         delete updateData.isApprovedByAdmin;
         delete updateData.adminApprovalStatus;
-      }
-
-      if (updateData.password || updateData.newPassword) {
-        const pass = (updateData.password || updateData.newPassword).trim();
-        if (pass.length >= 6) {
-          updateData.passwordHash = await hashPassword(pass);
-        }
-        delete updateData.password;
-        delete updateData.newPassword;
+        delete updateData.isKycVerified;
+        delete updateData.kycData;
+        delete updateData.cedulaNumber;
       }
       const updated = db.updateUser(req.params.id, updateData);
       if (!updated) return res.status(404).json({ success: false, message: 'User not found' });
