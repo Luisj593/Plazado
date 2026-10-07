@@ -2714,10 +2714,12 @@ async function startServer() {
       if (diagnostic.unavailableCoreCollections?.includes('users')) {
         return res.status(503).json({ success: false, message: 'No se pudo leer la colección users de Firestore.' });
       }
-      const firestoreState = await firestoreRepo.loadFullState();
-      if (!firestoreState) return res.status(503).json({ success: false, message: 'Firestore no disponible.' });
-      const firestoreIds = new Set(firestoreState.users.map((u: any) => u.id));
-      const firestoreEmails = new Set(firestoreState.users.map((u: any) => String(u.email || '').toLowerCase()));
+      // The diagnostic already read the production users successfully through
+      // Firebase Admin. Reuse its safe identifiers instead of loadFullState(), which
+      // reads many unrelated collections and can fail because one optional collection
+      // is unavailable.
+      const firestoreIds = new Set((diagnostic.userIdentifiers || []).map((u: any) => u.id).filter(Boolean));
+      const firestoreEmails = new Set((diagnostic.userIdentifiers || []).map((u: any) => String(u.email || '').toLowerCase()).filter(Boolean));
       const missing = db.getUsers().filter((u: any) =>
         u.id && !firestoreIds.has(u.id) && !firestoreEmails.has(String(u.email || '').toLowerCase())
       );
