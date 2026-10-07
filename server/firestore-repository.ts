@@ -1,4 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
+import { cert, getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
+import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { 
   getFirestore, 
   collection, 
@@ -38,6 +40,7 @@ export class FirestoreRepository {
   private db: Firestore | null = null;
   private isConfigured: boolean = false;
   private databaseId: string = '';
+  private adminDb: any = null;
 
   constructor() {
     this.initFirebase();
@@ -45,6 +48,25 @@ export class FirestoreRepository {
 
   private initFirebase() {
     try {
+      // Production/Railway: prefer server-side Firebase Admin credentials.
+      // This path is independent from AI Studio and bypasses client Firestore rules,
+      // while IAM limits the service account to the permissions granted in Google Cloud.
+      const serviceAccountRaw = process.env.FIREBASE_SERVICE_ACCOUNT;
+      const envProjectId = process.env.FIREBASE_PROJECT_ID;
+      const envDatabaseId = process.env.FIREBASE_DATABASE_ID;
+      if (serviceAccountRaw && envProjectId && envDatabaseId) {
+        const serviceAccount = JSON.parse(serviceAccountRaw);
+        const adminApp = getAdminApps().length
+          ? getAdminApps()[0]
+          : initializeAdminApp({ credential: cert(serviceAccount), projectId: envProjectId });
+        this.databaseId = envDatabaseId;
+        this.adminDb = getAdminFirestore(adminApp, envDatabaseId);
+        this.db = this.adminDb as any;
+        this.isConfigured = true;
+        console.log(`[FirestoreRepository] Initialized secure Firebase Admin connection to Firestore db: ${this.databaseId}`);
+        return;
+      }
+
       const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
       if (!fs.existsSync(configPath)) {
         console.warn('[FirestoreRepository] firebase-applet-config.json not found.');
