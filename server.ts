@@ -2692,12 +2692,11 @@ async function startServer() {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     try {
-      const state = db.getData();
       const diagnostic = await firestoreRepo.getIntegrityDiagnostic({
-        users: state.users,
-        stores: state.stores,
-        products: state.products,
-        orders: state.orders
+        users: db.getUsers(),
+        stores: db.getStores(),
+        products: db.getProducts(),
+        orders: db.getOrders()
       });
       res.json({ success: true, diagnostic });
     } catch (err: any) {
