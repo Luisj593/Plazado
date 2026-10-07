@@ -151,13 +151,13 @@ export const HomePage: React.FC = () => {
   ];
 
   return (
-    <div className="max-w-[1600px] mx-auto px-0 sm:px-3 lg:px-4 space-y-4 pb-10 sm:pb-14 overflow-x-hidden">
+    <div className="max-w-[1920px] mx-auto px-0 sm:px-3 lg:px-4 space-y-4 pb-10 sm:pb-14 overflow-x-hidden">
 
       {/* ============================================================== */}
       {/* 2. HERO PRINCIPAL — REPLICA VISUAL EXACTA DE LA REFERENCIA     */}
       {/* ============================================================== */}
       <section className="pt-2 sm:pt-4">
-        <div className="relative rounded-none sm:rounded-[20px] overflow-hidden bg-gradient-to-r from-black via-[#170005] to-[#360008] border border-stone-800 shadow-sm min-h-[330px] sm:min-h-[390px] lg:h-[390px] flex items-center">
+        <div className="relative rounded-none sm:rounded-[20px] overflow-hidden bg-gradient-to-r from-black via-[#170005] to-[#360008] border border-stone-800 shadow-sm min-h-[420px] sm:min-h-[500px] lg:h-[560px] xl:h-[620px] flex items-center">
           
           {/* Suaves elementos de luz y ambientación de marca */}
           <div className="absolute -right-16 -top-16 w-80 h-80 bg-rose-100/40 dark:bg-rose-900/20 rounded-full blur-3xl pointer-events-none" />
@@ -218,11 +218,11 @@ export const HomePage: React.FC = () => {
               >
                 
                 {/* Contenedor de la Imagen con badges superpuestos */}
-                <div className="relative w-full h-[240px] sm:h-[340px] lg:h-[390px] overflow-hidden shadow-md border-l border-slate-200/30 dark:border-stone-800 group">
+                <div className="relative w-full h-[300px] sm:h-[420px] lg:h-[560px] xl:h-[620px] overflow-hidden shadow-md border-l border-slate-200/30 dark:border-stone-800 group flex items-center justify-center bg-black/10">
                   <img 
                     src={heroMode === 'slider' && activeHeroProduct && !heroImageError ? activeHeroProduct.images[0] : heroImageSrc} 
                     alt={activeHeroProduct ? activeHeroProduct.name : "Compras en Plazado.com República Dominicana"} 
-                    className="w-full h-full object-cover bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-900 dark:to-black transition-all duration-700"
+                    className="w-full h-full object-contain bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-900 dark:to-black transition-all duration-700"
                     loading="eager"
                     onError={() => setHeroImageError(true)}
                   />
