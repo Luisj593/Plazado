@@ -403,8 +403,8 @@ async function startServer() {
         return res.status(400).json({ success: false, message: 'Debes ingresar un correo electrónico válido.' });
       }
 
-      if (!password || password.length < 6) {
-        return res.status(400).json({ success: false, message: 'La contraseña debe contener al menos 6 caracteres.' });
+      if (!password || password.length < 10 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) {
+        return res.status(400).json({ success: false, message: 'La contraseña debe tener al menos 10 caracteres e incluir mayúscula, minúscula y número.' });
       }
 
       const passHash = await hashPassword(password);
@@ -487,6 +487,9 @@ async function startServer() {
   // --- AI PRODUCT DESCRIPTION AGENT ---
   app.post('/api/ai/generate-product-description', async (req: Request, res: Response) => {
     try {
+      const caller = getAuthenticatedUser(req);
+      if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
+      if (caller.role !== 'SUPER_ADMIN' && caller.role !== 'STORE_OWNER') return res.status(403).json({ success: false, message: 'Acceso denegado' });
       const { productName, categoryName, storeName, price, promoPrice, tone, keywords } = req.body;
       if (!productName || typeof productName !== 'string' || !productName.trim()) {
         return res.status(400).json({ success: false, message: 'El nombre del producto es obligatorio para generar la descripción.' });
@@ -629,6 +632,8 @@ async function startServer() {
 
   // --- CONFIGURACIÓN DE PAGOS & PROVEEDORES CENTRALES (PLAZADO.COM) ---
   app.get('/api/payment-gateways', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     res.json({ success: true, gateways: db.getPaymentGateways(true) });
   });
 
@@ -2130,19 +2135,8 @@ async function startServer() {
   // Customer & Store: Submit/Update KYC identity verification documents (Cédula & Biometric Selfie)
   app.post('/api/user/kyc', async (req: Request, res: Response) => {
     try {
-      const { userId, cedulaNumber, cedulaFrontUrl, selfieUrl, biometricScore } = req.body;
-      let user: User | null = null;
-      const authHeader = req.headers.authorization;
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        const token = authHeader.slice(7).trim();
-        const session = verifySessionToken(token);
-        if (session) {
-          user = db.getUserById(session.userId) || null;
-        }
-      }
-      if (!user && userId) {
-        user = db.getUserById(userId) || null;
-      }
+      const { cedulaNumber, cedulaFrontUrl, selfieUrl, biometricScore } = req.body;
+      const user = getAuthenticatedUser(req);
       if (!user) {
         return res.status(401).json({ success: false, message: 'Usuario no identificado o sesión no válida.' });
       }
@@ -2195,8 +2189,8 @@ async function startServer() {
 
       const { password, newPassword, currentPassword } = req.body;
       const targetPass = (newPassword || password || '').trim();
-      if (!targetPass || targetPass.length < 6) {
-        return res.status(400).json({ success: false, message: 'La nueva contraseña debe contener al menos 6 caracteres.' });
+      if (!targetPass || targetPass.length < 10 || !/[A-Z]/.test(targetPass) || !/[a-z]/.test(targetPass) || !/\d/.test(targetPass)) {
+        return res.status(400).json({ success: false, message: 'La nueva contraseña debe tener al menos 10 caracteres e incluir mayúscula, minúscula y número.' });
       }
 
       const existingUser = db.getUsers().find(u => u.id === req.params.id);
@@ -2303,10 +2297,12 @@ async function startServer() {
   });
 
   // Self-service store deletion for merchants
-  app.post('/api/stores/:id/delete-by-owner', (req: Request, res: Response) => {
+  app.post('/api/stores/:id/delete-by-owner', async (req: Request, res: Response) => {
     try {
       const storeId = req.params.id;
-      const { ownerId, confirmationText } = req.body;
+      const { confirmationText, password } = req.body;
+      const user = getAuthenticatedUser(req);
+      if (!user) return res.status(401).json({ success: false, message: 'Usuario no autenticado.' });
 
       if (confirmationText !== 'ELIMINAR') {
         return res.status(400).json({ success: false, message: 'Debes escribir ELIMINAR para confirmar la eliminación.' });
@@ -2317,13 +2313,13 @@ async function startServer() {
         return res.status(404).json({ success: false, message: 'Tienda no encontrada.' });
       }
 
-      const user = db.getUsers().find(u => u.id === ownerId);
-      if (!user) {
-        return res.status(401).json({ success: false, message: 'Usuario no autenticado.' });
-      }
-
-      if (user.role !== 'SUPER_ADMIN' && store.ownerId !== ownerId && user.storeId !== storeId) {
+      if (user.role !== 'SUPER_ADMIN' && store.ownerId !== user.id && user.storeId !== storeId) {
         return res.status(403).json({ success: false, message: 'No tienes permisos para eliminar esta tienda.' });
+      }
+      if (user.role !== 'SUPER_ADMIN') {
+        if (!password || !user.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
+          return res.status(401).json({ success: false, message: 'Contraseña incorrecta. No se eliminó la tienda.' });
+        }
       }
 
       const storeName = store.name;
