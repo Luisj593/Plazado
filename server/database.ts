@@ -2128,7 +2128,9 @@ class GlobalDatabase {
     if (!order) return { success: false, message: 'Pedido no encontrado' };
 
     if (status === 'DELIVERED') {
-      if (order.deliveryConfirmationCode && confirmationCode && confirmationCode.trim().toUpperCase() !== order.deliveryConfirmationCode.toUpperCase()) {
+      if (order.status === 'DELIVERED') return { success: true, message: 'Entrega ya confirmada; sin movimientos adicionales.', order };
+      if (order.status === 'CANCELLED') return { success: false, message: 'No se puede entregar un pedido cancelado.' };
+      if (!order.deliveryConfirmationCode || !confirmationCode || confirmationCode.trim().toUpperCase() !== order.deliveryConfirmationCode.trim().toUpperCase()) {
         return { success: false, message: 'Código secreto de entrega incorrecto.' };
       }
 
