@@ -569,9 +569,11 @@ class GlobalDatabase {
         this.memoryData.categories = mergedCategories;
         updated = true;
       }
-      if (firestoreData.users && firestoreData.users.length > 0) {
-        console.log(`[GlobalDatabase] Loaded ${firestoreData.users.length} official users from Firestore.`);
-        this.memoryData.users = firestoreData.users;
+      if (Array.isArray(firestoreData.users)) {
+        console.log(`[GlobalDatabase] Firestore is authoritative for users: ${firestoreData.users.length} users loaded.`);
+        // Firestore is the persistent source of truth. Never let an ephemeral Railway
+        // snapshot silently replace authenticated Firestore users after a redeploy.
+        this.memoryData.users = [...firestoreData.users];
         updated = true;
       }
       if (firestoreData.orders && firestoreData.orders.length > 0) {
