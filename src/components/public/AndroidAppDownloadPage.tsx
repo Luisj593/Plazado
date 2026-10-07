@@ -44,13 +44,7 @@ export const AndroidAppDownloadPage: React.FC = () => {
       triggerFileDownload(appConfig.apkUrl, appConfig.apkFileName || `PlazaDO-v${appConfig.versionName}.apk`);
       showNotification(`Descargando ${appConfig.apkFileName || 'PlazaDO Android APK'}...`);
     } else {
-      // Fallback notification or sample download
-      showNotification('Iniciando descarga del instalador oficial de PlazaDO para Android...');
-      // Generate standard APK manifest stub
-      const dummyApkContent = `PlazaDO Android Package Installer v${appConfig.versionName}\nPackage: ${appConfig.packageName}\nPlazaDO Soluciones Tecnologicas SRL (RNC: ${systemSettings.rnc})\nDescargado desde https://plazado.com`;
-      const blob = new Blob([dummyApkContent], { type: 'application/vnd.android.package-archive' });
-      const url = URL.createObjectURL(blob);
-      triggerFileDownload(url, appConfig.apkFileName || `PlazaDO-v${appConfig.versionName}.apk`);
+      showNotification('La aplicación Android todavía no está disponible. El APK se publicará aquí cuando esté compilado y verificado.', 'info');
     }
   };
 
