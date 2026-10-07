@@ -210,8 +210,8 @@ export const AdminDashboard: React.FC = () => {
   // Mailer settings state
   const [mailSenderEmail, setMailSenderEmail] = useState(systemSettings.mailConfig?.senderEmail || 'contacto@plazado.com');
   const [mailSenderName, setMailSenderName] = useState(systemSettings.mailConfig?.senderName || 'PlazaDO.com - Marketplace Dominicano');
-  const [mailSmtpHost, setMailSmtpHost] = useState(systemSettings.mailConfig?.smtpHost || 'smtp.gmail.com');
-  const [mailSmtpPort, setMailSmtpPort] = useState(systemSettings.mailConfig?.smtpPort || 465);
+  const [mailSmtpHost, setMailSmtpHost] = useState(systemSettings.mailConfig?.smtpHost || 'smtp.ionos.com');
+  const [mailSmtpPort, setMailSmtpPort] = useState(systemSettings.mailConfig?.smtpPort || 587);
   const [mailSmtpUser, setMailSmtpUser] = useState(systemSettings.mailConfig?.smtpUser || 'contacto@plazado.com');
   const [mailSmtpPass, setMailSmtpPass] = useState(systemSettings.mailConfig?.smtpPass || '');
   const [showMailPass, setShowMailPass] = useState(false);
@@ -237,8 +237,8 @@ export const AdminDashboard: React.FC = () => {
         testEmail: mailSenderEmail.trim() || 'contacto@plazado.com',
         senderEmail: mailSenderEmail.trim() || 'contacto@plazado.com',
         senderName: mailSenderName.trim() || 'PlazaDO.com - Marketplace Dominicano',
-        smtpHost: mailSmtpHost.trim() || 'smtp.gmail.com',
-        smtpPort: Number(mailSmtpPort) || 465,
+        smtpHost: mailSmtpHost.trim() || 'smtp.ionos.com',
+        smtpPort: Number(mailSmtpPort) || 587,
         smtpUser: mailSmtpUser.trim() || mailSenderEmail.trim() || 'contacto@plazado.com',
         smtpPass: mailSmtpPass.trim()
       });
@@ -354,7 +354,7 @@ export const AdminDashboard: React.FC = () => {
       mailConfig: {
         senderEmail: mailSenderEmail.trim() || 'contacto@plazado.com',
         senderName: mailSenderName.trim() || 'PlazaDO.com - Marketplace Dominicano',
-        smtpHost: mailSmtpHost.trim() || 'smtp.gmail.com',
+        smtpHost: mailSmtpHost.trim() || 'smtp.ionos.com',
         smtpPort: Number(mailSmtpPort) || 465,
         smtpUser: mailSmtpUser.trim() || mailSenderEmail.trim() || 'contacto@plazado.com',
         smtpPass: mailSmtpPass.trim(),
@@ -2818,7 +2818,7 @@ export const AdminDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    setMailSmtpHost('smtp.gmail.com');
+                    setMailSmtpHost('smtp.ionos.com');
                     setMailSmtpPort(465);
                     setMailSenderEmail('contacto@plazado.com');
                     setMailSenderName('PlazaDO.com - Marketplace Dominicano');
@@ -2844,7 +2844,7 @@ export const AdminDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    setMailSmtpHost('smtp.gmail.com');
+                    setMailSmtpHost('smtp.ionos.com');
                     setMailSmtpPort(587);
                     setMailSenderEmail('contacto@plazado.com');
                     setMailSenderName('PlazaDO.com - Marketplace Dominicano');
@@ -2923,13 +2923,13 @@ export const AdminDashboard: React.FC = () => {
                     placeholder="contacto@plazado.com"
                   />
                   <span className="text-[10px] text-stone-400 mt-1 block">
-                    Usuario de conexión SMTP (ej: contacto@plazado.com o cuenta Google).
+                    Usuario de conexión SMTP de IONOS (ej: contacto@plazado.com).
                   </span>
                 </div>
 
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">
-                    Contraseña SMTP / Contraseña de Aplicación de Google
+                    Contraseña SMTP IONOS
                   </label>
                   <div className="relative">
                     <input
@@ -2948,7 +2948,7 @@ export const AdminDashboard: React.FC = () => {
                     </button>
                   </div>
                   <span className="text-[10px] text-stone-400 mt-1 block">
-                    Para Gmail: Genera una "Contraseña de aplicaciones" de 16 caracteres en Google &gt; Seguridad &gt; Verificación en 2 pasos &gt; Contraseñas de aplicaciones.
+                    Contraseña de la cuenta de correo IONOS utilizada para autenticar el envío SMTP.
                   </span>
                 </div>
 
@@ -2958,7 +2958,7 @@ export const AdminDashboard: React.FC = () => {
                     <div>
                       <p className="font-bold text-xs text-stone-800">Prueba de Entrega SMTP</p>
                       <p className="text-[11px] text-stone-500">
-                        Dispara un código de prueba a {mailSenderEmail} para verificar que Google acepte la conexión.
+                        Dispara un código de prueba a {mailSenderEmail} para verificar que IONOS acepte la conexión.
                       </p>
                     </div>
                     <button
