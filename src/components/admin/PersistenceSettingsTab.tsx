@@ -32,6 +32,7 @@ export const PersistenceSettingsTab: React.FC = () => {
   const [restoringFile, setRestoringFile] = useState<string | null>(null);
   const [diagnostic, setDiagnostic] = useState<any>(null);
   const [isDiagnosing, setIsDiagnosing] = useState(false);
+  const [isReconcilingUsers, setIsReconcilingUsers] = useState(false);
 
   const fetchStatus = async () => {
     try {
@@ -82,6 +83,24 @@ export const PersistenceSettingsTab: React.FC = () => {
       showNotification(err.message || 'Error ejecutando diagnóstico de Firestore', 'error');
     } finally {
       setIsDiagnosing(false);
+    }
+  };
+
+  const handleReconcileMissingUsers = async () => {
+    if (!window.confirm('¿Deseas persistir en Firestore únicamente los usuarios actuales que todavía no existen allí? No se eliminarán ni reemplazarán usuarios existentes.')) return;
+    try {
+      setIsReconcilingUsers(true);
+      const res = await api.reconcileMissingFirestoreUsers();
+      if (res?.success) {
+        showNotification(`Reconciliación completada: ${res.persisted} usuario(s) persistido(s) en Firestore.`);
+        await handleFirestoreDiagnostic();
+      } else {
+        showNotification(res?.message || 'No se pudo reconciliar los usuarios', 'error');
+      }
+    } catch (err: any) {
+      showNotification(err.message || 'Error reconciliando usuarios con Firestore', 'error');
+    } finally {
+      setIsReconcilingUsers(false);
     }
   };
 
@@ -259,11 +278,18 @@ export const PersistenceSettingsTab: React.FC = () => {
             </h3>
             <p className="text-xs text-stone-500 mt-1">Consulta la base real en modo solo lectura. No crea, modifica ni elimina registros.</p>
           </div>
-          <button onClick={handleFirestoreDiagnostic} disabled={isDiagnosing}
-            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 disabled:opacity-50">
-            <Database className="w-4 h-4" />
-            <span>{isDiagnosing ? 'Analizando Firestore...' : 'Ejecutar Diagnóstico'}</span>
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <button onClick={handleReconcileMissingUsers} disabled={isReconcilingUsers || isDiagnosing}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 disabled:opacity-50">
+              <Users className="w-4 h-4" />
+              <span>{isReconcilingUsers ? 'Reconciliando...' : 'Reconciliar usuarios faltantes'}</span>
+            </button>
+            <button onClick={handleFirestoreDiagnostic} disabled={isDiagnosing || isReconcilingUsers}
+              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 disabled:opacity-50">
+              <Database className="w-4 h-4" />
+              <span>{isDiagnosing ? 'Analizando Firestore...' : 'Ejecutar Diagnóstico'}</span>
+            </button>
+          </div>
         </div>
         {diagnostic && (
           <div className="space-y-4">
