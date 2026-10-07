@@ -1038,6 +1038,16 @@ async function startServer() {
   // Webhook centralizado de procesamiento de pagos
   app.post('/api/payments/webhook', (req: Request, res: Response) => {
     try {
+      // Payment providers must authenticate server-to-server webhooks with a shared secret.
+      // Refuse processing in production when the secret has not been configured.
+      const configuredSecret = process.env.PAYMENT_WEBHOOK_SECRET;
+      const providedSecret = req.headers['x-plazado-webhook-secret'];
+      if (process.env.NODE_ENV === 'production' && !configuredSecret) {
+        return res.status(503).json({ success: false, message: 'Webhook de pagos no configurado de forma segura.' });
+      }
+      if (configuredSecret && providedSecret !== configuredSecret) {
+        return res.status(401).json({ success: false, message: 'Firma de webhook inválida.' });
+      }
       const payload = req.body;
       const result = db.processPaymentWebhook(payload);
       res.json({ ...result, version: db.getVersion() });
