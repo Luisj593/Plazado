@@ -1234,7 +1234,7 @@ async function startServer() {
   });
 
   // Active email verification OTP memory cache for non-registered users (guest / pre-register)
-  const activeVerificationCodes = new Map<string, { code: string; expiresAt: number; name?: string; type: string }>();
+  const activeVerificationCodes = new Map<string, { code: string; expiresAt: number; name?: string; type: string; lastSentAt?: number }>();
 
   // Send email confirmation code (pre-register or generic)
   app.post('/api/auth/send-verification-code', async (req: Request, res: Response) => {
@@ -1249,10 +1249,13 @@ async function startServer() {
       const code = crypto.randomInt(100000, 1000000).toString();
       const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes validity
 
-      activeVerificationCodes.set(cleanEmail, { code, expiresAt, name, type });
+      activeVerificationCodes.set(cleanEmail, { code, expiresAt, name, type, lastSentAt: Date.now() });
 
-      // If user already exists in db, update their verification record
+      // Existing verified accounts must never be reverted to unverified by this public endpoint.
       const existingUser = db.getUserByEmail(cleanEmail);
+      if (existingUser?.isEmailVerified) {
+        return res.status(400).json({ success: false, message: 'Esta cuenta ya está verificada. Inicia sesión con tu contraseña.' });
+      }
       if (existingUser) {
         db.setUserVerification(existingUser.id, {
           code,
@@ -1306,7 +1309,7 @@ async function startServer() {
       const existingUser = db.getUserByEmail(cleanEmail);
       const preRecord = activeVerificationCodes.get(cleanEmail);
 
-      const lastSentAt = existingUser?.verification?.lastSentAt || 0;
+      const lastSentAt = existingUser?.verification?.lastSentAt || preRecord?.lastSentAt || 0;
       const elapsedSeconds = Math.floor((Date.now() - lastSentAt) / 1000);
       const COOLDOWN_SECONDS = 60;
 
@@ -1327,7 +1330,8 @@ async function startServer() {
         code: newCode,
         expiresAt,
         name: existingUser?.name || preRecord?.name,
-        type: existingUser?.role === 'STORE_OWNER' ? 'STORE' : 'CUSTOMER'
+        type: existingUser?.role === 'STORE_OWNER' ? 'STORE' : 'CUSTOMER',
+        lastSentAt: Date.now()
       });
 
       if (existingUser) {
@@ -1484,6 +1488,8 @@ async function startServer() {
   // Test SMTP Email configuration from Super Admin
   app.post('/api/admin/mail/test', async (req: Request, res: Response) => {
     try {
+      const admin = getAuthenticatedSuperAdmin(req);
+      if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
       const { testEmail, senderEmail, senderName, smtpHost, smtpPort, smtpUser, smtpPass } = req.body;
       const targetEmail = (testEmail || '').trim().toLowerCase() || 'contacto@plazado.com';
       const config = {
@@ -1721,8 +1727,8 @@ async function startServer() {
       if (!name?.trim() || !email?.trim()) {
         return res.status(400).json({ success: false, message: 'Nombre y correo electrónico son requeridos.' });
       }
-      if (!password || password.length < 6) {
-        return res.status(400).json({ success: false, message: 'La contraseña debe tener un mínimo de 6 caracteres.' });
+      if (!password || password.length < 10 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) {
+        return res.status(400).json({ success: false, message: 'La contraseña debe tener al menos 10 caracteres e incluir mayúscula, minúscula y número.' });
       }
 
       const passHash = await hashPassword(password);
@@ -1810,8 +1816,8 @@ async function startServer() {
       if (!data.name?.trim()) {
         return res.status(400).json({ success: false, message: 'Por favor ingresa tu nombre.' });
       }
-      if (!data.password || data.password.length < 6) {
-        return res.status(400).json({ success: false, message: 'La contraseña debe tener un mínimo de 6 caracteres.' });
+      if (!data.password || data.password.length < 10 || !/[A-Z]/.test(data.password) || !/[a-z]/.test(data.password) || !/\d/.test(data.password)) {
+        return res.status(400).json({ success: false, message: 'La contraseña debe tener al menos 10 caracteres e incluir mayúscula, minúscula y número.' });
       }
       if (data.password !== data.confirmPassword) {
         return res.status(400).json({ success: false, message: 'Las contraseñas no coinciden.' });
@@ -1950,8 +1956,8 @@ async function startServer() {
       if (!data.ownerName?.trim()) {
         return res.status(400).json({ success: false, message: 'Por favor ingresa el nombre del responsable de la tienda.' });
       }
-      if (!data.password || data.password.length < 6) {
-        return res.status(400).json({ success: false, message: 'La contraseña debe contener al menos 6 caracteres.' });
+      if (!data.password || data.password.length < 10 || !/[A-Z]/.test(data.password) || !/[a-z]/.test(data.password) || !/\d/.test(data.password)) {
+        return res.status(400).json({ success: false, message: 'La contraseña debe tener al menos 10 caracteres e incluir mayúscula, minúscula y número.' });
       }
       if (data.password !== data.confirmPassword) {
         return res.status(400).json({ success: false, message: 'Las contraseñas no coinciden.' });
