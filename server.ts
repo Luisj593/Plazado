@@ -1095,7 +1095,23 @@ async function startServer() {
     if (!caller) {
       return res.status(401).json({ success: false, message: 'No autenticado' });
     }
-    const disp = db.createDispute(req.body);
+    const orderId = req.body?.orderId;
+    const order = orderId ? db.getOrders().find((o: any) => o.id === orderId) : null;
+    if (!order) return res.status(400).json({ success: false, message: 'La disputa debe corresponder a una orden válida' });
+    const isAdmin = caller.role === 'SUPER_ADMIN';
+    const isStore = !!caller.storeId && caller.storeId === order.storeId;
+    const isCustomer = caller.id === order.customerId;
+    if (!isAdmin && !isStore && !isCustomer) {
+      return res.status(403).json({ success: false, message: 'No autorizado para abrir una disputa sobre esta orden' });
+    }
+    const safeDispute = {
+      ...req.body,
+      orderId: order.id,
+      storeId: order.storeId,
+      customerId: order.customerId,
+      createdBy: caller.id
+    };
+    const disp = db.createDispute(safeDispute);
     res.json({ success: true, dispute: disp, version: db.getVersion() });
   });
 
@@ -1125,7 +1141,11 @@ async function startServer() {
   });
 
   app.post('/api/reviews', (req: Request, res: Response) => {
-    const rev = db.addReview(req.body);
+    const caller = getAuthenticatedUser(req);
+    if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
+    if (caller.role !== 'CUSTOMER') return res.status(403).json({ success: false, message: 'Solo clientes pueden publicar reseñas' });
+    const safeReview = { ...req.body, userId: caller.id, customerId: caller.id };
+    const rev = db.addReview(safeReview);
     res.json({ success: true, review: rev, version: db.getVersion() });
   });
 
