@@ -1616,6 +1616,37 @@ export const AdminDashboard: React.FC = () => {
 
                       {/* Actions with Horizontal Scrollbar */}
                       <div className="w-full md:w-auto max-w-full md:max-w-[480px] lg:max-w-[560px] xl:max-w-[640px] 2xl:max-w-[740px] flex items-center gap-2 overflow-x-auto pb-2 pt-1 admin-actions-scroll shrink-0">
+                        {/* Envío manual del código de validación junto a la tienda creada */}
+                        {assignedAdmin?.verification?.code && !assignedAdmin.isEmailVerified && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const code = assignedAdmin.verification?.code || '';
+                              const message = `Hola ${assignedAdmin.name},
+
+Gracias por registrar ${st.name} en Plazado.com.
+
+Tu código de validación es: ${code}
+
+Utiliza este código para completar la verificación de tu tienda.
+
+Este código es personal. No lo compartas con terceros.
+
+Saludos,
+Plazado.com
+contacto@plazado.com`;
+                              navigator.clipboard.writeText(message).catch(() => undefined);
+                              window.open('https://email.ionos.com/appsuite/#!!&app=io.ox/mail&folder=default0/INBOX', '_blank', 'noopener,noreferrer');
+                              showNotification(`Código ${code} y mensaje copiados para ${assignedAdmin.email}. Pégalos en Webmail IONOS.`, 'success');
+                            }}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0"
+                            title={`Enviar manualmente el código ${assignedAdmin.verification.code} a ${assignedAdmin.email}`}
+                          >
+                            <Mail className="w-3.5 h-3.5 shrink-0" />
+                            <span>Enviar código {assignedAdmin.verification.code}</span>
+                          </button>
+                        )}
+
                         {/* Super Admin Enter Store Directly to Configure */}
                         <button
                           type="button"
