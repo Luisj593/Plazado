@@ -66,7 +66,7 @@ export async function verifySmtpConnection(config: MailConfig = DEFAULT_MAIL_CON
   if (!pass) {
     return {
       ok: false,
-      message: 'Falta la Contraseña de Aplicación de 16 caracteres de Google (App Password). Genera una en tu cuenta de Google > Seguridad > Contraseñas de aplicaciones y guárdala aquí.'
+      message: 'Falta la contraseña SMTP de IONOS. Genera una en tu cuenta de IONOS > Seguridad > Contraseñas de aplicaciones y guárdala aquí.'
     };
   }
 
@@ -80,9 +80,9 @@ export async function verifySmtpConnection(config: MailConfig = DEFAULT_MAIL_CON
   } catch (err: any) {
     let friendly = err?.message || 'Error de conexión SMTP desconocido';
     if (friendly.includes('530') || friendly.includes('Authentication Required')) {
-      friendly = 'Error 530 de Google: Autenticación requerida. Debes ingresar la contraseña de aplicación de 16 caracteres de tu cuenta Google.';
+      friendly = 'Error 530 de IONOS: Autenticación requerida. Debes ingresar la contraseña de aplicación de 16 caracteres de tu cuenta IONOS.';
     } else if (friendly.includes('535') || friendly.includes('BadCredentials') || friendly.includes('Username and Password not accepted')) {
-      friendly = 'Error 535: Usuario o contraseña de aplicación no aceptada por Google. Verifica que la contraseña de 16 caracteres esté correcta.';
+      friendly = 'Error 535: Usuario o usuario o contraseña SMTP no aceptados por IONOS. Verifica que la contraseña de 16 caracteres esté correcta.';
     }
     return {
       ok: false,
@@ -233,7 +233,7 @@ De: ${senderAddress}
 Para: ${recipientEmail}
 Asunto: ${subject}
 Código generado: ${otpCode}
-Aviso: Falta Contraseña de Aplicación de Google en Super Admin > Configuración.
+Aviso: Falta Contraseña de Aplicación de IONOS en Super Admin > Configuración.
 ===================================================================
     `);
     return {
@@ -241,7 +241,7 @@ Aviso: Falta Contraseña de Aplicación de Google en Super Admin > Configuració
       delivered: false,
       simulated: true,
       reason: 'MISSING_SMTP_PASS',
-      warning: 'Para entrega real en bandeja de entrada Gmail, ingresa la Contraseña de Aplicación de 16 caracteres de Google en el Panel Super Admin > Configuración.',
+      warning: 'Para entrega real en bandeja de entrada Gmail, ingresa la Contraseña de Aplicación de 16 caracteres de IONOS en el Panel Super Admin > Configuración.',
       messageId: `otp-fallback-${Date.now()}`
     };
   }
@@ -279,9 +279,9 @@ Error devuelto por SMTP: ${errMessage}
 
     let warning = 'El servidor SMTP rechazó el envío.';
     if (errMessage.includes('530') || errMessage.includes('Authentication Required')) {
-      warning = 'Google SMTP requiere Contraseña de Aplicación de 16 caracteres (2FA). Configúrala en Super Admin > Configuración.';
+      warning = 'IONOS SMTP requiere Contraseña de Aplicación de 16 caracteres (2FA). Configúrala en Super Admin > Configuración.';
     } else if (errMessage.includes('535') || errMessage.includes('BadCredentials')) {
-      warning = 'Contraseña de aplicación rechazada por Google. Verifica la contraseña de 16 caracteres en Super Admin.';
+      warning = 'Credenciales SMTP rechazadas por IONOS. Verifica la contraseña de 16 caracteres en Super Admin.';
     }
 
     return { 
