@@ -292,6 +292,30 @@ export const UserVerificationsTab: React.FC = () => {
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
+  const openManualVerificationEmail = (item: VerificationItem) => {
+    if (!item.code) {
+      showNotification('Este registro todavía no tiene un código de validación disponible.', 'error');
+      return;
+    }
+    const accountLabel = item.accountType === 'STORE' ? `la tienda ${item.storeName || item.name}` : item.name;
+    const message = `Hola ${item.name},
+
+Gracias por registrarte en Plazado.com.
+
+Tu código de validación es: ${item.code}
+
+Utiliza este código para completar la verificación de ${accountLabel}.
+
+Este código es personal. No lo compartas con terceros.
+
+Saludos,
+Plazado.com
+contacto@plazado.com`;
+    navigator.clipboard.writeText(message).catch(() => undefined);
+    window.open('https://email.ionos.com/appsuite/#!!&app=io.ox/mail&folder=default0/INBOX', '_blank', 'noopener,noreferrer');
+    showNotification(`Mensaje y código ${item.code} copiados. Pégalos en Webmail IONOS para ${item.email}.`, 'success');
+  };
+
   return (
     <div className="space-y-6">
       
@@ -726,6 +750,19 @@ export const UserVerificationsTab: React.FC = () => {
                               title="Rechazar documentación"
                             >
                               <ThumbsDown className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
+                          {/* Envío manual temporal por Webmail IONOS */}
+                          {!item.isEmailVerified && item.code && (
+                            <button
+                              type="button"
+                              onClick={() => openManualVerificationEmail(item)}
+                              className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-xs"
+                              title={`Copiar mensaje con código ${item.code} y abrir Webmail IONOS para ${item.email}`}
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                              <span>Enviar código {item.code}</span>
                             </button>
                           )}
 
