@@ -13,11 +13,11 @@ export interface MailConfig {
 export const DEFAULT_MAIL_CONFIG: MailConfig = {
   senderEmail: process.env.MAIL_SENDER_EMAIL || 'contacto@plazado.com',
   senderName: process.env.MAIL_SENDER_NAME || 'PlazaDO.com - Marketplace Dominicano',
-  smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
-  smtpPort: Number(process.env.SMTP_PORT) || 465,
+  smtpHost: process.env.SMTP_HOST || 'smtp.ionos.com',
+  smtpPort: Number(process.env.SMTP_PORT) || 587,
   smtpUser: process.env.SMTP_USER || process.env.MAIL_SENDER_EMAIL || 'contacto@plazado.com',
   smtpPass: process.env.SMTP_PASS || '',
-  useSsl: true,
+  useSsl: false,
 };
 
 /**
@@ -32,8 +32,8 @@ export function cleanAppPassword(pass?: string): string {
  * Creates a nodemailer transport based on configuration
  */
 function createTransporter(config: MailConfig = DEFAULT_MAIL_CONFIG) {
-  const host = config.smtpHost || 'smtp.gmail.com';
-  const port = Number(config.smtpPort) || 465;
+  const host = config.smtpHost || 'smtp.ionos.com';
+  const port = Number(config.smtpPort) || 587;
   const user = (config.smtpUser || config.senderEmail || 'contacto@plazado.com').trim();
   const rawPass = config.smtpPass || process.env.SMTP_PASS || '';
   const pass = cleanAppPassword(rawPass);
@@ -44,6 +44,7 @@ function createTransporter(config: MailConfig = DEFAULT_MAIL_CONFIG) {
     host,
     port,
     secure: isSecure,
+    requireTLS: port === 587,
     auth: pass ? {
       user,
       pass,
@@ -74,7 +75,7 @@ export async function verifySmtpConnection(config: MailConfig = DEFAULT_MAIL_CON
     await transporter.verify();
     return {
       ok: true,
-      message: `Conexión SMTP exitosa con ${config.smtpHost || 'smtp.gmail.com'}:${config.smtpPort || 465} autenticado como ${config.smtpUser || config.senderEmail}.`
+      message: `Conexión SMTP exitosa con ${config.smtpHost || 'smtp.ionos.com'}:${config.smtpPort || 465} autenticado como ${config.smtpUser || config.senderEmail}.`
     };
   } catch (err: any) {
     let friendly = err?.message || 'Error de conexión SMTP desconocido';
