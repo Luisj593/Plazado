@@ -880,7 +880,14 @@ async function startServer() {
   // Dedicated delivery confirmation endpoint validating the secret delivery code
   app.post('/api/delivery/confirm', async (req: Request, res: Response) => {
     try {
-      const { orderId, deliveryCode, confirmedBy } = req.body;
+      const caller = getAuthenticatedUser(req);
+      if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
+      const { orderId, deliveryCode } = req.body;
+      const deliveryOrder = db.getOrders().find((o: any) => o.id === orderId);
+      if (!deliveryOrder) return res.status(404).json({ success: false, message: 'Pedido no encontrado' });
+      if (caller.role !== 'SUPER_ADMIN' && caller.id !== deliveryOrder.customerId && caller.storeId !== deliveryOrder.storeId) {
+        return res.status(403).json({ success: false, message: 'No autorizado para confirmar esta entrega' });
+      }
       if (!orderId || !deliveryCode) {
         return res.status(400).json({ success: false, message: 'ID de orden y código secreto de entrega requeridos.' });
       }

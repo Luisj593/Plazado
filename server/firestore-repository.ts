@@ -405,7 +405,8 @@ export class FirestoreRepository {
   }
 
   public async saveUser(user: User): Promise<void> {
-    if (!this.db || !user.id) return;
+    if (!this.db) throw new Error('Firestore no disponible al guardar usuario');
+    if (!user.id) throw new Error('ID de usuario requerido para guardar en Firestore');
     try {
       const ref = doc(this.db, 'users', user.id);
       const protectedUser = {
@@ -416,6 +417,7 @@ export class FirestoreRepository {
       await this.rotateBackupVersion('user', user.id, protectedUser);
     } catch (e) {
       console.error(`[FirestoreRepository] Error saving user ${user.id}:`, e);
+      throw e;
     }
   }
 

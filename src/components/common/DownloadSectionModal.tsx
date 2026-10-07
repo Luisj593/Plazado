@@ -106,15 +106,7 @@ export const DownloadSectionModal: React.FC<DownloadSectionModalProps> = ({
       triggerFileDownload(androidConfig.apkUrl, androidConfig.apkFileName || 'PlazaDO-Marketplace.apk');
       showNotification(`Descargando ${androidConfig.apkFileName || 'PlazaDO-Marketplace.apk'}...`);
     } else {
-      // Fallback direct generate apk stub installer package
-      const dummyApkContent = `PlazaDO Android Package Archive (APK)
-Package: ${androidConfig.packageName}
-Version: ${androidConfig.versionName} (${androidConfig.versionCode})
-Plataforma: PlazaDO.com Marketplace República Dominicana`;
-      const blob = new Blob([dummyApkContent], { type: 'application/vnd.android.package-archive' });
-      const blobUrl = URL.createObjectURL(blob);
-      triggerFileDownload(blobUrl, androidConfig.apkFileName || 'PlazaDO-Marketplace.apk');
-      showNotification(`Descargando archivo instalador APK (${androidConfig.apkFileName || 'PlazaDO-Marketplace.apk'})...`);
+      showNotification('El instalador Android todavía no está disponible. Se habilitará la descarga cuando exista un APK real y verificado.', 'info');
     }
   };
 
