@@ -521,9 +521,20 @@ export class FirestoreRepository {
   public async getIntegrityDiagnostic(memoryState?: { users?: User[]; stores?: Store[]; products?: Product[]; orders?: Order[] }): Promise<any> {
     if (!this.db) throw new Error('Firestore no está configurado');
     const names = ['users', 'stores', 'products', 'orders', 'stores_backup', 'users_backup', 'stores_backup_history', 'users_backup_history'] as const;
-    const snaps = await Promise.all(names.map(name => getDocs(collection(this.db!, name))));
+    // Read each collection independently. Optional backup collections may not exist yet
+    // or may have stricter rules; that must not prevent the core production diagnostic.
     const byName: Record<string, any> = {};
-    names.forEach((name, i) => { byName[name] = snaps[i]; });
+    const collectionErrors: Record<string, string> = {};
+    await Promise.all(names.map(async name => {
+      try {
+        byName[name] = await getDocs(collection(this.db!, name));
+      } catch (err: any) {
+        collectionErrors[name] = err?.code || err?.message || 'READ_ERROR';
+        byName[name] = { docs: [], size: 0 };
+      }
+    }));
+    const coreNames = ['users', 'stores', 'products', 'orders'];
+    const unavailableCoreCollections = coreNames.filter(name => collectionErrors[name]);
 
     const users = byName.users.docs.map((d: any) => ({ id: d.id, ...d.data() }));
     const stores = byName.stores.docs.map((d: any) => ({ id: d.id, ...d.data() }));
@@ -575,6 +586,8 @@ export class FirestoreRepository {
         storesHistory: byName.stores_backup_history.size,
         usersHistory: byName.users_backup_history.size
       },
+      collectionErrors,
+      unavailableCoreCollections,
       integrity: {
         duplicateUserEmails: duplicateEmails,
         storesWithoutExistingOwner: storeWithoutOwner,
@@ -583,7 +596,7 @@ export class FirestoreRepository {
         ordersWithoutExistingStore: ordersWithoutStore,
         ordersWithoutExistingCustomer: ordersWithoutCustomer
       },
-      healthy: duplicateEmails.length === 0 && storeWithoutOwner.length === 0 && storeUsersWithoutStore.length === 0 &&
+      healthy: unavailableCoreCollections.length === 0 && duplicateEmails.length === 0 && storeWithoutOwner.length === 0 && storeUsersWithoutStore.length === 0 &&
         productsWithoutStore.length === 0 && ordersWithoutStore.length === 0 && ordersWithoutCustomer.length === 0
     };
   }
