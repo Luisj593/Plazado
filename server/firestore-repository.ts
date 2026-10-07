@@ -549,7 +549,12 @@ export class FirestoreRepository {
     const collectionErrors: Record<string, string> = {};
     await Promise.all(names.map(async name => {
       try {
-        byName[name] = await getDocs(collection(this.db!, name));
+        if (this.adminDb) {
+          const snap = await this.adminDb.collection(name).get();
+          byName[name] = { docs: snap.docs, size: snap.size };
+        } else {
+          byName[name] = await getDocs(collection(this.db!, name));
+        }
       } catch (err: any) {
         collectionErrors[name] = err?.code || err?.message || 'READ_ERROR';
         byName[name] = { docs: [], size: 0 };
