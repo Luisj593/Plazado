@@ -176,6 +176,16 @@ function sanitizeBootstrapForCaller(rawState: any, caller: User | null) {
 }
 
 async function startServer() {
+  // Protect production identities before loading application state.
+  // The recovery routine only recreates records missing by ID; it never overwrites valid live stores/users.
+  console.log('[PlazaDO] Running automatic production backup/recovery protection...');
+  try {
+    const protectionResult = await firestoreRepo.backupAndRecoverProductionRecords();
+    console.log('[PlazaDO] Production records protected:', protectionResult);
+  } catch (err) {
+    console.error('[PlazaDO] Production protection warning:', err);
+  }
+
   console.log('[PlazaDO] Initializing Firestore Production synchronization as primary source of truth...');
   try {
     await Promise.race([
@@ -193,6 +203,14 @@ async function startServer() {
 
   const app = express();
   const PORT = 3000;
+
+  // Keep an independent durable copy refreshed while production is running.
+  // This protects user-created stores/users from accidental disappearance between deployments.
+  setInterval(() => {
+    firestoreRepo.backupAndRecoverProductionRecords().catch(err => {
+      console.error('[PlazaDO] Scheduled production protection warning:', err);
+    });
+  }, 5 * 60 * 1000);
 
   // Middlewares (allow up to 100mb for PDF and APK file uploads)
   app.use(express.json({ limit: '100mb' }));
