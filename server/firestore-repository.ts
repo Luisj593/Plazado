@@ -3,17 +3,43 @@ import { cert, getApps as getAdminApps, initializeApp as initializeAdminApp } fr
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { 
   getFirestore, 
-  collection, 
-  getDocs, 
-  doc, 
-  getDoc, 
-  setDoc, 
-  updateDoc, 
-  deleteDoc, 
+  collection as clientCollection, 
+  getDocs as clientGetDocs, 
+  doc as clientDoc, 
+  getDoc as clientGetDoc, 
+  setDoc as clientSetDoc, 
+  updateDoc as clientUpdateDoc, 
+  deleteDoc as clientDeleteDoc, 
   Firestore 
 } from 'firebase/firestore';
 import fs from 'fs';
 import path from 'path';
+// Compatibility layer: every existing repository operation transparently uses
+// Firebase Admin on Railway, while retaining the legacy client fallback locally.
+const isAdminFirestore = (value: any) => !!value && typeof value.collection === 'function' && typeof value.doc === 'function';
+const isAdminRef = (value: any) => !!value && typeof value.get === 'function' && (typeof value.set === 'function' || typeof value.doc === 'function');
+
+const collection = (db: any, name: string): any =>
+  isAdminFirestore(db) ? db.collection(name) : clientCollection(db, name);
+
+const doc = (db: any, collectionName: string, id: string): any =>
+  isAdminFirestore(db) ? db.doc(`${collectionName}/${id}`) : clientDoc(db, collectionName, id);
+
+const getDocs = async (ref: any): Promise<any> =>
+  isAdminRef(ref) ? ref.get() : clientGetDocs(ref);
+
+const getDoc = async (ref: any): Promise<any> =>
+  isAdminRef(ref) ? ref.get() : clientGetDoc(ref);
+
+const setDoc = async (ref: any, data: any, options?: any): Promise<any> =>
+  isAdminRef(ref) ? ref.set(data, options) : clientSetDoc(ref, data, options);
+
+const updateDoc = async (ref: any, data: any): Promise<any> =>
+  isAdminRef(ref) ? ref.update(data) : clientUpdateDoc(ref, data);
+
+const deleteDoc = async (ref: any): Promise<any> =>
+  isAdminRef(ref) ? ref.delete() : clientDeleteDoc(ref);
+
 import { 
   Store, 
   Product, 
