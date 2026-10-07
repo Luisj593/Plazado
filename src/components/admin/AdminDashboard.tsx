@@ -1647,6 +1647,38 @@ contacto@plazado.com`;
                           </button>
                         )}
 
+                        {assignedAdmin?.verification?.code && !assignedAdmin.isEmailVerified && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const code = assignedAdmin.verification?.code || '';
+                              const message = `Hola ${assignedAdmin.name},
+
+Gracias por registrar ${st.name} en Plazado.com.
+
+Tu código de validación es: ${code}
+
+Utiliza este código para completar la verificación de tu tienda.
+
+Este código es personal. No lo compartas con terceros.
+
+Saludos,
+Plazado.com
+contacto@plazado.com`;
+                              window.alert(`FORMATO DE MENSAJE
+
+Destinatario: ${assignedAdmin.email}
+
+${message}`);
+                            }}
+                            className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-300 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0"
+                            title="Ver el formato del mensaje que se enviará"
+                          >
+                            <FileText className="w-3.5 h-3.5 shrink-0" />
+                            <span>Ver formato de mensaje</span>
+                          </button>
+                        )}
+
                         {/* Super Admin Enter Store Directly to Configure */}
                         <button
                           type="button"
