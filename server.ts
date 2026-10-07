@@ -2727,12 +2727,21 @@ async function startServer() {
   app.post('/api/admin/persistence/restore', (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
-    const { filename } = req.body;
+    const { filename, confirmation } = req.body;
     if (!filename) {
       return res.status(400).json({ success: false, message: 'Nombre de archivo requerido' });
     }
+    // A restore is destructive by nature: require an explicit confirmation and create
+    // a safety backup of the current production state before replacing anything.
+    if (confirmation !== 'RESTAURAR_RESPALDO') {
+      return res.status(400).json({ success: false, message: 'Restauración bloqueada: confirmación explícita requerida.' });
+    }
+    const safetyBackup = db.createManualBackup(`pre-restore-${Date.now()}`);
+    if (!(safetyBackup as any)?.success) {
+      return res.status(500).json({ success: false, message: 'No se pudo crear la copia de seguridad previa. Restauración cancelada.' });
+    }
     const result = db.restoreFromBackupFile(filename);
-    res.json({ ...result, version: db.getVersion() });
+    res.json({ ...result, safetyBackup, version: db.getVersion() });
   });
 
   // ==========================================
