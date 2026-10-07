@@ -770,16 +770,27 @@ async function startServer() {
 
   // --- ORDERS ---
   app.get('/api/orders', (req: Request, res: Response) => {
-    res.json({ success: true, orders: db.getOrders() });
+    const caller = getAuthenticatedUser(req);
+    if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
+    const orders = db.getOrders();
+    if (caller.role === 'SUPER_ADMIN') return res.json({ success: true, orders });
+    if (caller.storeId) return res.json({ success: true, orders: orders.filter((o: any) => o.storeId === caller.storeId) });
+    return res.json({ success: true, orders: orders.filter((o: any) => o.customerId === caller.id) });
   });
 
   app.post('/api/orders', (req: Request, res: Response) => {
     try {
+      const caller = getAuthenticatedUser(req);
+      if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
+      if (caller.role !== 'CUSTOMER' && caller.role !== 'SUPER_ADMIN') {
+        return res.status(403).json({ success: false, message: 'No autorizado para crear pedidos de clientes' });
+      }
       const orders = req.body.orders;
       if (!Array.isArray(orders) || orders.length === 0) {
         return res.status(400).json({ success: false, message: 'No orders provided' });
       }
-      const created = db.createOrders(orders);
+      const safeOrders = caller.role === 'SUPER_ADMIN' ? orders : orders.map((o: any) => ({ ...o, customerId: caller.id }));
+      const created = db.createOrders(safeOrders);
       res.json({ success: true, orders: created, version: db.getVersion() });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error processing orders' });
@@ -787,6 +798,13 @@ async function startServer() {
   });
 
   app.patch('/api/orders/:id/status', (req: Request, res: Response) => {
+    const caller = getAuthenticatedUser(req);
+    if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
+    const order = db.getOrders().find((o: any) => o.id === req.params.id);
+    if (!order) return res.status(404).json({ success: false, message: 'Orden no encontrada' });
+    if (caller.role !== 'SUPER_ADMIN' && (!caller.storeId || caller.storeId !== order.storeId)) {
+      return res.status(403).json({ success: false, message: 'No autorizado para cambiar el estado de esta orden' });
+    }
     const { status, note, confirmationCode } = req.body;
     const result = db.updateOrderStatus(req.params.id, status, note, confirmationCode);
     res.json({ ...result, version: db.getVersion() });
@@ -794,13 +812,32 @@ async function startServer() {
 
   // In-platform order chat messaging (PlazaDO exclusive communication channel)
   app.get('/api/orders/:id/messages', (req: Request, res: Response) => {
+    const caller = getAuthenticatedUser(req);
+    if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
+    const order = db.getOrders().find((o: any) => o.id === req.params.id);
+    if (!order) return res.status(404).json({ success: false, message: 'Orden no encontrada' });
+    if (caller.role !== 'SUPER_ADMIN' && caller.storeId !== order.storeId && caller.id !== order.customerId) {
+      return res.status(403).json({ success: false, message: 'No autorizado para consultar este pedido' });
+    }
     const messages = db.getOrderMessages(req.params.id);
     res.json({ success: true, messages });
   });
 
   app.post('/api/orders/:id/messages', (req: Request, res: Response) => {
     try {
-      const { storeId, customerId, senderId, senderName, senderRole, message } = req.body;
+      const caller = getAuthenticatedUser(req);
+      if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
+      const order = db.getOrders().find((o: any) => o.id === req.params.id);
+      if (!order) return res.status(404).json({ success: false, message: 'Orden no encontrada' });
+      if (caller.role !== 'SUPER_ADMIN' && caller.storeId !== order.storeId && caller.id !== order.customerId) {
+        return res.status(403).json({ success: false, message: 'No autorizado para escribir en este pedido' });
+      }
+      const { message } = req.body;
+      const storeId = order.storeId;
+      const customerId = order.customerId;
+      const senderId = caller.id;
+      const senderName = caller.name || 'Usuario PlazaDO';
+      const senderRole = caller.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : caller.storeId === order.storeId ? 'STORE' : 'CUSTOMER';
       if (!message || !message.trim()) {
         return res.status(400).json({ success: false, message: 'El mensaje no puede estar vacío.' });
       }
@@ -821,8 +858,15 @@ async function startServer() {
 
   app.patch('/api/orders/:id/messages/read', (req: Request, res: Response) => {
     try {
-      const { role } = req.body;
-      db.markOrderMessagesAsRead(req.params.id, role === 'STORE' ? 'STORE' : 'CUSTOMER');
+      const caller = getAuthenticatedUser(req);
+      if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
+      const order = db.getOrders().find((o: any) => o.id === req.params.id);
+      if (!order) return res.status(404).json({ success: false, message: 'Orden no encontrada' });
+      if (caller.role !== 'SUPER_ADMIN' && caller.storeId !== order.storeId && caller.id !== order.customerId) {
+        return res.status(403).json({ success: false, message: 'No autorizado para este pedido' });
+      }
+      const role = caller.storeId === order.storeId || caller.role === 'SUPER_ADMIN' ? 'STORE' : 'CUSTOMER';
+      db.markOrderMessagesAsRead(req.params.id, role);
       res.json({ success: true, version: db.getVersion() });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message });
@@ -849,8 +893,12 @@ async function startServer() {
   // Direct multi-store checkout powered by Cloud SQL
   app.post('/api/orders/checkout-multi', async (req: Request, res: Response) => {
     try {
+      const caller = getAuthenticatedUser(req);
+      if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
+      if (caller.role !== 'CUSTOMER' && caller.role !== 'SUPER_ADMIN') return res.status(403).json({ success: false, message: 'No autorizado para realizar checkout' });
       const { customer, customerId, items, paymentMethod, shippingAddress, notes } = req.body;
-      const targetCustomerId = customerId || (typeof customer === 'object' ? customer?.id : customer);
+      const requestedCustomerId = customerId || (typeof customer === 'object' ? customer?.id : customer);
+      const targetCustomerId = caller.role === 'SUPER_ADMIN' ? requestedCustomerId : caller.id;
       if (!targetCustomerId || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ success: false, message: 'Datos incompletos para procesar el pedido.' });
       }
@@ -875,6 +923,9 @@ async function startServer() {
   // Cart operations backed directly by Cloud SQL
   app.get('/api/cart/:userId', async (req: Request, res: Response) => {
     try {
+      const caller = getAuthenticatedUser(req);
+      if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
+      if (caller.role !== 'SUPER_ADMIN' && caller.id !== req.params.userId) return res.status(403).json({ success: false, message: 'No autorizado para consultar este carrito' });
       const cartData = await cloudSqlRepo.getCartByUser(req.params.userId);
       res.json({ success: true, cart: cartData });
     } catch (err: any) {
@@ -884,8 +935,12 @@ async function startServer() {
 
   app.post('/api/cart/add', async (req: Request, res: Response) => {
     try {
+      const caller = getAuthenticatedUser(req);
+      if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
       const { userId, productId, storeId, quantity } = req.body;
-      const cartData = await cloudSqlRepo.addToCart(userId, productId, storeId, quantity || 1);
+      const targetUserId = caller.role === 'SUPER_ADMIN' ? userId : caller.id;
+      if (!targetUserId) return res.status(400).json({ success: false, message: 'Usuario requerido' });
+      const cartData = await cloudSqlRepo.addToCart(targetUserId, productId, storeId, quantity || 1);
       res.json({ success: true, cart: cartData });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message });
@@ -894,6 +949,9 @@ async function startServer() {
 
   app.delete('/api/cart/:userId', async (req: Request, res: Response) => {
     try {
+      const caller = getAuthenticatedUser(req);
+      if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
+      if (caller.role !== 'SUPER_ADMIN' && caller.id !== req.params.userId) return res.status(403).json({ success: false, message: 'No autorizado para modificar este carrito' });
       await cloudSqlRepo.clearCart(req.params.userId);
       res.json({ success: true });
     } catch (err: any) {
@@ -902,6 +960,8 @@ async function startServer() {
   });
 
   app.delete('/api/orders/:id', (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const ok = db.deleteOrder(req.params.id);
     res.json({ success: ok, version: db.getVersion() });
   });
