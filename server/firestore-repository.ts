@@ -189,15 +189,79 @@ export class FirestoreRepository {
     }
   }
 
+  // --- AUTOMATIC PRODUCTION BACKUP / RECOVERY ---
+  // Durable safety copies live in separate Firestore collections and are never used
+  // to replace valid live records. Missing live stores/users are restored by ID only.
+  public async backupAndRecoverProductionRecords(): Promise<{ backedUpStores: number; backedUpUsers: number; restoredStores: number; restoredUsers: number }> {
+    const result = { backedUpStores: 0, backedUpUsers: 0, restoredStores: 0, restoredUsers: 0 };
+    if (!this.db) return result;
+
+    try {
+      const [storesSnap, usersSnap, storesBackupSnap, usersBackupSnap] = await Promise.all([
+        getDocs(collection(this.db, 'stores')),
+        getDocs(collection(this.db, 'users')),
+        getDocs(collection(this.db, 'stores_backup')),
+        getDocs(collection(this.db, 'users_backup'))
+      ]);
+
+      const liveStoreIds = new Set(storesSnap.docs.map(d => d.id));
+      const liveUserIds = new Set(usersSnap.docs.map(d => d.id));
+      const now = new Date().toISOString();
+
+      // First recover records that disappeared from the live collections.
+      for (const backupDoc of storesBackupSnap.docs) {
+        if (!liveStoreIds.has(backupDoc.id)) {
+          const { backupUpdatedAt: _backupUpdatedAt, ...storeData } = backupDoc.data() as any;
+          await setDoc(doc(this.db, 'stores', backupDoc.id), { ...storeData, recoveredAt: now }, { merge: false });
+          result.restoredStores++;
+        }
+      }
+      for (const backupDoc of usersBackupSnap.docs) {
+        if (!liveUserIds.has(backupDoc.id)) {
+          const { backupUpdatedAt: _backupUpdatedAt, ...userData } = backupDoc.data() as any;
+          await setDoc(doc(this.db, 'users', backupDoc.id), { ...userData, recoveredAt: now }, { merge: false });
+          result.restoredUsers++;
+        }
+      }
+
+      // Then refresh backups from every currently valid live record.
+      for (const liveDoc of storesSnap.docs) {
+        await setDoc(doc(this.db, 'stores_backup', liveDoc.id), {
+          ...liveDoc.data(),
+          backupUpdatedAt: now
+        }, { merge: true });
+        result.backedUpStores++;
+      }
+      for (const liveDoc of usersSnap.docs) {
+        await setDoc(doc(this.db, 'users_backup', liveDoc.id), {
+          ...liveDoc.data(),
+          backupUpdatedAt: now
+        }, { merge: true });
+        result.backedUpUsers++;
+      }
+
+      console.log('[FirestoreRepository] Production protection cycle completed:', result);
+    } catch (e) {
+      console.error('[FirestoreRepository] Production backup/recovery cycle failed:', e);
+    }
+    return result;
+  }
+
   // --- MUTATIONS: ATOMIC WRITES TO FIRESTORE WITH TRAZABILIDAD ---
 
   public async saveStore(store: Store): Promise<void> {
     if (!this.db || !store.id) return;
     try {
       const ref = doc(this.db, 'stores', store.id);
-      await setDoc(ref, {
+      const backupRef = doc(this.db, 'stores_backup', store.id);
+      const protectedStore = {
         ...store,
         updatedAt: new Date().toISOString()
+      };
+      await setDoc(ref, protectedStore, { merge: true });
+      await setDoc(backupRef, {
+        ...protectedStore,
+        backupUpdatedAt: new Date().toISOString()
       }, { merge: true });
     } catch (e) {
       console.error(`[FirestoreRepository] Error saving store ${store.id}:`, e);
@@ -254,9 +318,15 @@ export class FirestoreRepository {
     if (!this.db || !user.id) return;
     try {
       const ref = doc(this.db, 'users', user.id);
-      await setDoc(ref, {
+      const backupRef = doc(this.db, 'users_backup', user.id);
+      const protectedUser = {
         ...user,
         updatedAt: new Date().toISOString()
+      };
+      await setDoc(ref, protectedUser, { merge: true });
+      await setDoc(backupRef, {
+        ...protectedUser,
+        backupUpdatedAt: new Date().toISOString()
       }, { merge: true });
     } catch (e) {
       console.error(`[FirestoreRepository] Error saving user ${user.id}:`, e);
