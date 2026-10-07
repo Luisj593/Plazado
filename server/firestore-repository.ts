@@ -173,7 +173,7 @@ export class FirestoreRepository {
       ] = await Promise.all([
         getDocs(collection(this.db, 'stores')).catch(e => { console.warn('stores read err:', e); return { docs: [] }; }),
         getDocs(collection(this.db, 'products')).catch(e => { console.warn('products read err:', e); return { docs: [] }; }),
-        getDocs(collection(this.db, 'users')).catch(e => { console.warn('users read err:', e); return { docs: [] }; }),
+        getDocs(collection(this.db, 'users')), // Critical: never treat a failed users read as an empty authoritative collection.
         getDocs(collection(this.db, 'categories')).catch(e => { console.warn('categories read err:', e); return { docs: [] }; }),
         getDocs(collection(this.db, 'orders')).catch(e => { console.warn('orders read err:', e); return { docs: [] }; }),
         getDocs(collection(this.db, 'banners')).catch(e => { console.warn('banners read err:', e); return { docs: [] }; }),
@@ -208,7 +208,8 @@ export class FirestoreRepository {
       const adPlacements: AdPlacement[] = placementsSnap.docs.map(d => ({ id: d.id, ...d.data() } as unknown as AdPlacement));
       const orderMessages: OrderChatMessage[] = messagesSnap.docs.map(d => ({ id: d.id, ...d.data() } as OrderChatMessage));
 
-      const systemSettings = settingsDoc.exists() ? (settingsDoc.data() as SystemSettings) : undefined;
+      const settingsExists = typeof settingsDoc.exists === 'function' ? settingsDoc.exists() : Boolean(settingsDoc.exists);
+      const systemSettings = settingsExists ? (settingsDoc.data() as SystemSettings) : undefined;
 
       console.log(`[FirestoreRepository] Successfully loaded from Firestore: ${stores.length} stores, ${products.length} products, ${users.length} users, ${categories.length} categories.`);
 
