@@ -2687,6 +2687,24 @@ async function startServer() {
     res.json({ success: true, persistence: db.getPersistenceStatus() });
   });
 
+  // Read-only Firestore integrity diagnostic. Does not write or repair data.
+  app.get('/api/admin/persistence/firestore-diagnostic', async (req: Request, res: Response) => {
+    const admin = getAuthenticatedSuperAdmin(req);
+    if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
+    try {
+      const state = db.getData();
+      const diagnostic = await firestoreRepo.getIntegrityDiagnostic({
+        users: state.users,
+        stores: state.stores,
+        products: state.products,
+        orders: state.orders
+      });
+      res.json({ success: true, diagnostic });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'No fue posible ejecutar el diagnóstico de Firestore.' });
+    }
+  });
+
   // --- DEDICATED STORES DATABASE REGISTRY STATUS ---
   app.get('/api/admin/stores-database/status', (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
