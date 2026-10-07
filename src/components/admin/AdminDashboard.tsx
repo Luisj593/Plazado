@@ -511,31 +511,30 @@ export const AdminDashboard: React.FC = () => {
 
                 {/* Botón de Prueba Directa de SMTP */}
                 <div className="sm:col-span-2 pt-2">
-                  <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-stone-100/80 rounded-xl border border-stone-200">
+                  <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 space-y-3">
                     <div>
-                      <p className="font-bold text-xs text-stone-800">Prueba de Entrega SMTP</p>
-                      <p className="text-[11px] text-stone-500">
-                        Dispara un código de prueba a {mailSenderEmail} para verificar que IONOS acepte la conexión.
+                      <p className="font-bold text-xs text-amber-900">Envío manual de código de registro</p>
+                      <p className="text-[11px] text-amber-800 mt-1">
+                        Mientras el SMTP esté temporalmente deshabilitado, copia el código generado para el usuario y envíalo manualmente desde Webmail IONOS.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      disabled={testingSmtp}
-                      onClick={handleTestSmtp}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5"
+                    <div className="p-3 bg-white rounded-lg border border-amber-200 text-[11px] text-stone-700">
+                      <p className="font-bold mb-1">Formato recomendado:</p>
+                      <p>Asunto: Código de verificación de Plazado.com</p>
+                      <p className="mt-2">Hola,</p>
+                      <p>Tu código de registro para Plazado.com es: <strong>[CÓDIGO DE 6 DÍGITOS]</strong></p>
+                      <p>Este código es personal y debe utilizarse para completar la verificación de tu cuenta.</p>
+                      <p className="mt-2">Saludos,<br/>Plazado.com</p>
+                    </div>
+                    <a
+                      href="https://email.ionos.com/appsuite/#!!&app=io.ox/mail&folder=default0/INBOX"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-2xs items-center gap-1.5"
                     >
-                      {testingSmtp ? (
-                        <>
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          <span>Verificando SMTP...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Mail className="w-3.5 h-3.5" />
-                          <span>Probar Envío a {mailSenderEmail}</span>
-                        </>
-                      )}
-                    </button>
+                      <Mail className="w-3.5 h-3.5" />
+                      <span>Abrir Webmail IONOS</span>
+                    </a>
                   </div>
 
                   {smtpTestResult && (
