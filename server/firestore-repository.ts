@@ -201,6 +201,20 @@ export class FirestoreRepository {
 
     if (currentSnap.exists()) {
       const previous = currentSnap.data() as any;
+      // The protection job runs every five minutes. Do not consume the five-version
+      // history when the production record itself has not changed.
+      const normalizeForComparison = (value: any) => {
+        const copy = { ...(value || {}) };
+        delete copy.backupUpdatedAt;
+        delete copy.backupCreatedAt;
+        delete copy.recoveredAt;
+        delete copy.originalRecordId;
+        return copy;
+      };
+      const previousComparable = JSON.stringify(normalizeForComparison(previous));
+      const nextComparable = JSON.stringify(normalizeForComparison(nextData));
+      if (previousComparable === nextComparable) return;
+
       const versionTime = previous.backupUpdatedAt || previous.updatedAt || now;
       const historyId = `${recordId}__${Date.now()}__${crypto.randomUUID()}`;
       await setDoc(doc(this.db, historyCollection, historyId), {
