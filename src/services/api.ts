@@ -719,6 +719,12 @@ export const api = {
     });
   },
 
+  async reconcileMissingFirestoreUsers(): Promise<{ success: boolean; persisted: number; userIds?: string[]; message?: string }> {
+    return request('/api/admin/persistence/reconcile-missing-users', {
+      method: 'POST'
+    });
+  },
+
   async generateProductDescription(params: {
     productName: string;
     categoryName?: string;
