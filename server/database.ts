@@ -680,47 +680,50 @@ class GlobalDatabase {
         }
       }
 
-      // 2. SYNC USERS (ensure all memory users exist in Cloud SQL, and Cloud SQL users merged into memory)
-      for (const u of this.memoryData.users) {
-        if (!sqlUsers.some(su => su.id === u.id || (su.email && su.email.toLowerCase() === u.email.toLowerCase()))) {
-          await cloudSqlRepo.createUser({
-            id: u.id,
-            name: u.name,
-            email: u.email,
-            role: u.role,
-            phone: u.phone,
-            avatar: u.avatar,
-            storeId: u.storeId,
-            passwordHash: u.passwordHash,
-            addresses: u.addresses
-          }).catch(e => console.warn('[CloudSQL] Error syncing memory user to CloudSQL:', u.email, e));
+      // 2. USERS: Firestore is authoritative in production.
+      // Cloud SQL may keep a secondary copy, but it must never re-inject stale users
+      // into application memory after Firestore has completed its startup load.
+      if (this.firestoreSyncStatus !== 'CONNECTED') {
+        for (const u of this.memoryData.users) {
+          if (!sqlUsers.some(su => su.id === u.id || (su.email && su.email.toLowerCase() === u.email.toLowerCase()))) {
+            await cloudSqlRepo.createUser({
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              role: u.role,
+              phone: u.phone,
+              avatar: u.avatar,
+              storeId: u.storeId,
+              passwordHash: u.passwordHash,
+              addresses: u.addresses
+            }).catch(e => console.warn('[CloudSQL] Error syncing memory user to CloudSQL:', u.email, e));
+          }
         }
-      }
-      if (sqlUsers.length > 0) {
-        for (const u of sqlUsers) {
-          const existingIdx = this.memoryData.users.findIndex(mu => mu.id === u.id || mu.email.toLowerCase() === u.email.toLowerCase());
-          const mappedUser: User = {
-            id: u.id,
-            name: u.name,
-            email: u.email,
-            role: (u.role as UserRole) || 'CUSTOMER',
-            phone: u.phone || '',
-            avatar: u.avatar || '',
-            storeId: u.storeId || undefined,
-            passwordHash: u.passwordHash || (existingIdx !== -1 ? this.memoryData.users[existingIdx].passwordHash : undefined),
-            addresses: (u.addresses as any) || [],
-            createdAt: u.createdAt ? u.createdAt.toISOString() : new Date().toISOString()
-          };
-          if (existingIdx === -1) {
-            this.memoryData.users.push(mappedUser);
-          } else {
-            this.memoryData.users[existingIdx] = {
+        if (sqlUsers.length > 0) {
+          for (const u of sqlUsers) {
+            const existingIdx = this.memoryData.users.findIndex(mu => mu.id === u.id || mu.email.toLowerCase() === u.email.toLowerCase());
+            const mappedUser: User = {
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              role: (u.role as UserRole) || 'CUSTOMER',
+              phone: u.phone || '',
+              avatar: u.avatar || '',
+              storeId: u.storeId || undefined,
+              passwordHash: u.passwordHash || (existingIdx !== -1 ? this.memoryData.users[existingIdx].passwordHash : undefined),
+              addresses: (u.addresses as any) || [],
+              createdAt: u.createdAt ? u.createdAt.toISOString() : new Date().toISOString()
+            };
+            if (existingIdx === -1) this.memoryData.users.push(mappedUser);
+            else this.memoryData.users[existingIdx] = {
               ...this.memoryData.users[existingIdx],
               ...mappedUser,
               passwordHash: this.memoryData.users[existingIdx].passwordHash || mappedUser.passwordHash
             };
           }
         }
+      } else {
+        console.log('[GlobalDatabase] Firestore authoritative for users; Cloud SQL user merge skipped.');
       }
 
       // 3. SYNC STORES (Safe bidirectional merge: push memory stores to Cloud SQL and vice-versa)
