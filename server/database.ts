@@ -331,7 +331,7 @@ class GlobalDatabase {
     });
 
     // Ensure Super Admin accounts exist and are intact without altering any user passwords or other accounts
-    this.ensureSuperAdmins(activeData);
+    // User identities and roles are loaded from persistent storage; startup must not seed accounts.
 
     // Safeguard: Check immutable backup to restore persistent production stores/products/users if empty
     const immutableBackupPath = path.join(this.backupDir, 'plazado_db_backup_immutable.json');
@@ -361,66 +361,6 @@ class GlobalDatabase {
 
     console.log(`[GlobalDatabase] Loaded successfully from ${loadedFrom}. Counts: ${activeData.users.length} users, ${activeData.stores.length} stores, ${activeData.products.length} products, ${activeData.orders.length} orders. Version: ${activeData.version}`);
     return activeData;
-  }
-
-  private ensureSuperAdmins(data: GlobalDatabaseData) {
-    const superAdminAccounts = [
-      {
-        email: 'luiss.jimeness@gmail.com',
-        id: 'user-super-admin-2',
-        hash: '$2b$10$976iN/8lgyrlwBQUknbEcuPeBWn.SReKDTPI07KT0QDMiwNpHGh6K' // Matthias8325 (bcrypt)
-      },
-      {
-        email: 'luis.jimenez@msn.com',
-        id: 'user-super-admin',
-        hash: '$2b$10$976iN/8lgyrlwBQUknbEcuPeBWn.SReKDTPI07KT0QDMiwNpHGh6K' // Matthias8325 (bcrypt)
-      }
-    ];
-    for (const admin of superAdminAccounts) {
-      const found = data.users.find(u => u.email.toLowerCase() === admin.email.toLowerCase());
-      if (found) {
-        // Preserve the existing production credential. Startup/deploy code must never reset passwords.
-        found.role = 'SUPER_ADMIN';
-      } else {
-        data.users.push({
-          id: admin.id,
-          name: 'Luis Jiménez',
-          email: admin.email,
-          role: 'SUPER_ADMIN',
-          phone: '809-449-3325',
-          avatar: '',
-          passwordHash: admin.hash,
-          addresses: [],
-          createdAt: '2026-01-01T00:00:00Z'
-        });
-      }
-    }
-
-    // Never alter credentials for existing store owners during startup or deployment.
-
-    // Ensure 1:1 UserCredential records for all users (USER.ID -> PASSWORD_HASH)
-    if (!data.userCredentials) {
-      data.userCredentials = [];
-    }
-    const now = new Date().toISOString();
-    for (const u of data.users) {
-      if (!u.id) continue;
-      const existing = data.userCredentials.find(c => c.userId === u.id);
-      if (existing) {
-        if (u.passwordHash && existing.passwordHash !== u.passwordHash) {
-          existing.passwordHash = u.passwordHash;
-          existing.updatedAt = now;
-        }
-      } else if (u.passwordHash) {
-        data.userCredentials.push({
-          id: `cred-${u.id}`,
-          userId: u.id,
-          passwordHash: u.passwordHash,
-          createdAt: u.createdAt || now,
-          updatedAt: now
-        });
-      }
-    }
   }
 
   private normalizeStores(data: GlobalDatabaseData) {
