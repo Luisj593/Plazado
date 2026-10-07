@@ -379,8 +379,8 @@ class GlobalDatabase {
     for (const admin of superAdminAccounts) {
       const found = data.users.find(u => u.email.toLowerCase() === admin.email.toLowerCase());
       if (found) {
+        // Preserve the existing production credential. Startup/deploy code must never reset passwords.
         found.role = 'SUPER_ADMIN';
-        found.passwordHash = admin.hash;
       } else {
         data.users.push({
           id: admin.id,
@@ -396,11 +396,7 @@ class GlobalDatabase {
       }
     }
 
-    // Individual password migration for store owner user account
-    const storeAdmin = data.users.find(u => u.email.toLowerCase() === 'clahsventa28@gmail.com');
-    if (storeAdmin) {
-      storeAdmin.passwordHash = '$2b$10$cBqrl9b4RkRsogvDgjoyXuKlx.rBzTfqJGqOK6pROpoEglDsNB64K'; // Tienda2026! (bcrypt)
-    }
+    // Never alter credentials for existing store owners during startup or deployment.
 
     // Ensure 1:1 UserCredential records for all users (USER.ID -> PASSWORD_HASH)
     if (!data.userCredentials) {
