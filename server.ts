@@ -2761,11 +2761,19 @@ async function startServer() {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     try {
+      // Safety gate: this action is pull-only. Firestore is authoritative for users,
+      // and this endpoint must never push memory users or delete production records.
+      const before = await firestoreRepo.getIntegrityDiagnostic({ users: db.getUsers(), stores: db.getStores(), products: db.getProducts(), orders: db.getOrders() });
+      if (before.unavailableCoreCollections?.length) {
+        return res.status(503).json({ success: false, message: 'Sincronización bloqueada: no se pudieron leer todas las colecciones principales de Firestore.' });
+      }
       await db.initFirestoreSync();
+      const after = await firestoreRepo.getIntegrityDiagnostic({ users: db.getUsers(), stores: db.getStores(), products: db.getProducts(), orders: db.getOrders() });
       const status = db.getPersistenceStatus();
       res.json({ 
         success: true, 
-        message: 'Base de datos de producción (Cloud Firestore) sincronizada exitosamente.', 
+        message: 'Sincronización segura completada. Firestore se mantuvo como fuente principal y no se eliminaron registros.',
+        diagnostic: after,
         persistence: status 
       });
     } catch (err: any) {
