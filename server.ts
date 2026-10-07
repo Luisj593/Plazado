@@ -212,6 +212,50 @@ async function startServer() {
     });
   }, 5 * 60 * 1000);
 
+  // Production security headers
+  app.disable('x-powered-by');
+  app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    if (process.env.NODE_ENV === 'production') {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+    next();
+  });
+
+  // Lightweight in-memory abuse protection for authentication/verification endpoints.
+  // It does not touch production data and resets naturally when the process restarts.
+  const securityRateBuckets = new Map<string, { count: number; resetAt: number }>();
+  app.use('/api/auth', (req, res, next) => {
+    const forwarded = req.headers['x-forwarded-for'];
+    const ip = (Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0]) || req.ip || 'unknown';
+    const key = `${ip}:${req.path}`;
+    const now = Date.now();
+    const existing = securityRateBuckets.get(key);
+    const bucket = !existing || existing.resetAt <= now
+      ? { count: 0, resetAt: now + 15 * 60 * 1000 }
+      : existing;
+    bucket.count += 1;
+    securityRateBuckets.set(key, bucket);
+    res.setHeader('X-RateLimit-Limit', '60');
+    res.setHeader('X-RateLimit-Remaining', String(Math.max(0, 60 - bucket.count)));
+    if (bucket.count > 60) {
+      return res.status(429).json({ error: 'Demasiadas solicitudes. Intenta nuevamente en unos minutos.' });
+    }
+    next();
+  });
+
+  // Periodic cleanup prevents the rate-limit map from growing indefinitely.
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, bucket] of securityRateBuckets.entries()) {
+      if (bucket.resetAt <= now) securityRateBuckets.delete(key);
+    }
+  }, 15 * 60 * 1000);
+
   // Middlewares (allow up to 100mb for PDF and APK file uploads)
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ extended: true, limit: '100mb' }));
