@@ -40,6 +40,19 @@ const updateDoc = async (ref: any, data: any): Promise<any> =>
 const deleteDoc = async (ref: any): Promise<any> =>
   isAdminRef(ref) ? ref.delete() : clientDeleteDoc(ref);
 
+// Firestore rejects undefined values by default. Domain objects contain optional
+// properties, so strip only undefined values before persistence without changing
+// null/false/0/empty-string values.
+const firestoreSafe = (value: any): any => {
+  if (Array.isArray(value)) return value.map(firestoreSafe).filter(v => v !== undefined);
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    return Object.fromEntries(Object.entries(value)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, firestoreSafe(v)]));
+  }
+  return value;
+};
+
 import { 
   Store, 
   Product, 
@@ -248,7 +261,8 @@ export class FirestoreRepository {
     const currentSnap = await getDoc(currentRef);
     const now = new Date().toISOString();
 
-    if (currentSnap.exists()) {
+    const currentExists = typeof currentSnap.exists === 'function' ? currentSnap.exists() : Boolean(currentSnap.exists);
+    if (currentExists) {
       const previous = currentSnap.data() as any;
       // The protection job runs every five minutes. Do not consume the five-version
       // history when the production record itself has not changed.
@@ -284,7 +298,7 @@ export class FirestoreRepository {
     }
 
     await setDoc(currentRef, {
-      ...nextData,
+      ...firestoreSafe(nextData),
       backupUpdatedAt: now
     }, { merge: false });
   }
@@ -308,21 +322,9 @@ export class FirestoreRepository {
       const liveUserIds = new Set(usersSnap.docs.map(d => d.id));
       const now = new Date().toISOString();
 
-      // First recover records that disappeared from the live collections.
-      for (const backupDoc of storesBackupSnap.docs) {
-        if (!liveStoreIds.has(backupDoc.id)) {
-          const { backupUpdatedAt: _backupUpdatedAt, ...storeData } = backupDoc.data() as any;
-          await setDoc(doc(this.db, 'stores', backupDoc.id), { ...storeData, recoveredAt: now }, { merge: false });
-          result.restoredStores++;
-        }
-      }
-      for (const backupDoc of usersBackupSnap.docs) {
-        if (!liveUserIds.has(backupDoc.id)) {
-          const { backupUpdatedAt: _backupUpdatedAt, ...userData } = backupDoc.data() as any;
-          await setDoc(doc(this.db, 'users', backupDoc.id), { ...userData, recoveredAt: now }, { merge: false });
-          result.restoredUsers++;
-        }
-      }
+      // Never restore missing production records automatically. A missing live
+      // record may have been intentionally deleted. Backups are recovery material
+      // only and restoration requires an explicit, audited admin action.
 
       // Then refresh backups from every currently valid live record.
       for (const liveDoc of storesSnap.docs) {
@@ -351,7 +353,7 @@ export class FirestoreRepository {
         ...store,
         updatedAt: new Date().toISOString()
       };
-      await setDoc(ref, protectedStore, { merge: true });
+      await setDoc(ref, firestoreSafe(protectedStore), { merge: true });
       await this.rotateBackupVersion('store', store.id, protectedStore);
     } catch (e) {
       console.error(`[FirestoreRepository] Error saving store ${store.id}:`, e);
@@ -413,7 +415,7 @@ export class FirestoreRepository {
         ...user,
         updatedAt: new Date().toISOString()
       };
-      await setDoc(ref, protectedUser, { merge: true });
+      await setDoc(ref, firestoreSafe(protectedUser), { merge: true });
       await this.rotateBackupVersion('user', user.id, protectedUser);
     } catch (e) {
       console.error(`[FirestoreRepository] Error saving user ${user.id}:`, e);
