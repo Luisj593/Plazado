@@ -75,14 +75,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [isSavingNewAddress, setIsSavingNewAddress] = useState(false);
 
   // Payment Method state
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('CARD_AZUL');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('CASH_ON_DELIVERY');
   const [customerNotes, setCustomerNotes] = useState('');
 
   // Simulated AZUL Card Details
-  const [cardNumber, setCardNumber] = useState('4111 2222 3333 4444');
-  const [cardExpiry, setCardExpiry] = useState('12/28');
-  const [cardCvc, setCardCvc] = useState('888');
-  const [cardHolder, setCardHolder] = useState(currentUser?.name || '');
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [chargeProgressMessage, setChargeProgressMessage] = useState<string>('');
@@ -254,67 +250,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       userId: activeAddress.userId || currentUser.id
     };
 
-    // Validación específica para pago con tarjeta (Cargo Automático)
-    if (paymentMethod === 'CARD_AZUL') {
-      const cleanNum = cardNumber.replace(/\s+/g, '');
-      if (!cardHolder.trim()) {
-        setCheckoutError('Por favor ingresa el nombre del titular de la tarjeta.');
-        return;
-      }
-      if (cleanNum.length < 15 || !/^\d+$/.test(cleanNum)) {
-        setCheckoutError('Por favor ingresa un número de tarjeta válido (15 o 16 dígitos).');
-        return;
-      }
-      if (!cardExpiry.trim() || !cardExpiry.includes('/')) {
-        setCheckoutError('Por favor ingresa la fecha de vencimiento en formato MM/AA.');
-        return;
-      }
-      if (cardCvc.trim().length < 3) {
-        setCheckoutError('Por favor ingresa el código de seguridad CVC / CVV.');
-        return;
-      }
-
-      setIsProcessing(true);
-      setChargeProgressMessage('Conectando con la pasarela bancaria AZUL...');
-
-      setTimeout(() => {
-        setChargeProgressMessage(`Efectuando cargo automático de RD$ ${cartTotal.grandTotal.toLocaleString()} a tarjeta ••••${cleanNum.slice(-4)}...`);
-      }, 500);
-
-      setTimeout(() => {
-        setChargeProgressMessage('¡Cargo automático aprobado exitosamente!');
-        
-        const res = processCheckout(addressSnapshot, paymentMethod, customerNotes, {
-          number: cardNumber,
-          expiry: cardExpiry,
-          cvc: cardCvc,
-          holder: cardHolder
-        });
-
-        setIsProcessing(false);
-        setChargeProgressMessage('');
-        if (res.success) {
-          onSuccess(res.orderGroupCode, res.orderIds);
-        } else {
-          setCheckoutError(res.error || 'Ocurrió un error al procesar el cargo automático.');
-        }
-      }, 1400);
-      return;
-    }
-
-    // Otros métodos de pago (Efectivo / Transferencia)
+    if (isProcessing) return;
     setIsProcessing(true);
     setChargeProgressMessage('Confirmando pedido...');
-    setTimeout(() => {
-      const res = processCheckout(addressSnapshot, paymentMethod, customerNotes);
+    try {
+      const res = await processCheckout(addressSnapshot, paymentMethod, customerNotes);
+      if (res.success) onSuccess(res.orderGroupCode, res.orderIds);
+      else setCheckoutError(res.error || 'No se pudo confirmar el pedido');
+    } finally {
       setIsProcessing(false);
       setChargeProgressMessage('');
-      if (res.success) {
-        onSuccess(res.orderGroupCode, res.orderIds);
-      } else {
-        setCheckoutError(res.error || 'Ocurrió un error al procesar la compra.');
-      }
-    }, 800);
+    }
+
   };
 
   return (
@@ -782,7 +729,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               {/* Tarjetas AZUL */}
               <button
                 type="button"
-                onClick={() => setPaymentMethod('CARD_AZUL')}
+                disabled
+                aria-label="Tarjetas próximamente"
                 className={`p-3.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
                   paymentMethod === 'CARD_AZUL'
                     ? 'border-red-600 bg-red-50/50 ring-2 ring-red-100 shadow-xs'
@@ -797,7 +745,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
                 <div>
                   <h4 className="font-bold text-xs text-stone-900">Tarjeta Crédito / Débito</h4>
-                  <p className="text-[11px] text-stone-500 mt-0.5">Visa, Mastercard procesado por Banco Popular</p>
+                  <p className="text-[11px] text-stone-500 mt-0.5">Próximamente: integración bancaria en validación</p>
                 </div>
               </button>
 
@@ -826,7 +774,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               {/* Transferencia */}
               <button
                 type="button"
-                onClick={() => setPaymentMethod('BANK_TRANSFER')}
+                disabled
+                aria-label="Transferencias próximamente"
                 className={`p-3.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
                   paymentMethod === 'BANK_TRANSFER'
                     ? 'border-red-600 bg-red-50/50 ring-2 ring-red-100 shadow-xs'
@@ -841,81 +790,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
                 <div>
                   <h4 className="font-bold text-xs text-stone-900">Transferencia Bancaria</h4>
-                  <p className="text-[11px] text-stone-500 mt-0.5">Popular o Banreservas corporativo</p>
+                  <p className="text-[11px] text-stone-500 mt-0.5">Próximamente: confirmación bancaria</p>
                 </div>
               </button>
             </div>
 
-            {/* If AZUL selected, show simulated payment card form */}
-            {paymentMethod === 'CARD_AZUL' && (
-              <div className="p-4 rounded-xl border border-stone-200 bg-stone-50 text-xs space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-stone-200">
-                  <span className="font-bold text-stone-800 flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-emerald-600" />
-                    Pasarela Segura AZUL (Ambiente de Pruebas / Sandbox)
-                  </span>
-                  <span className="text-[11px] text-stone-400">Cifrado SSL 256-bit</span>
-                </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="col-span-2 sm:col-span-4">
-                    <label className="block font-semibold text-stone-700 mb-1">Titular de la Tarjeta</label>
-                    <input
-                      type="text"
-                      value={cardHolder}
-                      onChange={(e) => setCardHolder(e.target.value)}
-                      className="w-full p-2 bg-white border border-stone-300 rounded-lg outline-none"
-                    />
-                  </div>
-                  <div className="col-span-2 sm:col-span-2">
-                    <label className="block font-semibold text-stone-700 mb-1">Número de Tarjeta</label>
-                    <input
-                      type="text"
-                      value={cardNumber}
-                      onChange={(e) => setCardNumber(e.target.value)}
-                      className="w-full p-2 bg-white border border-stone-300 rounded-lg font-mono outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-stone-700 mb-1">Vence (MM/AA)</label>
-                    <input
-                      type="text"
-                      value={cardExpiry}
-                      onChange={(e) => setCardExpiry(e.target.value)}
-                      className="w-full p-2 bg-white border border-stone-300 rounded-lg font-mono outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-stone-700 mb-1">CVC / CVV</label>
-                    <input
-                      type="text"
-                      value={cardCvc}
-                      onChange={(e) => setCardCvc(e.target.value)}
-                      className="w-full p-2 bg-white border border-stone-300 rounded-lg font-mono outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="p-2.5 bg-blue-50 rounded-lg border border-blue-200 text-blue-950 text-[11px] flex items-center gap-2">
-                  <CreditCard className="w-4 h-4 text-blue-700 shrink-0" />
-                  <span>
-                    <strong>Cargo automático directo:</strong> Al pulsar el botón, se procesará automáticamente el cobro de <strong>RD$ {cartTotal.grandTotal.toLocaleString()}</strong> a tu tarjeta. Los fondos quedan protegidos en custodia de PlazaDO.
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Notes for delivery */}
-            <div>
-              <label className="block text-xs font-semibold text-stone-700 mb-1">Notas especiales para los comercios (opcional):</label>
-              <textarea
-                value={customerNotes}
-                onChange={(e) => setCustomerNotes(e.target.value)}
-                placeholder="Instrucciones para la entrega o preparación..."
-                rows={2}
-                className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-lg text-xs outline-none focus:border-red-500"
-              />
-            </div>
           </div>
 
           {/* 4. Final Breakdown & Totals */}

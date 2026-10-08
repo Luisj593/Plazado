@@ -9,7 +9,8 @@
     "start": "node server.js",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "node scripts/test-registration-consent.mjs && node scripts/test-settings-persistence.mjs && node scripts/test-product-offers.mjs && node scripts/test-public-state.mjs && node scripts/test-checkout-security.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -21,7 +22,7 @@
     "dotenv": "^17.2.3",
     "drizzle-kit": "^0.31.11",
     "drizzle-orm": "^0.45.3",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.2",
     "express": "^4.21.2",
     "firebase": "^12.19.0",
     "firebase-admin": "^14.4.0",

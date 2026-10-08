@@ -1,3 +1,5 @@
+import { validateOrders, checkoutOrderId } from './server/order-validation';
+import { sanitizeMarketplaceState, safeUser, safeOrder, publicSettings, editableFields, STORE_EDIT_FIELDS, PRODUCT_EDIT_FIELDS } from './server/public-state';
 import 'dotenv/config';
 import { validateProductOffer } from './src/utils/productOffers';
 import { LEGAL_VERSION, hasCurrentLegalConsent, registrationDocuments } from './src/legal/registration';
@@ -20,10 +22,7 @@ if (!SESSION_SECRET.trim()) {
   throw new Error('CRITICAL SECURITY ERROR: SESSION_SECRET is required as an environment variable');
 }
 
-export function sanitizeUser(user: User): Omit<User, 'passwordHash'> {
-  const { passwordHash: _, ...safe } = user;
-  return safe;
-}
+export function sanitizeUser(user: User): Omit<User, 'passwordHash'> { return safeUser(user); }
 
 export function createSessionToken(user: User): string {
   const payload = {
@@ -46,7 +45,8 @@ export function verifySessionToken(token: string): { userId: string; email: stri
     if (parts.length !== 3) return null;
     const [head, body, sig] = parts;
     const expectedSig = crypto.createHmac('sha256', SESSION_SECRET).update(`${head}.${body}`).digest('base64url');
-    if (sig !== expectedSig) return null;
+    const actual = Buffer.from(sig), expected = Buffer.from(expectedSig);
+    if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
     if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
     return payload;
@@ -72,117 +72,7 @@ export function getAuthenticatedSuperAdmin(req: Request): User | null {
 }
 
 function sanitizeBootstrapForCaller(rawState: any, caller: User | null) {
-  const safeUsers = (rawState.users || []).map((u: any) => sanitizeUser(u));
-
-  const publicStores = (rawState.stores || []).map((s: any) => {
-    if (!caller || (caller.role !== 'SUPER_ADMIN' && caller.storeId !== s.id)) {
-      const { bankInfo, ...restStore } = s;
-      return {
-        ...restStore,
-        bankInfo: bankInfo ? {
-          bank: bankInfo.bank,
-          accountType: bankInfo.accountType,
-          accountHolder: bankInfo.accountHolder,
-          rncOrCedula: bankInfo.rncOrCedula,
-          accountNumber: '****'
-        } : undefined
-      };
-    }
-    return s;
-  });
-
-  const publicSettings = { ...rawState.systemSettings };
-  if (!caller || caller.role !== 'SUPER_ADMIN') {
-    if (publicSettings.mailConfig) {
-      const { smtpPass: _, ...safeMail } = publicSettings.mailConfig;
-      publicSettings.mailConfig = {
-        ...safeMail,
-        isConfigured: !!publicSettings.mailConfig?.isConfigured
-      };
-    }
-  }
-
-  if (caller && caller.role === 'SUPER_ADMIN') {
-    return {
-      ...rawState,
-      users: safeUsers,
-      stores: publicStores,
-      systemSettings: publicSettings
-    };
-  }
-
-  if (caller && caller.role === 'STORE_OWNER') {
-    const storeId = caller.storeId;
-    return {
-      ...rawState,
-      stores: publicStores,
-      products: rawState.products || [],
-      categories: rawState.categories || [],
-      banners: rawState.banners || [],
-      coupons: rawState.coupons || [],
-      reviews: rawState.reviews || [],
-      systemSettings: publicSettings,
-      users: safeUsers.filter((u: any) => u.id === caller.id),
-      orders: (rawState.orders || []).filter((o: any) => o.storeId === storeId || o.customerId === caller.id),
-      storeBalances: storeId && rawState.storeBalances && rawState.storeBalances[storeId] 
-        ? { [storeId]: rawState.storeBalances[storeId] } 
-        : {},
-      settlements: (rawState.settlements || []).filter((s: any) => s.storeId === storeId),
-      disputes: (rawState.disputes || []).filter((d: any) => d.storeId === storeId || d.customerId === caller.id),
-      auditLogs: [],
-      paymentTransactions: [],
-      financialAuditLogs: []
-    };
-  }
-
-  if (caller && caller.role === 'CUSTOMER') {
-    return {
-      ...rawState,
-      stores: publicStores,
-      products: rawState.products || [],
-      categories: rawState.categories || [],
-      banners: rawState.banners || [],
-      coupons: rawState.coupons || [],
-      reviews: rawState.reviews || [],
-      systemSettings: publicSettings,
-      users: safeUsers.filter((u: any) => u.id === caller.id),
-      orders: (rawState.orders || []).filter((o: any) => o.customerId === caller.id),
-      storeBalances: {},
-      settlements: [],
-      disputes: (rawState.disputes || []).filter((d: any) => d.customerId === caller.id),
-      auditLogs: [],
-      paymentTransactions: [],
-      financialAuditLogs: []
-    };
-  }
-
-  // Unauthenticated public visitor: expose the exact same PUBLIC marketplace
-  // catalog used by the web UI. Mobile/desktop must never diverge by session state.
-  const visibleStoreIds = new Set(
-    (rawState.stores || []).filter((s: any) => isStorePubliclyVisible(s)).map((s: any) => s.id)
-  );
-  const publicProducts = (rawState.products || []).filter((p: any) =>
-    isProductPubliclyVisible(p) && (!p.storeId || visibleStoreIds.has(p.storeId))
-  );
-
-  return {
-    ...rawState,
-    stores: publicStores.filter((s: any) => isStorePubliclyVisible(s)),
-    products: publicProducts,
-    categories: rawState.categories || [],
-    banners: rawState.banners || [],
-    coupons: rawState.coupons || [],
-    reviews: rawState.reviews || [],
-    systemSettings: publicSettings,
-    users: [],
-    orders: [],
-    storeBalances: {},
-    settlements: [],
-    disputes: [],
-    auditLogs: [],
-    paymentTransactions: [],
-    financialAuditLogs: []
-  };
+  return sanitizeMarketplaceState(rawState, caller);
 }
 
 async function startServer() {
@@ -211,7 +101,8 @@ async function startServer() {
   });
 
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT || 3000);
+  app.set('trust proxy', 1);
 
   // Keep an independent durable copy refreshed while production is running.
   // This protects user-created stores/users from accidental disappearance between deployments.
@@ -239,8 +130,7 @@ async function startServer() {
   // It does not touch production data and resets naturally when the process restarts.
   const securityRateBuckets = new Map<string, { count: number; resetAt: number }>();
   app.use('/api/auth', (req, res, next) => {
-    const forwarded = req.headers['x-forwarded-for'];
-    const ip = (Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0]) || req.ip || 'unknown';
+    const ip = req.ip || 'unknown';
     const key = `${ip}:${req.path}`;
     const now = Date.now();
     const existing = securityRateBuckets.get(key);
@@ -319,7 +209,7 @@ async function startServer() {
 
   // --- STORES ---
   app.get('/api/stores', (req: Request, res: Response) => {
-    res.json({ success: true, stores: db.getStores() });
+    res.json({ success: true, stores: sanitizeMarketplaceState(db.getFullState(), getAuthenticatedUser(req)).stores });
   });
 
   app.post('/api/stores', (req: Request, res: Response) => {
@@ -347,7 +237,9 @@ async function startServer() {
     if (caller.role !== 'SUPER_ADMIN' && caller.storeId !== req.params.id) {
       return res.status(403).json({ success: false, message: 'No tienes autorización para editar esta tienda' });
     }
-    const updated = db.updateStore(req.params.id, req.body);
+    const changes = caller.role === 'SUPER_ADMIN' ? { ...req.body } : editableFields(req.body, STORE_EDIT_FIELDS);
+    delete changes.id; delete changes.ownerId; delete changes.owner_id;
+    const updated = db.updateStore(req.params.id, changes);
     if (!updated) return res.status(404).json({ success: false, message: 'Store not found' });
     res.json({ success: true, store: updated, version: db.getVersion() });
   });
@@ -437,7 +329,7 @@ async function startServer() {
 
   // --- PRODUCTS ---
   app.get('/api/products', (req: Request, res: Response) => {
-    res.json({ success: true, products: db.getProducts() });
+    res.json({ success: true, products: sanitizeMarketplaceState(db.getFullState(), getAuthenticatedUser(req)).products });
   });
 
   app.post('/api/products', async (req: Request, res: Response) => {
@@ -447,7 +339,7 @@ async function startServer() {
       return res.status(403).json({ success: false, message: 'No autorizado para crear productos' });
     }
     try {
-      const productData = { ...req.body };
+      const productData = caller.role === 'SUPER_ADMIN' ? { ...req.body } : editableFields(req.body, PRODUCT_EDIT_FIELDS);
       if (caller.role === 'STORE_OWNER') {
         if (!caller.storeId) return res.status(403).json({ success: false, message: 'Usuario sin tienda asignada' });
         // Never trust a storeId supplied by the client.
@@ -470,8 +362,12 @@ async function startServer() {
     if (caller.role !== 'SUPER_ADMIN' && (caller.role !== 'STORE_OWNER' || caller.storeId !== existing.storeId)) {
       return res.status(403).json({ success: false, message: 'No puedes modificar productos de otra tienda' });
     }
-    const safeBody = { ...req.body };
-    if (caller.role !== 'SUPER_ADMIN') safeBody.storeId = existing.storeId;
+    const safeBody = caller.role === 'SUPER_ADMIN' ? { ...req.body } : editableFields(req.body, PRODUCT_EDIT_FIELDS);
+    delete safeBody.id;
+    if (caller.role !== 'SUPER_ADMIN') {
+      safeBody.storeId = existing.storeId;
+      if (existing.isFulfillment || db.getFullState().fulfillmentInventory?.some(item => item.productId === existing.id)) delete safeBody.stock;
+    }
     if (Object.hasOwn(safeBody, 'price') || Object.hasOwn(safeBody, 'promoPrice')) {
       const offerError = validateProductOffer(safeBody.price ?? existing.price, Object.hasOwn(safeBody, 'promoPrice') ? safeBody.promoPrice : existing.promoPrice);
       if (offerError) return res.status(400).json({ success: false, message: offerError });
@@ -612,14 +508,7 @@ async function startServer() {
     if (admin) {
       return res.json({ success: true, settings });
     }
-    const safeSettings = { ...settings };
-    if (safeSettings.mailConfig) {
-      const { smtpPass: _, ...safeMail } = safeSettings.mailConfig;
-      safeSettings.mailConfig = {
-        ...safeMail,
-        isConfigured: !!settings.mailConfig?.isConfigured
-      };
-    }
+    const safeSettings = publicSettings(settings);
     res.json({ success: true, settings: safeSettings });
   });
 
@@ -662,7 +551,8 @@ async function startServer() {
   });
 
   app.get('/api/payment-gateways/active', (req: Request, res: Response) => {
-    res.json({ success: true, activeGateway: db.getActivePaymentGateway() });
+    const gateway = db.getActivePaymentGateway();
+    res.json({ success: true, activeGateway: gateway ? editableFields(gateway, ['id','providerKey','providerName','currency','isActive','environment']) : null });
   });
 
   app.post('/api/payment-gateways', (req: Request, res: Response) => {
@@ -803,11 +693,11 @@ async function startServer() {
     if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
     const orders = db.getOrders();
     if (caller.role === 'SUPER_ADMIN') return res.json({ success: true, orders });
-    if (caller.storeId) return res.json({ success: true, orders: orders.filter((o: any) => o.storeId === caller.storeId) });
+    if (caller.storeId) return res.json({ success: true, orders: orders.filter((o: any) => o.storeId === caller.storeId).map((o: any) => safeOrder(o, caller)) });
     return res.json({ success: true, orders: orders.filter((o: any) => o.customerId === caller.id) });
   });
 
-  app.post('/api/orders', (req: Request, res: Response) => {
+  app.post('/api/orders', async (req: Request, res: Response) => {
     try {
       const caller = getAuthenticatedUser(req);
       if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
@@ -818,8 +708,15 @@ async function startServer() {
       if (!Array.isArray(orders) || orders.length === 0) {
         return res.status(400).json({ success: false, message: 'No orders provided' });
       }
-      const safeOrders = caller.role === 'SUPER_ADMIN' ? orders : orders.map((o: any) => ({ ...o, customerId: caller.id }));
-      const created = db.createOrders(safeOrders);
+      const previous = orders.map((o: any) => db.getOrders().find(saved => saved.id === checkoutOrderId(caller.id, String(o.id || ''))));
+      if (previous.every(Boolean)) {
+        const matches = previous.every((saved: any, index: number) => saved.customerId === caller.id && saved.storeId === orders[index].storeId && saved.total === orders[index].total && JSON.stringify(saved.items.map((item: any) => [item.productId,item.quantity])) === JSON.stringify(orders[index].items?.map((item: any) => [item.productId,item.quantity])));
+        if (!matches) return res.status(409).json({success:false,message:'Identificador de compra ya utilizado'});
+        return res.json({success:true,orders:previous,version:db.getVersion()});
+      }
+      if (previous.some(Boolean)) return res.status(409).json({success:false,message:'Compra parcialmente registrada. Contacta a soporte.'});
+      const safeOrders = validateOrders(orders, db.getFullState(), caller);
+      const created = await db.createOrders(safeOrders);
       res.json({ success: true, orders: created, version: db.getVersion() });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error processing orders' });
@@ -866,7 +763,7 @@ async function startServer() {
       const customerId = order.customerId;
       const senderId = caller.id;
       const senderName = caller.name || 'Usuario PlazaDO';
-      const senderRole = caller.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : caller.storeId === order.storeId ? 'STORE' : 'CUSTOMER';
+      const senderRole = caller.role === 'SUPER_ADMIN' ? 'ADMIN' : caller.storeId === order.storeId ? 'STORE' : 'CUSTOMER';
       if (!message || !message.trim()) {
         return res.status(400).json({ success: false, message: 'El mensaje no puede estar vacío.' });
       }
@@ -920,33 +817,8 @@ async function startServer() {
   });
 
   // Direct multi-store checkout powered by Cloud SQL
-  app.post('/api/orders/checkout-multi', async (req: Request, res: Response) => {
-    try {
-      const caller = getAuthenticatedUser(req);
-      if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
-      if (caller.role !== 'CUSTOMER' && caller.role !== 'SUPER_ADMIN') return res.status(403).json({ success: false, message: 'No autorizado para realizar checkout' });
-      const { customer, customerId, items, paymentMethod, shippingAddress, notes } = req.body;
-      const requestedCustomerId = customerId || (typeof customer === 'object' ? customer?.id : customer);
-      const targetCustomerId = caller.role === 'SUPER_ADMIN' ? requestedCustomerId : caller.id;
-      if (!targetCustomerId || !Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ success: false, message: 'Datos incompletos para procesar el pedido.' });
-      }
-
-      const result = await cloudSqlRepo.createMultiStoreOrders({
-        customerId: targetCustomerId,
-        items,
-        paymentMethod: paymentMethod || 'CARD_AZUL',
-        shippingAddress: shippingAddress || {},
-        notes,
-      });
-
-      // Sync memory state
-      await db.initCloudSqlSync();
-
-      res.json({ success: true, ...result, version: db.getVersion() });
-    } catch (err: any) {
-      res.status(500).json({ success: false, message: err.message || 'Error procesando multi-store checkout' });
-    }
+  app.post('/api/orders/checkout-multi', (req: Request, res: Response) => {
+    res.status(503).json({ success: false, message: 'Usa el checkout de la plataforma. El checkout alternativo está pendiente de integración.' });
   });
 
   // Cart operations backed directly by Cloud SQL
@@ -2193,7 +2065,8 @@ async function startServer() {
         return res.status(403).json({ success: false, message: 'No tienes autorización para modificar este usuario' });
       }
 
-      const updateData = { ...req.body };
+      const updateData = caller.role === 'SUPER_ADMIN' ? { ...req.body } : editableFields(req.body, ['name','phone','avatar','addresses']);
+      delete updateData.id;
       // Credential changes use the dedicated password endpoint, which verifies the current password.
       delete updateData.password;
       delete updateData.newPassword;

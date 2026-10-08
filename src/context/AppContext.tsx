@@ -174,7 +174,7 @@ interface AppContextType {
     paymentMethod: PaymentMethodType, 
     notes?: string,
     simulatedCard?: { number: string; expiry: string; cvc: string; holder?: string }
-  ) => { success: boolean; orderIds: string[]; orderGroupCode: string; error?: string };
+  ) => Promise<{ success: boolean; orderIds: string[]; orderGroupCode: string; error?: string }>;
 
   // Orders
   orders: Order[];
@@ -1644,21 +1644,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         shippingConfig: { type: 'fixed', fixedRate: 200, estimatedDays: '24-48 horas', coverageProvinces: [] }
       } as unknown as Store);
 
-      const subtotal = items.reduce((sum, i) => {
+      const subtotal = Math.round(items.reduce((sum, i) => {
         const price = i.product.promoPrice || i.product.price;
         return sum + (price * i.cartItem.quantity);
-      }, 0);
+      }, 0) * 100) / 100;
 
       const freeThreshold = store.shippingConfig?.freeShippingThreshold;
       const freeShippingQualified = !!(freeThreshold && subtotal >= freeThreshold);
-      const shippingCost = freeShippingQualified ? 0 : (store.shippingConfig?.fixedRate || 200);
+      const shippingCost = freeShippingQualified || store.shippingConfig?.type === 'free' ? 0 : (store.shippingConfig?.fixedRate ?? 200);
 
       groups.push({
         store,
         items,
         subtotal,
         shippingCost,
-        storeTotal: subtotal + shippingCost,
+        storeTotal: Math.round((subtotal + shippingCost) * 100) / 100,
         freeShippingQualified,
         freeShippingThreshold: freeThreshold
       });
@@ -1705,192 +1705,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const removeCoupon = () => setAppliedCoupon(null);
 
   // --- ORDERS & CHECKOUT (Centralized) ---
-  const processCheckout = (
-    address: CustomerAddress, 
-    paymentMethod: PaymentMethodType, 
-    notes?: string,
-    simulatedCard?: { number: string; expiry: string; cvc: string; holder?: string }
-  ) => {
-    if (cart.length === 0) {
-      return { success: false, orderIds: [], orderGroupCode: '', error: 'El carrito está vacío' };
-    }
-
+  const checkoutAttempt = useRef<{fingerprint: string; key: string} | null>(null);
+  const processCheckout = async (address: CustomerAddress, paymentMethod: PaymentMethodType, notes?: string) => {
+    const failure = (error: string) => ({success:false,orderIds:[],orderGroupCode:'',error});
+    if (!currentUser || !cart.length) return failure('Inicia sesión y agrega productos al carrito');
+    if (paymentMethod !== 'CASH_ON_DELIVERY') return failure('Este método de pago todavía no está disponible');
+    if (appliedCoupon) return failure('Los cupones requieren validación adicional. Retira el cupón para continuar.');
+    const fingerprint = JSON.stringify({cart,address,paymentMethod,notes});
+    if (checkoutAttempt.current?.fingerprint !== fingerprint) checkoutAttempt.current = {fingerprint,key:crypto.randomUUID()};
+    const key = checkoutAttempt.current!.key;
     const groups = getCartGroups();
-    const orderGroupCode = `CHK-${Math.floor(1000 + Math.random() * 9000)}`;
-    const createdOrderIds: string[] = [];
-    // Comisión de Plazado.com centralizada (0.05% = 0.0005)
-    const commissionRate = typeof systemSettings.plazaCommissionRate === 'number' 
-      ? systemSettings.plazaCommissionRate 
-      : 0.0005;
-
-    // Verify stock availability
-    for (const group of groups) {
-      for (const item of group.items) {
-        if (item.cartItem.quantity > item.product.stock) {
-          return {
-            success: false,
-            orderIds: [],
-            orderGroupCode: '',
-            error: `Inventario insuficiente para "${item.product.name}". Disponible: ${item.product.stock}`
-          };
-        }
-      }
+    const payload = groups.map((group, index) => ({
+      id:`${key}-${index}`,orderGroupCode:`CHK-${key}`,storeId:group.store.id,
+      items:group.items.map(item => ({productId:item.product.id,quantity:item.cartItem.quantity})),
+      paymentMethod,deliveryAddress:address,customerNotes:notes,total:group.storeTotal,
+    }));
+    try {
+      const res = await api.createOrders(payload as unknown as Order[]);
+      if (!res.success || !res.orders?.length) return failure((res as any).message || 'No se pudo confirmar el pedido. Tu carrito se conserva.');
+      setOrders(prev => [...res.orders, ...prev.filter(o => !res.orders.some(saved => saved.id === o.id))]);
+      clearCart(); setAppliedCoupon(null); checkoutAttempt.current = null;
+      showNotification('Pedido confirmado. Pago en efectivo al recibir.', 'success');
+      return {success:true,orderIds:res.orders.map(o => o.id),orderGroupCode:res.orders[0].orderGroupCode};
+    } catch (e) {
+      return failure('No se pudo confirmar el pedido. Tu carrito se conserva para reintentar.');
     }
-
-    const isCard = paymentMethod === 'CARD_AZUL';
-    const cleanCard = (simulatedCard?.number || '4111222233334444').replace(/\s+/g, '');
-    const cardLast4 = cleanCard.slice(-4) || '4444';
-    const cardBrand = cleanCard.startsWith('4') ? 'VISA' : cleanCard.startsWith('5') ? 'MASTERCARD' : 'TARJETA';
-    const authCode = `AUTH-AUTO-${Math.floor(100000 + Math.random() * 900000)}`;
-    const chargedAt = new Date().toISOString();
-
-    const newOrders: Order[] = [];
-    const newTransactions: PaymentTransaction[] = [];
-
-    groups.forEach((group, idx) => {
-      const orderId = `ORD-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}-${idx + 1}`;
-      createdOrderIds.push(orderId);
-
-      const deliveryConfirmationCode = Math.floor(100000 + Math.random() * 900000).toString();
-      // Comisión = Monto de la venta * 0.0005
-      // Monto neto tienda = Monto de la venta - Comisión
-      const commissionAmount = Number((group.storeTotal * commissionRate).toFixed(2));
-      const storeNetEarnings = Number((group.storeTotal - commissionAmount).toFixed(2));
-
-      const newOrder: Order = {
-        id: orderId,
-        orderGroupCode,
-        customerId: currentUser ? currentUser.id : `guest-${Date.now()}`,
-        customerName: currentUser ? currentUser.name : address.recipientName,
-        customerEmail: currentUser ? currentUser.email : 'comprador@plazado.com',
-        customerPhone: address.phone || (currentUser?.phone || ''),
-        storeId: group.store.id,
-        storeName: group.store.name,
-        items: group.items.map(i => ({
-          productId: i.product.id,
-          productName: i.product.name,
-          productImage: i.product.images[0] || '',
-          sku: i.product.sku,
-          price: i.product.promoPrice || i.product.price,
-          quantity: i.cartItem.quantity
-        })),
-        subtotal: group.subtotal,
-        shippingCost: group.shippingCost,
-        discount: 0,
-        total: group.storeTotal,
-        plazaCommissionRate: commissionRate,
-        plazaCommissionAmount: commissionAmount,
-        storeNetEarnings,
-        status: 'PENDING',
-        paymentMethod,
-        paymentStatus: isCard ? 'PAID' : 'PENDING',
-        cardLast4: isCard ? cardLast4 : undefined,
-        cardBrand: isCard ? cardBrand : undefined,
-        cardAuthorizationCode: isCard ? authCode : undefined,
-        cardChargedAt: isCard ? chargedAt : undefined,
-        chargeType: isCard ? 'AUTOMATIC' : undefined,
-        deliveryConfirmationCode,
-        deliveryAddress: { ...address },
-        customerNotes: notes,
-        statusHistory: [
-          {
-            status: 'PENDING',
-            timestamp: chargedAt,
-            updatedBy: currentUser ? `Cliente (${currentUser.name})` : `Cliente (${address.recipientName})`,
-            note: isCard
-              ? `Cargo automático aprobado de RD$ ${group.storeTotal.toLocaleString()} a tarjeta ${cardBrand} ••••${cardLast4} (Aut: ${authCode}). Fondos recibidos en custodia de Plazado.com.`
-              : `Pedido generado en checkout multi-tienda ${orderGroupCode}`
-          }
-        ],
-        settlementStatus: 'PENDING',
-        createdAt: chargedAt
-      };
-
-      newOrders.push(newOrder);
-
-      // Registrar transacción financiera vinculada
-      const tx: PaymentTransaction = {
-        id: `TX-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
-        orderId,
-        orderGroupCode,
-        customerId: newOrder.customerId,
-        customerName: newOrder.customerName,
-        storeId: group.store.id,
-        storeName: group.store.name,
-        amount: group.storeTotal,
-        method: paymentMethod,
-        commissionAmount,
-        netAmount: storeNetEarnings,
-        orderStatus: 'PENDING',
-        paymentStatus: isCard ? 'PAID' : 'PENDING',
-        settlementStatus: 'PENDING',
-        gatewayReference: isCard ? `AZUL-${authCode}` : `CASH-${orderId}`,
-        idempotencyKey: `PAY-${orderId}-${group.store.id}`,
-        cardLast4: isCard ? cardLast4 : undefined,
-        cardBrand: isCard ? cardBrand : undefined,
-        notes: isCard ? `Cargo automático procesado con éxito (Aut: ${authCode})` : 'Efectivo contra entrega',
-        createdAt: chargedAt
-      };
-      newTransactions.push(tx);
-    });
-
-    // Send to global server backend
-    api.createOrders(newOrders).then(res => {
-      if (res.success && res.orders) {
-        setOrders(prev => [...res.orders, ...prev.filter(o => !newOrders.some(no => no.id === o.id))]);
-      }
-    }).catch(console.error);
-
-    // Optimistic local state update
-    setOrders(prev => [...newOrders, ...prev]);
-    setPaymentTransactions(prev => [...newTransactions, ...prev]);
-
-    // Update balances optimistically
-    setStoreBalances(prev => {
-      const updated = { ...prev };
-      groups.forEach((group) => {
-        const commissionAmount = Number((group.storeTotal * commissionRate).toFixed(2));
-        const storeNetEarnings = Number((group.storeTotal - commissionAmount).toFixed(2));
-        const current = updated[group.store.id] || {
-          storeId: group.store.id,
-          totalSales: 0,
-          cardSales: 0,
-          cashSales: 0,
-          plazaCommissionsPaid: 0,
-          pendingCashCommissions: 0,
-          pendingBalance: 0,
-          availableBalance: 0,
-          settledBalance: 0,
-          retainedBalance: 0,
-          adjustments: 0,
-          carriedOverDebt: 0,
-          lastUpdated: chargedAt
-        };
-
-        updated[group.store.id] = {
-          ...current,
-          totalSales: (current.totalSales || 0) + group.storeTotal,
-          cardSales: isCard ? (current.cardSales || 0) + group.storeTotal : (current.cardSales || 0),
-          cashSales: !isCard ? (current.cashSales || 0) + group.storeTotal : (current.cashSales || 0),
-          pendingBalance: isCard ? (current.pendingBalance || 0) + storeNetEarnings : (current.pendingBalance || 0),
-          plazaCommissionsPaid: isCard ? (current.plazaCommissionsPaid || 0) + commissionAmount : (current.plazaCommissionsPaid || 0),
-          pendingCashCommissions: !isCard ? (current.pendingCashCommissions || 0) + commissionAmount : (current.pendingCashCommissions || 0),
-          lastUpdated: chargedAt
-        };
-      });
-      return updated;
-    });
-
-    clearCart();
-    setAppliedCoupon(null);
-
-    const totalCharged = groups.reduce((acc, g) => acc + g.storeTotal, 0);
-    if (isCard) {
-      showNotification(`¡Cargo automático aprobado! Se cargó RD$ ${totalCharged.toLocaleString()} a tu tarjeta (Aut: ${authCode}).`, 'success');
-    } else {
-      showNotification(`¡Compra completada con éxito! Se generaron ${groups.length} pedidos.`, 'success');
-    }
-    return { success: true, orderIds: createdOrderIds, orderGroupCode };
   };
 
   const updateOrderStatus = (

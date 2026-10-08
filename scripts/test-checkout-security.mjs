@@ -1,0 +1,44 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {build,transform} from 'esbuild';
+const bundled=await build({entryPoints:['server/order-validation.ts'],bundle:true,platform:'node',format:'cjs',write:false});
+const mod={exports:{}};new Function('module','exports','require',bundled.outputFiles[0].text)(mod,mod.exports,(await import('node:module')).createRequire(import.meta.url));
+const state={products:[{id:'p',name:'Memory fixture',storeId:'s',stock:5,price:100,promoPrice:80,status:'published',images:[]}],stores:[{id:'s',name:'Isolated',status:'APPROVED',shippingConfig:{type:'fixed',fixedRate:0}}],systemSettings:{plazaCommissionRate:0.005}};
+const user={id:'u',name:'Fixture',email:'fixture@example.invalid',phone:'fixture'};
+const request={id:'isolated-attempt-0001',orderGroupCode:'isolated',storeId:'s',items:[{productId:'p',quantity:2,price:1}],total:160,paymentMethod:'CASH_ON_DELIVERY',paymentStatus:'PAID',deliveryAddress:{recipientName:'Fixture',phone:'fixture',province:'Fixture',municipality:'Fixture',street:'Fixture'}};
+const valid=mod.exports.validateOrders([request],state,user);
+assert.equal(valid[0].items[0].price,80);assert.equal(valid[0].paymentStatus,'PENDING');assert.equal(valid[0].customerId,'u');assert.equal(valid[0].total,160);
+for(const quantity of [-1,0,1.5,NaN,6]) assert.throws(()=>mod.exports.validateOrders([{...request,items:[{productId:'p',quantity}]}],state,user));
+assert.throws(()=>mod.exports.validateOrders([{...request,total:1}],state,user));
+for(const paymentMethod of ['CARD_AZUL','BANK_TRANSFER']) assert.throws(()=>mod.exports.validateOrders([{...request,paymentMethod}],state,user));
+assert.throws(()=>mod.exports.validateOrders([{...request,items:[{productId:'p',quantity:3},{productId:'p',quantity:3}]}],state,user));
+const source=fs.readFileSync('server/database.ts','utf8');const start=source.indexOf('  public createOrders('),end=source.indexOf('  public updateOrderStatus(',start);
+const code=await transform(`class Harness {memoryData:any;checkoutQueue=Promise.resolve();stagingCheckout=false;constructor(state:any){this.memoryData=structuredClone(state);}commit(){}addAuditLog(){}addFinancialAuditLog(){} ${source.slice(start,end)} }`,{loader:'ts'});
+const changes=await build({entryPoints:['server/commerce-changes.ts'],bundle:true,platform:'node',format:'cjs',write:false});const cm={exports:{}};new Function('module','exports',changes.outputFiles[0].text)(cm,cm.exports);
+let fail=false,writes=0,persisted;
+const firestoreRepo={persistCheckout:async(prev,next)=>{if(fail)throw Error('isolated write failure');writes++;persisted=structuredClone(next);}};
+const cloudSqlRepo={saveRawOrders:async()=>{}};
+const Harness=new Function('firestoreRepo','cloudSqlRepo','commerceChanges',code.code+';return Harness;')(firestoreRepo,cloudSqlRepo,cm.exports.commerceChanges);
+const initial={...state,orders:[],storeBalances:{},paymentTransactions:[],financialAuditLogs:[],auditLogs:[]};
+const db=new Harness(initial);await db.createOrders(valid);assert.equal(writes,1);assert.equal(db.memoryData.products[0].stock,3);assert.equal(persisted.orders.length,1);await db.createOrders(valid);assert.equal(writes,1);
+fail=true;const rejected=new Harness(initial);await assert.rejects(rejected.createOrders(valid));assert.equal(rejected.memoryData.products[0].stock,5);assert.equal(rejected.memoryData.orders.length,0);
+const frontend=fs.readFileSync('src/context/AppContext.tsx','utf8');const fa=frontend.indexOf('  const processCheckout = async'),fb=frontend.indexOf('\n  const updateOrderStatus',fa);const func=await transform(frontend.slice(fa,fb),{loader:'ts'});
+for(const scenario of ['rejected','offline','success']) {
+ let clears=0,sets=0;const api={createOrders:async()=>{if(scenario==='offline')throw Error('offline');return {success:scenario==='success',orders:scenario==='success'?valid:[]};}};
+ const fn=new Function('currentUser','cart','appliedCoupon','checkoutAttempt','getCartGroups','api','setOrders','clearCart','setAppliedCoupon','showNotification','crypto',func.code+';return processCheckout;')(user,[{}],null,{current:null},()=>[{store:state.stores[0],items:[{product:state.products[0],cartItem:{quantity:2}}],storeTotal:160}],api,()=>sets++,()=>clears++,()=>{},()=>{},globalThis.crypto);
+ const res=await fn(request.deliveryAddress,'CASH_ON_DELIVERY');assert.equal(res.success,scenario==='success');assert.equal(clears,scenario==='success'?1:0);assert.equal(sets,scenario==='success'?1:0);
+}
+console.log('Checkout security: catalog prices, quantity/stock validation, no simulated payments, durable commit before memory, idempotent retries, failed writes preserve stock and cart.');
+// Exercise the actual Firestore transaction method against an isolated in-memory adapter.
+const repoSource=fs.readFileSync('server/firestore-repository.ts','utf8');const ra=repoSource.indexOf('  public async persistCheckout('),rb=repoSource.indexOf('  public async saveOrder(',ra);
+const repoCode=await transform(`class RepoHarness {adminDb:any;constructor(admin:any){this.adminDb=admin;} ${repoSource.slice(ra,rb)} }`,{loader:'ts'});
+const RepoHarness=new Function('commerceChanges','firestoreSafe','isStorePubliclyVisible','isProductPubliclyVisible',repoCode.code+';return RepoHarness;')(cm.exports.commerceChanges,value=>JSON.parse(JSON.stringify(value)),store=>store.status==='APPROVED',product=>product.status==='published');
+const previous=structuredClone(initial),next=structuredClone(persisted);
+const documents=new Map([['products/p',structuredClone(previous.products[0])],['stores/s',structuredClone(previous.stores[0])],['systemSettings/default',structuredClone(previous.systemSettings)]]);
+let rejectCommit=false;
+const admin={doc:path=>path,runTransaction:async callback=>{const pending=[];let writing=false;const result=await callback({get:async path=>{assert.equal(writing,false,'all reads precede writes');return {exists:documents.has(path),data:()=>structuredClone(documents.get(path))};},update:(path,data)=>{writing=true;pending.push([path,{...documents.get(path),...data}]);},set:(path,data)=>{writing=true;pending.push([path,{...documents.get(path),...data}]);}});if(rejectCommit)throw Error('isolated transaction rejection');for(const [path,data] of pending)documents.set(path,structuredClone(data));return result;}};
+const repository=new RepoHarness(admin);
+rejectCommit=true;await assert.rejects(repository.persistCheckout(previous,next));assert.equal(documents.get('products/p').stock,5);assert.equal(documents.has(`orders/${valid[0].id}`),false);
+rejectCommit=false;await repository.persistCheckout(previous,next);assert.equal(documents.get('products/p').stock,3);assert.equal(documents.get(`orders/${valid[0].id}`).paymentStatus,'PENDING');
+await assert.rejects(repository.persistCheckout(previous,next));assert.equal(documents.get('products/p').stock,3);
+console.log('Firestore atomic transaction: all reads precede writes, rejected commit changes nothing, successful commit stores order/stock/balance together, duplicate or concurrent stock change rejected.');

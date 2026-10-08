@@ -1,3 +1,4 @@
+import { commerceChanges } from './commerce-changes';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -97,6 +98,8 @@ export interface GlobalDatabaseData {
 }
 
 class GlobalDatabase {
+  private checkoutQueue: Promise<void> = Promise.resolve();
+  private stagingCheckout = false;
   private settingsUpdateQueue: Promise<void> = Promise.resolve();
   private dataDir: string;
   private backupDir: string;
@@ -447,6 +450,7 @@ class GlobalDatabase {
   }
 
   private commit() {
+    if (this.stagingCheckout) return;
     this.saveToDisk(this.memoryData);
   }
 
@@ -534,6 +538,11 @@ class GlobalDatabase {
       if (Array.isArray(firestoreData.orderMessages)) {
         this.memoryData.orderMessages = [...firestoreData.orderMessages];
         updated = true;
+      }
+      for (const [key, rows] of Object.entries(firestoreData.commerceState || {})) {
+        const merged = new Map(((this.memoryData as any)[key] || []).map((row: any) => [row.id, row]));
+        for (const row of rows) merged.set(row.id, row);
+        (this.memoryData as any)[key] = Array.from(merged.values());
       }
       if (firestoreData.systemSettings) {
         this.memoryData.systemSettings = { ...this.memoryData.systemSettings, ...firestoreData.systemSettings };
@@ -775,7 +784,7 @@ class GlobalDatabase {
       }
 
       // 5. ORDERS & ADS
-      if (sqlOrders.length > 0) {
+      if (this.firestoreSyncStatus !== 'CONNECTED' && sqlOrders.length > 0) {
         for (const o of sqlOrders) {
           if (!this.memoryData.orders.some(mo => mo.id === o.id)) {
             this.memoryData.orders.push({
@@ -1843,7 +1852,45 @@ class GlobalDatabase {
     return this.memoryData.orders;
   }
 
-  public createOrders(orders: Order[]): Order[] {
+  public createOrders(orders: Order[]): Promise<Order[]> {
+    const execute = async () => {
+      const existing = orders.map(order => this.memoryData.orders.find(saved => saved.id === order.id));
+      if (existing.every(Boolean)) return existing as Order[];
+      if (existing.some(Boolean)) throw new Error('Compra parcialmente registrada. Contacta a soporte.');
+      const previous = this.memoryData;
+      this.memoryData = structuredClone(previous);
+      this.stagingCheckout = true;
+      let next: GlobalDatabaseData;
+      let created: Order[];
+      try {
+        created = this.buildCheckout(orders);
+        next = this.memoryData;
+      } finally {
+        this.memoryData = previous;
+        this.stagingCheckout = false;
+      }
+      await firestoreRepo.persistCheckout(previous, next!);
+      for (const change of commerceChanges(previous, next!)) {
+        if (change.collection === 'storeBalances') this.memoryData.storeBalances[change.id] = change.after;
+        else {
+          const list = ((this.memoryData as any)[change.collection] ||= []);
+          const index = list.findIndex((row: any) => row.id === change.id);
+          if (change.collection === 'products' && index >= 0) list[index] = {...list[index],stock:change.after.stock,soldCount:change.after.soldCount};
+          else if (index >= 0) list[index] = change.after;
+          else list.unshift(change.after);
+        }
+      }
+      this.commit();
+      cloudSqlRepo.saveRawOrders(created!).catch(err => console.error('[CloudSQL] Checkout mirror failed:', err));
+      return created!;
+    };
+    const result = this.checkoutQueue.then(execute, execute);
+    this.checkoutQueue = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  private buildCheckout(orders: Order[]): Order[] {
+
     const rate = this.memoryData.systemSettings.plazaCommissionRate !== undefined 
       ? this.memoryData.systemSettings.plazaCommissionRate 
       : 0.0005; // 0.05% de Plazado.com
@@ -2118,7 +2165,7 @@ class GlobalDatabase {
 
     this.commit();
 
-    cloudSqlRepo.saveRawOrders(orders).catch(err => console.error('[CloudSQL] Error syncing saveRawOrders:', err));
+    if (!this.stagingCheckout) cloudSqlRepo.saveRawOrders(orders).catch(err => console.error('[CloudSQL] Error syncing saveRawOrders:', err));
 
     return orders;
   }
@@ -2127,8 +2174,11 @@ class GlobalDatabase {
     const order = this.memoryData.orders.find(o => o.id === orderId);
     if (!order) return { success: false, message: 'Pedido no encontrado' };
 
+    if (status === 'CANCELLED' && order.paymentMethod !== 'CASH_ON_DELIVERY' && order.paymentStatus === 'PAID') return {success:false,message:'El reembolso debe confirmarse con el proveedor de pago antes de cancelar'};
+    if (status === order.status) return {success:true,message:'El pedido ya tiene este estado',order};
+    if (order.status === 'DELIVERED' || order.status === 'CANCELLED') return {success:false,message:'El pedido ya está cerrado'};
     if (status === 'DELIVERED') {
-      if (order.deliveryConfirmationCode && confirmationCode && confirmationCode.trim().toUpperCase() !== order.deliveryConfirmationCode.toUpperCase()) {
+      if (!confirmationCode || !order.deliveryConfirmationCode || confirmationCode.trim().toUpperCase() !== order.deliveryConfirmationCode.toUpperCase()) {
         return { success: false, message: 'Código secreto de entrega incorrecto.' };
       }
 
@@ -2167,7 +2217,7 @@ class GlobalDatabase {
       order.paymentStatus = 'PAID';
     } else if (status === 'CANCELLED') {
       // Si se cancela un pedido pagado con tarjeta no entregado, revertir del pendingBalance
-      if (order.paymentMethod === 'CARD_AZUL' && order.status !== 'DELIVERED') {
+      if (order.paymentMethod === 'CARD_AZUL') {
         const balance = this.memoryData.storeBalances[order.storeId];
         if (balance) {
           balance.pendingBalance = Math.max(0, balance.pendingBalance - order.storeNetEarnings);
@@ -3160,7 +3210,7 @@ class GlobalDatabase {
       this.memoryData.auditLogs = this.memoryData.auditLogs.slice(0, 1000);
     }
 
-    cloudSqlRepo.addAuditLog({
+    if (!this.stagingCheckout) cloudSqlRepo.addAuditLog({
       userId: user?.id,
       userName: user?.name,
       userRole: user?.role,
