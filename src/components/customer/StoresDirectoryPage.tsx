@@ -29,6 +29,7 @@ export const StoresDirectoryPage: React.FC = () => {
     categories, 
     setCurrentView, 
     setSelectedStoreSlug,
+    currentUser,
     openAuthModal,
     copyStoreShareUrl
   } = useApp();
@@ -391,14 +392,25 @@ export const StoresDirectoryPage: React.FC = () => {
                       </button>
                     </div>
 
-                    <button
-                      id={`btn-visit-store-${store.id}`}
-                      onClick={() => handleStoreClick(store.slug || store.id)}
-                      className="px-4 py-2 bg-stone-900 hover:bg-red-600 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ml-auto"
-                    >
-                      <span>Visitar Tienda</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
+                    {currentUser?.role === 'STORE_OWNER' && currentUser.storeId === store.id ? (
+                      <button
+                        id={`btn-manage-store-${store.id}`}
+                        onClick={() => setCurrentView('store_dashboard')}
+                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ml-auto"
+                      >
+                        <Store className="w-3.5 h-3.5" />
+                        <span>Administrar mi tienda</span>
+                      </button>
+                    ) : (
+                      <button
+                        id={`btn-visit-store-${store.id}`}
+                        onClick={() => handleStoreClick(store.slug || store.id)}
+                        className="px-4 py-2 bg-stone-900 hover:bg-red-600 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ml-auto"
+                      >
+                        <span>Visitar Tienda</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
