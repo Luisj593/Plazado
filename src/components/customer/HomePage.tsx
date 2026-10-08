@@ -399,7 +399,7 @@ export const HomePage: React.FC = () => {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => handleCategorySelect(item.slug)
+                onClick={() => handleCategorySelect(item.slug)}
                 className="bg-white dark:bg-stone-900 rounded-xl border border-slate-200/70 dark:border-stone-800 px-3 py-2.5 flex flex-col items-center justify-center text-center hover:border-[#f20544] dark:hover:border-rose-500 hover:shadow-md hover:-translate-y-0.5 transition-all group cursor-pointer min-w-[96px] sm:min-w-[108px] h-[82px]"
                 title={`Explorar ${item.name}`}
               >
