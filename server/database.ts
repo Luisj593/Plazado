@@ -1524,6 +1524,9 @@ class GlobalDatabase {
     this.memoryData.banners.push(newBanner);
     this.addAuditLog('BANNER_CREATED', newId, undefined, `Banner creado: ${newBanner.title}`);
     this.commit();
+    // Firestore is the persistent authority for banners. Persist every mutation
+    // immediately so Railway restarts/redeploys cannot remove newly created banners.
+    firestoreRepo.saveBanner(newBanner).catch(e => console.error(`[GlobalDatabase] Error persisting banner ${newId} to Firestore:`, e));
     return newBanner;
   }
 
@@ -1531,9 +1534,11 @@ class GlobalDatabase {
     const idx = this.memoryData.banners.findIndex(b => b.id === id);
     if (idx === -1) return null;
     this.memoryData.banners[idx] = { ...this.memoryData.banners[idx], ...data };
+    const updatedBanner = this.memoryData.banners[idx];
     this.addAuditLog('BANNER_UPDATED', id, undefined, `Banner actualizado`);
     this.commit();
-    return this.memoryData.banners[idx];
+    firestoreRepo.saveBanner(updatedBanner).catch(e => console.error(`[GlobalDatabase] Error persisting updated banner ${id} to Firestore:`, e));
+    return updatedBanner;
   }
 
   public deleteBanner(id: string): boolean {
@@ -1542,6 +1547,7 @@ class GlobalDatabase {
     this.memoryData.banners.splice(idx, 1);
     this.addAuditLog('BANNER_DELETED', id, undefined, `Banner eliminado`);
     this.commit();
+    firestoreRepo.deleteBanner(id).catch(e => console.error(`[GlobalDatabase] Error deleting banner ${id} from Firestore:`, e));
     return true;
   }
 
