@@ -1,3 +1,4 @@
+import { resolveAndroidApp } from '../../utils/androidApp';
 import React, { useState, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
@@ -25,19 +26,7 @@ import { triggerFileDownload } from '../../utils/fileDownloader';
 export const AndroidAppManagementTab: React.FC = () => {
   const { systemSettings, updateSystemSettings, showNotification } = useApp();
 
-  const appConfig: AndroidAppConfig = systemSettings.androidApp || {
-    isEnabled: true,
-    appName: 'PlazaDO Marketplace RD',
-    versionName: '1.0.4',
-    versionCode: 104,
-    releaseDate: new Date().toISOString().split('T')[0],
-    apkFileName: 'PlazaDO-v1.0.4.apk',
-    apkFileSize: '18.6 MB',
-    minAndroidVersion: 'Android 8.0 (Oreo) o superior',
-    packageName: 'com.plazado.marketplace',
-    releaseNotes: 'Versión oficial de PlazaDO.com para dispositivos Android. Búsqueda por tiendas, carrito integrado y confirmación segura de entregas con código secreto.',
-    downloadCount: 312
-  };
+  const appConfig = resolveAndroidApp(systemSettings.androidApp);
 
   const [socialLinks, setSocialLinks] = useState<SocialLinks>(systemSettings.socialLinks || {});
   const [isEnabled, setIsEnabled] = useState(appConfig.isEnabled);
@@ -135,7 +124,7 @@ export const AndroidAppManagementTab: React.FC = () => {
       releaseDate: releaseDate || new Date().toISOString().split('T')[0],
       apkUrl: apkUrl.trim() || undefined,
       apkFileName: apkFileName.trim() || `PlazaDO-v${versionName}.apk`,
-      apkFileSize: apkFileSize.trim() || '18.6 MB',
+      apkFileSize: apkFileSize.trim() || '',
       minAndroidVersion: minAndroidVersion.trim() || 'Android 8.0+',
       packageName: packageName.trim() || 'com.plazado.marketplace',
       releaseNotes: releaseNotes.trim(),
@@ -506,7 +495,7 @@ export const AndroidAppManagementTab: React.FC = () => {
                     {appName || 'PlazaDO Marketplace RD'}
                   </h4>
                   <p className="text-[11px] text-stone-400">
-                    Versión {versionName} • {apkFileSize || '18.6 MB'}
+                    Versión {versionName} • {apkFileSize || 'Tamaño no informado'}
                   </p>
                 </div>
               </div>

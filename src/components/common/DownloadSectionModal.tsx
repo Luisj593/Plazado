@@ -1,3 +1,4 @@
+import { resolveAndroidApp } from '../../utils/androidApp';
 import React, { useState } from 'react';
 import { SocialLinks } from './SocialLinks';
 import { useApp } from '../../context/AppContext';
@@ -35,19 +36,7 @@ export const DownloadSectionModal: React.FC<DownloadSectionModalProps> = ({
 
   if (!isOpen) return null;
 
-  const androidConfig = systemSettings.androidApp || {
-    isEnabled: true,
-    appName: 'PlazaDO Marketplace RD',
-    versionName: '1.0.4',
-    versionCode: 104,
-    releaseDate: new Date().toISOString().split('T')[0],
-    apkFileName: 'PlazaDO-v1.0.4.apk',
-    apkFileSize: '18.6 MB',
-    minAndroidVersion: 'Android 8.0 (Oreo) o superior',
-    packageName: 'com.plazado.marketplace',
-    releaseNotes: 'Versión oficial de PlazaDO.com para dispositivos móviles Android. Búsqueda por tiendas, carrito unificado y confirmación segura de entregas con código secreto.',
-    downloadCount: 312
-  };
+  const androidConfig = resolveAndroidApp(systemSettings.androidApp);
 
   const legalDocs: LegalDocument[] = systemSettings.legalDocuments && systemSettings.legalDocuments.length > 0 
     ? systemSettings.legalDocuments 
@@ -71,7 +60,7 @@ export const DownloadSectionModal: React.FC<DownloadSectionModalProps> = ({
           categoryLabel: 'Vendedores',
           version: systemSettings.policies.storeTermsVersion || 'v2.1-2026-RD',
           lastUpdated: new Date().toISOString().split('T')[0],
-          description: 'Regulaciones de operaciones comerciales, comisiones (5%), aislamiento de cuentas, liquidaciones a bancos dominicanos y deberes de garantía.',
+          description: 'Regulaciones de operaciones comerciales, comisiones según la configuración vigente, aislamiento de cuentas, liquidaciones a bancos dominicanos y deberes de garantía.',
           isPublished: true,
           pdfFileName: 'PlazaDO_Terminos_Comercios_RD.pdf',
           pdfFileSize: '290 KB'
@@ -103,20 +92,12 @@ export const DownloadSectionModal: React.FC<DownloadSectionModalProps> = ({
       ];
 
   const handleDownloadApk = () => {
-    if (androidConfig.apkUrl) {
-      triggerFileDownload(androidConfig.apkUrl, androidConfig.apkFileName || 'PlazaDO-Marketplace.apk');
-      showNotification(`Descargando ${androidConfig.apkFileName || 'PlazaDO-Marketplace.apk'}...`);
-    } else {
-      // Fallback direct generate apk stub installer package
-      const dummyApkContent = `PlazaDO Android Package Archive (APK)
-Package: ${androidConfig.packageName}
-Version: ${androidConfig.versionName} (${androidConfig.versionCode})
-Plataforma: PlazaDO.com Marketplace República Dominicana`;
-      const blob = new Blob([dummyApkContent], { type: 'application/vnd.android.package-archive' });
-      const blobUrl = URL.createObjectURL(blob);
-      triggerFileDownload(blobUrl, androidConfig.apkFileName || 'PlazaDO-Marketplace.apk');
-      showNotification(`Descargando archivo instalador APK (${androidConfig.apkFileName || 'PlazaDO-Marketplace.apk'})...`);
+    if (!androidConfig.isEnabled || !androidConfig.apkUrl) {
+      showNotification('La descarga de Android no está disponible en este momento.', 'error');
+      return;
     }
+    const started = triggerFileDownload(androidConfig.apkUrl, androidConfig.apkFileName || 'Plazado.apk');
+    showNotification(started ? 'Descarga solicitada. Revisa las descargas de tu navegador.' : 'No se pudo iniciar la descarga.', started ? 'success' : 'error');
   };
 
   const handleDownloadPdf = (doc: LegalDocument) => {
@@ -142,7 +123,7 @@ Plataforma: PlazaDO.com Marketplace República Dominicana`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
-      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-stone-200 overflow-hidden my-6 flex flex-col max-h-[90vh]">
+      <div role="dialog" aria-modal="true" aria-labelledby="download-center-title" className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-stone-200 overflow-hidden my-6 flex flex-col max-h-[90vh] supports-[height:100dvh]:max-h-[90dvh]">
         
         {/* Header */}
         <div className="px-5 py-4 border-b border-stone-200 bg-stone-50 flex items-center justify-between">
@@ -151,7 +132,7 @@ Plataforma: PlazaDO.com Marketplace República Dominicana`;
               <Download className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-extrabold text-stone-900 text-base sm:text-lg">
+              <h2 id="download-center-title" className="font-extrabold text-stone-900 text-base sm:text-lg">
                 Centro de Descargas Oficiales
               </h2>
               <p className="text-[11px] text-stone-500">
@@ -160,6 +141,7 @@ Plataforma: PlazaDO.com Marketplace República Dominicana`;
             </div>
           </div>
           <button
+            aria-label="Cerrar descargas"
             onClick={onClose}
             className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-200 transition-colors"
           >
@@ -197,7 +179,7 @@ Plataforma: PlazaDO.com Marketplace República Dominicana`;
         </div>
 
         {/* Body Content */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
+        <div className="p-5 sm:p-6 min-h-0 overflow-y-auto space-y-4">
           
           {/* TAB 1: ANDROID APP APK */}
           {activeTab === 'app' && (
@@ -209,24 +191,25 @@ Plataforma: PlazaDO.com Marketplace República Dominicana`;
                   </div>
                   <div>
                     <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full inline-block">
-                      Versión Oficial Android {androidConfig.versionName}
+                      {androidConfig.isEnabled ? 'Versión Android' : 'Descarga no disponible'} {androidConfig.versionName}
                     </span>
                     <h3 className="font-extrabold text-stone-900 text-base mt-1">
                       {androidConfig.appName}
                     </h3>
                     <p className="text-xs text-stone-600 mt-0.5">
-                      Paquete: <code className="font-mono text-[11px] text-stone-700">{androidConfig.packageName}</code> • Peso: <strong>{androidConfig.apkFileSize || '18.6 MB'}</strong>
+                      Paquete: <code className="font-mono text-[11px] text-stone-700">{androidConfig.packageName}</code> • Peso: <strong>{androidConfig.apkFileSize || 'Tamaño no informado'}</strong>
                     </p>
                   </div>
                 </div>
 
                 <button
                   type="button"
+                  disabled={!androidConfig.isEnabled || !androidConfig.apkUrl}
                   onClick={handleDownloadApk}
                   className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-2 shrink-0 active:scale-95"
                 >
                   <ArrowDownToLine className="w-4 h-4" />
-                  <span>Descargar APK ({androidConfig.apkFileSize || '18.6 MB'})</span>
+                  <span>Descargar APK ({androidConfig.apkFileSize || 'Tamaño no informado'})</span>
                 </button>
               </div>
 
@@ -322,10 +305,11 @@ Plataforma: PlazaDO.com Marketplace República Dominicana`;
         <div className="px-6 py-3 border-t border-stone-200 bg-stone-50 flex items-center justify-between text-xs text-stone-500">
           <div className="flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Archivos firmados y verificados • PlazaDO.com</span>
+            <span>Archivos publicados por Plazado.com</span>
           </div>
           <button
             type="button"
+            aria-label="Cerrar descargas"
             onClick={onClose}
             className="px-4 py-1.5 bg-stone-200 hover:bg-stone-300 text-stone-800 font-semibold rounded-lg transition-colors"
           >

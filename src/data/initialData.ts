@@ -1,3 +1,4 @@
+import { PACKAGED_ANDROID_APP } from '../utils/androidApp';
 import { 
   User, 
   Store, 
@@ -163,19 +164,7 @@ export const DEFAULT_LEGAL_DOCUMENTS: LegalDocument[] = [
   }
 ];
 
-export const DEFAULT_ANDROID_APP_CONFIG: AndroidAppConfig = {
-  isEnabled: true,
-  appName: 'PlazaDO Marketplace RD',
-  versionName: '1.0.4',
-  versionCode: 104,
-  releaseDate: '2026-09-21',
-  apkFileName: 'PlazaDO-Marketplace-v1.0.4.apk',
-  apkFileSize: '18.6 MB',
-  minAndroidVersion: 'Android 8.0 (Oreo) o superior',
-  packageName: 'com.plazado.marketplace',
-  releaseNotes: 'Versión oficial de PlazaDO.com para Android. Incluye catálogo unificado multi-tienda, carrito multi-comercio, seguimiento de pedidos en tiempo real con Código Secreto de entrega, notificaciones instantáneas de despacho y pagos seguros en RD$.',
-  downloadCount: 312
-};
+export const DEFAULT_ANDROID_APP_CONFIG: AndroidAppConfig = { ...PACKAGED_ANDROID_APP };
 
 export const INITIAL_SETTINGS: SystemSettings = {
   platformName: 'PlazaDO.com',

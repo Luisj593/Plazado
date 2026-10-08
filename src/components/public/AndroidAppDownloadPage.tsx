@@ -1,3 +1,4 @@
+import { resolveAndroidApp } from '../../utils/androidApp';
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
@@ -25,33 +26,15 @@ import { PlazaDoLogo } from '../common/PlazaDoLogo';
 export const AndroidAppDownloadPage: React.FC = () => {
   const { systemSettings, setCurrentView, showNotification } = useApp();
 
-  const appConfig = systemSettings.androidApp || {
-    isEnabled: true,
-    appName: 'PlazaDO Marketplace RD',
-    versionName: '1.0.4',
-    versionCode: 104,
-    releaseDate: '2026-09-21',
-    apkFileName: 'PlazaDO-v1.0.4.apk',
-    apkFileSize: '18.6 MB',
-    minAndroidVersion: 'Android 8.0 (Oreo) o superior',
-    packageName: 'com.plazado.marketplace',
-    releaseNotes: 'Versión oficial de PlazaDO.com para Android. Incluye catálogo unificado multi-tienda, carrito multi-comercio, seguimiento de pedidos en tiempo real con Código Secreto de entrega, notificaciones instantáneas de despacho y pagos seguros en RD$.',
-    downloadCount: 312
-  };
+  const appConfig = resolveAndroidApp(systemSettings.androidApp);
 
   const handleDownload = () => {
-    if (appConfig.apkUrl) {
-      triggerFileDownload(appConfig.apkUrl, appConfig.apkFileName || `PlazaDO-v${appConfig.versionName}.apk`);
-      showNotification(`Descargando ${appConfig.apkFileName || 'PlazaDO Android APK'}...`);
-    } else {
-      // Fallback notification or sample download
-      showNotification('Iniciando descarga del instalador oficial de PlazaDO para Android...');
-      // Generate standard APK manifest stub
-      const dummyApkContent = `PlazaDO Android Package Installer v${appConfig.versionName}\nPackage: ${appConfig.packageName}\nPlazaDO Soluciones Tecnologicas SRL (RNC: ${systemSettings.rnc})\nDescargado desde https://plazado.com`;
-      const blob = new Blob([dummyApkContent], { type: 'application/vnd.android.package-archive' });
-      const url = URL.createObjectURL(blob);
-      triggerFileDownload(url, appConfig.apkFileName || `PlazaDO-v${appConfig.versionName}.apk`);
+    if (!appConfig.isEnabled || !appConfig.apkUrl) {
+      showNotification('La descarga de Android no está disponible en este momento.', 'error');
+      return;
     }
+    const started = triggerFileDownload(appConfig.apkUrl, appConfig.apkFileName || 'Plazado.apk');
+    showNotification(started ? 'Descarga solicitada. Revisa las descargas de tu navegador.' : 'No se pudo iniciar la descarga.', started ? 'success' : 'error');
   };
 
   return (
@@ -85,10 +68,10 @@ export const AndroidAppDownloadPage: React.FC = () => {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full text-xs font-bold flex items-center gap-1.5">
                 <Smartphone className="w-3.5 h-3.5" />
-                Aplicación Móvil para Android
+                {appConfig.isEnabled ? 'Aplicación Móvil para Android' : 'Descarga Android no disponible'}
               </span>
               <span className="text-xs text-stone-400">
-                Versión {appConfig.versionName} • {appConfig.apkFileSize || '18.6 MB'}
+                Versión {appConfig.versionName} • {appConfig.apkFileSize || 'Tamaño no informado'}
               </span>
             </div>
 
@@ -97,7 +80,7 @@ export const AndroidAppDownloadPage: React.FC = () => {
                 Lleva <span className="text-red-500">PlazaDO</span> en tu Teléfono Móvil
               </h1>
               <p className="text-sm sm:text-base text-stone-300 max-w-xl leading-relaxed">
-                Descarga el archivo instalador oficial <strong>APK para Android</strong>. Compra en cientos de tiendas y comercios dominicanos en un solo carrito y recibe tus pedidos con entrega garantizada.
+                Descarga el archivo instalador oficial <strong>APK para Android</strong>. Explora los productos de tiendas dominicanas, compra y confirma la recepción de tus pedidos.
               </p>
             </div>
 
@@ -131,16 +114,17 @@ export const AndroidAppDownloadPage: React.FC = () => {
             {/* Download CTA */}
             <div className="pt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               <button
-                onClick={handleDownload}
+                disabled={!appConfig.isEnabled || !appConfig.apkUrl}
+                  onClick={handleDownload}
                 className="px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-black rounded-2xl text-sm transition-all shadow-lg hover:shadow-emerald-500/20 flex items-center justify-center gap-3 active:scale-98"
               >
                 <Download className="w-5 h-5 text-stone-950" />
-                <span>Descargar APK para Android ({appConfig.apkFileSize || '18.6 MB'})</span>
+                <span>Descargar APK para Android ({appConfig.apkFileSize || 'Tamaño no informado'})</span>
               </button>
 
               <span className="text-xs text-stone-400 flex items-center justify-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>Libre de virus • Verificado por PlazaDO</span>
+                <span>Instalador publicado por Plazado</span>
               </span>
             </div>
           </div>
@@ -288,7 +272,8 @@ export const AndroidAppDownloadPage: React.FC = () => {
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={handleDownload}
+            disabled={!appConfig.isEnabled || !appConfig.apkUrl}
+                  onClick={handleDownload}
             className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-xs transition-colors flex items-center gap-2"
           >
             <Download className="w-4 h-4" />

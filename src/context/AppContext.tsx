@@ -1917,7 +1917,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setReviews(prev => prev.filter(r => r.id !== reviewId));
       showNotification('Reseña eliminada');
     } catch (e) {
-      setReviews(prev => prev.filter(r => r.id !== reviewId));
+      showNotification('No se pudo guardar la moderación. La reseña se conserva.', 'error');
     }
   };
 
