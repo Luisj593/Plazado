@@ -207,10 +207,34 @@ export const HomePage: React.FC = () => {
                   <span className="text-[#f20544] dark:text-rose-400">en un solo lugar</span>
                 </h1>
 
-                {/* Texto Descriptivo */}
-                <p className="text-sm sm:text-base lg:text-lg text-slate-600 dark:text-stone-300 font-normal leading-relaxed">
-                  Descubre productos de tiendas verificadas, compra fácil y disfruta una experiencia segura en Plazado.
-                </p>
+                {/* Información sincronizada con el producto visible en el slider */}
+                {heroMode === 'slider' && activeHeroProduct ? (
+                  <div className="space-y-2">
+                    <div>
+                      <p className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.14em] text-[#f20544] dark:text-rose-400">Producto destacado</p>
+                      <button type="button" onClick={() => setSelectedProductId(activeHeroProduct.id)} className="text-left text-lg sm:text-xl lg:text-2xl font-black text-slate-900 dark:text-white hover:text-[#f20544] transition-colors line-clamp-2">
+                        {activeHeroProduct.name}
+                      </button>
+                    </div>
+                    {activeHeroProduct.description && (
+                      <p className="text-sm sm:text-base text-slate-600 dark:text-stone-300 leading-relaxed line-clamp-2">{activeHeroProduct.description}</p>
+                    )}
+                    <div className="flex items-end gap-2.5">
+                      {typeof activeHeroProduct.promoPrice === 'number' && activeHeroProduct.promoPrice > 0 && activeHeroProduct.promoPrice < activeHeroProduct.price ? (
+                        <>
+                          <span className="text-2xl sm:text-3xl font-black text-[#f20544]">RD$ {activeHeroProduct.promoPrice.toLocaleString()}</span>
+                          <span className="text-sm text-slate-400 line-through pb-1">RD$ {activeHeroProduct.price.toLocaleString()}</span>
+                        </>
+                      ) : (
+                        <span className="text-2xl sm:text-3xl font-black text-[#f20544]">RD$ {activeHeroProduct.price.toLocaleString()}</span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm sm:text-base lg:text-lg text-slate-600 dark:text-stone-300 font-normal leading-relaxed">
+                    Descubre productos de tiendas verificadas, compra fácil y disfruta una experiencia segura en Plazado.
+                  </p>
+                )}
 
                 {/* Botones de Acción */}
                 <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -218,13 +242,17 @@ export const HomePage: React.FC = () => {
                     type="button"
                     id="hero-explore-btn"
                     onClick={() => {
-                      setSelectedCategorySlug(null);
-                      setCurrentView('catalog');
+                      if (heroMode === 'slider' && activeHeroProduct) {
+                        setSelectedProductId(activeHeroProduct.id);
+                      } else {
+                        setSelectedCategorySlug(null);
+                        setCurrentView('catalog');
+                      }
                     }}
                     className="px-6 py-3.5 bg-[#f20544] hover:bg-[#d9043d] active:bg-[#b90334] text-white rounded-full text-sm sm:text-base font-bold shadow-md hover:shadow-rose-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <ShoppingCart className="w-4 h-4 stroke-[2.5]" />
-                    <span>Comprar ahora</span>
+                    <span>{heroMode === 'slider' && activeHeroProduct ? 'Ver producto' : 'Comprar ahora'}</span>
                     <ArrowRight className="w-4 h-4 ml-0.5" />
                   </button>
 
