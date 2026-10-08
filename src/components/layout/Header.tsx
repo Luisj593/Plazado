@@ -142,11 +142,11 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
               title="PlazaDO.com — Comprar y vender en todo RD"
             >
               {customHeaderImage && !headerImageError ? (
-                <div className="flex items-center py-0.5">
+                <div className="w-[220px] h-12 flex items-center justify-center overflow-hidden">
                   <img 
                     src={customHeaderImage} 
                     alt={systemSettings?.platformName || "PlazaDO.com"} 
-                    className="h-9 sm:h-10 max-h-11 w-auto max-w-[220px] object-contain transition-transform group-hover:scale-102"
+                    className="w-full h-full object-contain object-center transition-transform group-hover:scale-[1.02]"
                     onError={() => setHeaderImageError(true)}
                   />
                 </div>
@@ -565,12 +565,14 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
             title="Inicio Plazado.com"
           >
             {customHeaderImage && !headerImageError ? (
-              <img 
-                src={customHeaderImage} 
-                alt={systemSettings?.platformName || "PlazaDO.com"} 
-                className="h-8 max-h-9 w-auto max-w-[150px] object-contain"
-                onError={() => setHeaderImageError(true)}
-              />
+              <div className="w-[150px] h-10 flex items-center justify-center overflow-hidden">
+                <img 
+                  src={customHeaderImage} 
+                  alt={systemSettings?.platformName || "PlazaDO.com"} 
+                  className="w-full h-full object-contain object-center"
+                  onError={() => setHeaderImageError(true)}
+                />
+              </div>
             ) : (
               <>
                 <div className="w-8 h-8 rounded-lg bg-[#f20544] flex items-center justify-center text-white shrink-0 shadow-2xs">
