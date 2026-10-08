@@ -350,7 +350,7 @@ export class CloudSqlRepository {
     description?: string;
     sku?: string;
     price: number;
-    promoPrice?: number;
+    promoPrice?: number | null;
     stock: number;
     status?: string;
     isFeatured?: boolean;
@@ -409,7 +409,7 @@ export class CloudSqlRepository {
     categoryId: string;
     description: string;
     price: number;
-    promoPrice: number;
+    promoPrice: number | null;
     stock: number;
     status: string;
     isFeatured: boolean;

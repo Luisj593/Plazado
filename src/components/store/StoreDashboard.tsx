@@ -136,6 +136,8 @@ export const StoreDashboard: React.FC = () => {
   const [pName, setPName] = useState('');
   const [pSku, setPSku] = useState('');
   const [pPrice, setPPrice] = useState(0);
+  const [isProductSaving, setIsProductSaving] = useState(false);
+  const [pOfferEnabled, setPOfferEnabled] = useState(false);
   const [pPromoPrice, setPPromoPrice] = useState<number | undefined>(undefined);
   const [pStock, setPStock] = useState(0);
   const [pMinAlert, setPMinAlert] = useState(3);
@@ -501,7 +503,8 @@ export const StoreDashboard: React.FC = () => {
       setPName(prod.name);
       setPSku(prod.sku);
       setPPrice(prod.price);
-      setPPromoPrice(prod.promoPrice);
+      setPPromoPrice(prod.promoPrice ?? undefined);
+      setPOfferEnabled(typeof prod.promoPrice === 'number' && prod.promoPrice > 0 && prod.promoPrice < prod.price);
       setPStock(prod.stock);
       setPMinAlert(prod.minStockAlert);
       const matchingCat = categories.find(c => c.id === prod.categoryId || c.slug === prod.categoryId);
@@ -515,6 +518,7 @@ export const StoreDashboard: React.FC = () => {
       setPSku(`SKU-${Date.now().toString().slice(-4)}`);
       setPPrice(1000);
       setPPromoPrice(undefined);
+      setPOfferEnabled(false);
       setPStock(10);
       setPMinAlert(3);
       setPCategory(categories[0]?.id || 'cat-tecnologia');
@@ -526,10 +530,14 @@ export const StoreDashboard: React.FC = () => {
   };
 
   // Save Product
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pName.trim()) {
       showNotification('Ingresa el nombre del producto', 'error');
+      return;
+    }
+    if (!Number.isFinite(pPrice) || pPrice <= 0 || (pOfferEnabled && (!Number.isFinite(pPromoPrice) || !pPromoPrice || pPromoPrice <= 0 || pPromoPrice >= pPrice))) {
+      showNotification('La oferta debe ser mayor que cero y menor que el precio regular', 'error');
       return;
     }
     if (pImagesList.length === 0) {
@@ -541,50 +549,56 @@ export const StoreDashboard: React.FC = () => {
       return;
     }
 
-    if (editingProduct) {
-      if (editingProduct.storeId !== store.id) {
-        showNotification('No tienes autorización para modificar este producto', 'error');
-        return;
+    if (isProductSaving) return;
+    setIsProductSaving(true);
+    try {
+      if (editingProduct) {
+        if (editingProduct.storeId !== store.id) {
+          showNotification('No tienes autorización para modificar este producto', 'error');
+          return;
+        }
+        const isFulfillment = Boolean(editingProduct.isFulfillment || storeFulfillmentItems.some(fi => fi.productId === editingProduct.id));
+        const saved = await updateProduct(editingProduct.id, {
+          name: pName,
+          sku: pSku,
+          price: Number(pPrice),
+          promoPrice: pOfferEnabled ? Number(pPromoPrice) : null,
+          // Rule: A store cannot directly modify warehouse physical stock of Plazado Fulfillment products
+          stock: isFulfillment ? editingProduct.stock : Number(pStock),
+          minStockAlert: Number(pMinAlert),
+          categoryId: pCategory,
+          description: pDesc,
+          images: pImagesList,
+          status: pStatus,
+          updatedAt: new Date().toISOString()
+        });
+        if (!saved) return;
+        showNotification('Producto y galería de imágenes actualizados en el catálogo');
+      } else {
+        const saved = await addProduct({
+          name: pName,
+          slug: pName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `prod-${Date.now()}`,
+          sku: pSku,
+          price: Number(pPrice),
+          promoPrice: pOfferEnabled ? Number(pPromoPrice) : null,
+          stock: Number(pStock),
+          minStockAlert: Number(pMinAlert),
+          categoryId: pCategory,
+          description: pDesc,
+          images: pImagesList,
+          status: pStatus,
+          isFeatured: false
+        });
+        if (!saved) return;
+        showNotification(
+          pStatus === 'published'
+            ? '¡Producto publicado exitosamente! Ya es visible para todos en el catálogo de PlazaDO.'
+            : 'Producto guardado en tu panel de tienda.'
+        );
       }
-      const isFulfillment = Boolean(editingProduct.isFulfillment || storeFulfillmentItems.some(fi => fi.productId === editingProduct.id));
-      updateProduct(editingProduct.id, {
-        name: pName,
-        sku: pSku,
-        price: Number(pPrice),
-        promoPrice: pPromoPrice ? Number(pPromoPrice) : undefined,
-        // Rule: A store cannot directly modify warehouse physical stock of Plazado Fulfillment products
-        stock: isFulfillment ? editingProduct.stock : Number(pStock),
-        minStockAlert: Number(pMinAlert),
-        categoryId: pCategory,
-        description: pDesc,
-        images: pImagesList,
-        status: pStatus,
-        updatedAt: new Date().toISOString()
-      });
-      showNotification('Producto y galería de imágenes actualizados en el catálogo');
-    } else {
-      addProduct({
-        name: pName,
-        slug: pName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `prod-${Date.now()}`,
-        sku: pSku,
-        price: Number(pPrice),
-        promoPrice: pPromoPrice ? Number(pPromoPrice) : undefined,
-        stock: Number(pStock),
-        minStockAlert: Number(pMinAlert),
-        categoryId: pCategory,
-        description: pDesc,
-        images: pImagesList,
-        status: pStatus,
-        isFeatured: false
-      });
-      showNotification(
-        pStatus === 'published' 
-          ? '¡Producto publicado exitosamente! Ya es visible para todos en el catálogo de PlazaDO.'
-          : 'Producto guardado en tu panel de tienda.'
-      );
-    }
 
-    setProductModalOpen(false);
+      setProductModalOpen(false);
+    } finally { setIsProductSaving(false); }
   };
 
   // Submit Settlement
@@ -2689,22 +2703,32 @@ export const StoreDashboard: React.FC = () => {
                   <input
                     type="number"
                     required
-                    min={1}
+                    min={0.01}
+                    step="0.01"
                     value={pPrice}
                     onChange={(e) => setPPrice(Number(e.target.value))}
                     className="w-full p-2 bg-stone-50 border border-stone-300 rounded-lg outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-stone-700 mb-1">Precio Oferta (Opcional)</label>
+                  <label className="flex items-center gap-2 font-semibold text-stone-700 mb-1">
+                    <input type="checkbox" checked={pOfferEnabled} onChange={e => setPOfferEnabled(e.target.checked)} />
+                    Activar oferta
+                  </label>
                   <input
                     type="number"
-                    min={0}
-                    value={pPromoPrice || ''}
+                    min={0.01}
+                    step="0.01"
+                    required={pOfferEnabled}
+                    disabled={!pOfferEnabled}
+                    aria-label="Precio de oferta (RD$)"
+                    value={pPromoPrice ?? ''}
                     onChange={(e) => setPPromoPrice(e.target.value ? Number(e.target.value) : undefined)}
-                    placeholder="Dejar vacío si no aplica"
+                    placeholder="Precio menor al regular"
                     className="w-full p-2 bg-stone-50 border border-stone-300 rounded-lg outline-none"
                   />
+                  <p className="mt-1 text-xs text-stone-500">Las ofertas de productos publicados aparecen en la portada. Desactiva la casilla para volver al precio regular.</p>
+                  {pOfferEnabled && pPromoPrice && pPromoPrice > 0 && pPromoPrice < pPrice ? <p className="mt-1 text-xs font-bold text-red-600">Descuento: {Math.round((1 - pPromoPrice / pPrice) * 100)}%</p> : null}
                 </div>
               </div>
 
@@ -2784,7 +2808,7 @@ export const StoreDashboard: React.FC = () => {
                   categoryName={categories.find(c => c.id === pCategory)?.name}
                   storeName={store?.name}
                   price={pPrice}
-                  promoPrice={pPromoPrice}
+                  promoPrice={pOfferEnabled ? pPromoPrice : undefined}
                   currentDescription={pDesc}
                   onDescriptionGenerated={(newDesc) => setPDesc(newDesc)}
                   showNotification={showNotification}
@@ -2809,9 +2833,10 @@ export const StoreDashboard: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold shadow-xs"
+                  disabled={isProductSaving}
+                  className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold shadow-xs disabled:opacity-50"
                 >
-                  Guardar Producto
+                  {isProductSaving ? 'Guardando…' : 'Guardar Producto'}
                 </button>
               </div>
             </form>

@@ -257,7 +257,7 @@ export interface Product {
   categoryId: string;
   subcategoryId?: string;
   price: number; // DOP
-  promoPrice?: number; // DOP opcional
+  promoPrice?: number | null; // null elimina explícitamente la oferta persistida
   sku: string;
   images: string[];
   stock: number;

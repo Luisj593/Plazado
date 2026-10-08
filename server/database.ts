@@ -1272,7 +1272,7 @@ class GlobalDatabase {
     return this.memoryData.products;
   }
 
-  public addProduct(productData: Omit<Product, 'id' | 'reservedStock' | 'soldCount' | 'rating' | 'reviewCount' | 'createdAt'>): Product {
+  public async addProduct(productData: Omit<Product, 'id' | 'reservedStock' | 'soldCount' | 'rating' | 'reviewCount' | 'createdAt'>): Promise<Product> {
     const newId = `prod-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const newProduct: Product = {
       ...productData,
@@ -1284,12 +1284,10 @@ class GlobalDatabase {
       reviewCount: 0,
       createdAt: new Date().toISOString()
     };
+    await firestoreRepo.saveProduct(newProduct);
     this.memoryData.products.unshift(newProduct);
     this.addAuditLog('PRODUCT_CREATED', newId, undefined, `Producto publicado: ${newProduct.name} (Tienda: ${newProduct.storeId})`);
     this.commit();
-
-    // Firestore is the production source of truth. Persist every new publication there.
-    firestoreRepo.saveProduct(newProduct).catch(err => console.error('[Firestore] Error syncing createProduct:', err));
 
     cloudSqlRepo.createProduct({
       id: newProduct.id,
@@ -1310,23 +1308,22 @@ class GlobalDatabase {
     return newProduct;
   }
 
-  public updateProduct(productId: string, data: Partial<Product>): Product | null {
+  public async updateProduct(productId: string, data: Partial<Product>): Promise<Product | null> {
     const idx = this.memoryData.products.findIndex(p => p.id === productId);
     if (idx === -1) return null;
     const prev = this.memoryData.products[idx];
     const updated = { ...prev, ...data };
+    await firestoreRepo.saveProduct(updated);
     this.memoryData.products[idx] = updated;
     this.addAuditLog('PRODUCT_UPDATED', productId, prev.name, updated.name);
     this.commit();
-
-    firestoreRepo.saveProduct(updated).catch(err => console.error('[Firestore] Error syncing updateProduct:', err));
 
     cloudSqlRepo.updateProduct(productId, {
       name: updated.name,
       description: updated.description,
       categoryId: updated.categoryId,
       price: updated.price,
-      promoPrice: updated.promoPrice,
+      promoPrice: updated.promoPrice ?? null,
       stock: updated.stock,
       images: updated.images,
       status: updated.status,

@@ -140,8 +140,8 @@ interface AppContextType {
 
   // Products
   products: Product[];
-  addProduct: (product: Omit<Product, 'id' | 'storeId' | 'reservedStock' | 'soldCount' | 'rating' | 'reviewCount' | 'createdAt'>) => void;
-  updateProduct: (productId: string, data: Partial<Product>) => void;
+  addProduct: (product: Omit<Product, 'id' | 'storeId' | 'reservedStock' | 'soldCount' | 'rating' | 'reviewCount' | 'createdAt'>) => Promise<boolean>;
+  updateProduct: (productId: string, data: Partial<Product>) => Promise<boolean>;
   deleteProduct: (productId: string) => void;
   cleanTestProducts: () => number;
 
@@ -1443,54 +1443,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // --- PRODUCTS OPERATIONS (Global) ---
-  const addProduct = async (productData: Omit<Product, 'id' | 'storeId' | 'reservedStock' | 'soldCount' | 'rating' | 'reviewCount' | 'createdAt'>) => {
-    const storeId = currentUser?.role === 'STORE_OWNER' ? currentUser.storeId : (stores[0]?.id || 'store-techzone');
-    if (!storeId) {
-      showNotification('Error: Debes ser una tienda activa para agregar productos', 'error');
-      return;
-    }
-
+  const addProduct = async (productData: Omit<Product, 'id' | 'storeId' | 'reservedStock' | 'soldCount' | 'rating' | 'reviewCount' | 'createdAt'>): Promise<boolean> => {
+    const storeId = currentUser?.role === 'STORE_OWNER' ? currentUser.storeId : stores[0]?.id;
+    if (!storeId) { showNotification('Debes tener una tienda para agregar productos', 'error'); return false; }
     try {
       const res = await api.createProduct({ ...productData, storeId });
-      if (res.success && res.product) {
-        setProducts(prev => [res.product, ...prev]);
-        showNotification(`Producto "${res.product.name}" publicado en el catálogo global`);
-      }
+      if (!res.success || !res.product) throw new Error('No se pudo guardar el producto');
+      setProducts(prev => [res.product, ...prev]);
+      return true;
     } catch (e) {
-      const tempId = `prod-${Date.now()}`;
-      const optimisticProd: Product = {
-        ...productData,
-        id: tempId,
-        storeId,
-        reservedStock: 0,
-        soldCount: 0,
-        rating: 5.0,
-        reviewCount: 0,
-        createdAt: new Date().toISOString()
-      };
-      setProducts(prev => [optimisticProd, ...prev]);
-      showNotification(`Producto "${optimisticProd.name}" publicado`);
+      showNotification('No se pudo guardar el producto. Reintenta sin cerrar el formulario.', 'error');
+      return false;
     }
   };
 
-  const updateProduct = async (productId: string, data: Partial<Product>) => {
+  const updateProduct = async (productId: string, data: Partial<Product>): Promise<boolean> => {
     const existing = products.find(p => p.id === productId);
-    if (!existing) return;
-
-    if (currentUser?.role === 'STORE_OWNER' && currentUser?.storeId !== existing.storeId) {
-      showNotification('Violación de seguridad: No puedes modificar productos de otra tienda', 'error');
-      return;
+    if (!existing) return false;
+    if (currentUser?.role === 'STORE_OWNER' && currentUser.storeId !== existing.storeId) {
+      showNotification('No puedes modificar productos de otra tienda', 'error');
+      return false;
     }
-
     try {
       const res = await api.updateProduct(productId, data);
-      if (res.success && res.product) {
-        setProducts(prev => prev.map(p => p.id === productId ? res.product : p));
-      }
+      if (!res.success || !res.product) throw new Error('No se pudo actualizar el producto');
+      setProducts(prev => prev.map(p => p.id === productId ? res.product : p));
+      return true;
     } catch (e) {
-      setProducts(prev => prev.map(p => p.id === productId ? { ...p, ...data } : p));
+      showNotification('No se pudo guardar el producto. Reintenta sin cerrar el formulario.', 'error');
+      return false;
     }
-    showNotification('Producto actualizado globalmente');
   };
 
   const deleteProduct = async (productId: string) => {
