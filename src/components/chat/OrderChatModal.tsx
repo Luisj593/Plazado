@@ -74,8 +74,8 @@ export const OrderChatModal: React.FC = () => {
     if (!trimmed || isSending) return;
 
     setIsSending(true);
-    setInputText('');
-    await sendOrderMessage(activeChatOrderId, trimmed);
+    const sent=await sendOrderMessage(activeChatOrderId, trimmed);
+    if(sent) setInputText('');
     setIsSending(false);
     setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

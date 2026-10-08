@@ -2135,13 +2135,15 @@ class GlobalDatabase {
     senderName: string;
     senderRole: 'CUSTOMER' | 'STORE' | 'ADMIN';
     message: string;
-  }): OrderChatMessage {
+  }): Promise<OrderChatMessage> {
+    return this.runCommerceMutation(() => {
+    if(typeof data.message!=='string' || !data.message.trim() || data.message.length>5000) throw new Error('El mensaje debe contener entre 1 y 5000 caracteres');
     if (!Array.isArray(this.memoryData.orderMessages)) {
       this.memoryData.orderMessages = [];
     }
 
     const newMessage: OrderChatMessage = {
-      id: `MSG-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+      id: `MSG-${crypto.randomUUID()}`,
       orderId: data.orderId,
       storeId: data.storeId,
       customerId: data.customerId,
@@ -2157,9 +2159,11 @@ class GlobalDatabase {
     this.memoryData.orderMessages.push(newMessage);
     this.commit();
     return newMessage;
+    });
   }
 
-  public markOrderMessagesAsRead(orderId: string, role: 'CUSTOMER' | 'STORE'): boolean {
+  public markOrderMessagesAsRead(orderId: string, role: 'CUSTOMER' | 'STORE'): Promise<boolean> {
+    return this.runCommerceMutation(() => {
     if (!Array.isArray(this.memoryData.orderMessages)) {
       this.memoryData.orderMessages = [];
       return true;
@@ -2182,6 +2186,7 @@ class GlobalDatabase {
       this.commit();
     }
     return true;
+    });
   }
 
   // --- BALANCES & SETTLEMENTS (PROCESO AUTOMÁTICO DE LOS VIERNES) ---

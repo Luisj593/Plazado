@@ -482,7 +482,7 @@ export class FirestoreRepository {
         if (change.before && (change.collection === 'orders' || change.collection === 'settlements')) {
           if (!current || current.status !== change.before.status || current.paymentStatus !== change.before.paymentStatus || current.settlementStatus !== change.before.settlementStatus || (current.activeDisputeId ?? null)!==(change.before.activeDisputeId ?? null)) throw new Error('La operación ya cambió en otra sesión. Actualiza antes de reintentar.');
         }
-        if (['users','stores','banners','disputes'].includes(change.collection) && change.before) {
+        if (['users','stores','banners','disputes','orderMessages'].includes(change.collection) && change.before) {
           if(!current) throw new Error('El registro ya no existe. Actualiza antes de reintentar');
           for(const key of Object.keys(change.before)) if(JSON.stringify(current[key])!==JSON.stringify(change.before[key])) throw new Error('El registro cambió en otra sesión. Actualiza antes de reintentar');
         }
