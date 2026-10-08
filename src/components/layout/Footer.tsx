@@ -7,7 +7,7 @@ import { PlazaDoLogo } from '../common/PlazaDoLogo';
 import { Phone, Mail, MapPin, ShieldCheck, CreditCard, Truck, RefreshCw, MessageSquare, Download, Smartphone, FileText } from 'lucide-react';
 
 export const Footer: React.FC = () => {
-  const { setCurrentView, setOpenPolicySlug, systemSettings, categories, setSelectedCategorySlug, openDownloadModal } = useApp();
+  const { setCurrentView, setOpenPolicySlug, systemSettings, theme, categories, setSelectedCategorySlug, openDownloadModal } = useApp();
 
   const handleOpenPolicy = (slug: string) => {
     setOpenPolicySlug(slug);
@@ -80,7 +80,7 @@ export const Footer: React.FC = () => {
         {/* Brand Column */}
         <div className="md:col-span-2 space-y-4">
           <div className="pt-1">
-            <PlazaDoLogo variant="full" inverted={true} className="w-56 h-auto" />
+            <PlazaDoLogo variant="full" inverted={theme === 'dark'} className="w-56 max-w-full h-auto" />
           </div>
           <p className="text-xs text-stone-500 dark:text-stone-400 leading-relaxed max-w-sm">
             El marketplace multi-vendedor de la República Dominicana. Todo en un solo lugar: conectando clientes con tiendas, comercios, emprendedores y marcas locales de todo el país.
