@@ -1,8 +1,8 @@
 {
-  "version": "2026-10-08.1",
+  "version": "2026-10-08.2",
   "effectiveDate": "2026-10-08",
   "contactEmail": "contacto@plazado.com",
-  "pdfUrl": "/legal/plazado-politicas-terminos-2026-10-08.pdf",
+  "pdfUrl": "/legal/plazado-politicas-plataforma.pdf",
   "documents": [
     {
       "id": "customer_terms",
@@ -42,7 +42,7 @@
         {
           "title": "5. Derechos y uso responsable",
           "paragraphs": [
-            "Aplican las políticas comunes de entregas y de devoluciones incluidas en este documento. Puedes reclamar por falta de entrega, daños, defectos, producto incorrecto o incumplimiento de lo ofrecido. Ninguna casilla de aceptación supone renunciar a derechos irrenunciables.",
+            "Aplican las políticas comunes de entregas y de devoluciones publicadas por separado en el centro legal y disponibles durante el registro. Puedes reclamar por falta de entrega, daños, defectos, producto incorrecto o incumplimiento de lo ofrecido. Ninguna casilla de aceptación supone renunciar a derechos irrenunciables.",
             "Se prohíben fraude, suplantación, abuso de códigos, accesos a cuentas ajenas, contenido ilícito y uso de la plataforma para operaciones prohibidas. Las reseñas deben basarse en experiencias reales y respetar la privacidad."
           ]
         },
@@ -228,5 +228,9 @@
       "title": "Leyes 172-13 y 126-02 - Poder Judicial",
       "url": "https://observatorio.poderjudicial.gob.do/normas-y-publicaciones/"
     }
-  ]
+  ],
+  "termsPdfUrls": {
+    "CUSTOMER": "/legal/plazado-terminos-usuarios.pdf",
+    "STORE": "/legal/plazado-terminos-tiendas.pdf"
+  }
 }

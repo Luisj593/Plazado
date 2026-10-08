@@ -2,6 +2,14 @@ import bundle from './documents.json';
 
 export const LEGAL_VERSION = bundle.version;
 export const LEGAL_PDF_URL = bundle.pdfUrl;
+export function termsPdfUrl(audience: 'CUSTOMER' | 'STORE') {
+  return bundle.termsPdfUrls[audience];
+}
+export function legalDocumentPdfUrl(category: string) {
+  if (category === 'customer_terms') return termsPdfUrl('CUSTOMER');
+  if (category === 'store_terms') return termsPdfUrl('STORE');
+  return LEGAL_PDF_URL;
+}
 export const LEGAL_DOCUMENTS = bundle.documents;
 export type LegalAudience = 'CUSTOMER' | 'STORE';
 

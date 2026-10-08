@@ -1,5 +1,6 @@
 import React from 'react';
 import bundle from '../../legal/documents.json';
+import { legalDocumentPdfUrl } from '../../legal/registration';
 import { useApp } from '../../context/AppContext';
 import { X, ShieldCheck, FileText, CheckCircle2, Download, FileCheck } from 'lucide-react';
 import { triggerFileDownload, downloadOfficialPdfFallback } from '../../utils/fileDownloader';
@@ -100,7 +101,8 @@ PlazaDO.com opera con una comisión comercial fija del **5%** sobre las ventas g
 
   const handleDownloadPdf = () => {
     if (canonicalDoc) {
-      triggerFileDownload(bundle.pdfUrl, 'Plazado-Politicas-y-Terminos.pdf');
+      const url = legalDocumentPdfUrl(canonicalDoc.id);
+      triggerFileDownload(url, url.split('/').pop() || 'Plazado.pdf');
     } else if (matchedDoc?.pdfUrl) {
       triggerFileDownload(matchedDoc.pdfUrl, matchedDoc.pdfFileName || `${matchedDoc.title}.pdf`);
       showNotification(`Descargando ${matchedDoc.pdfFileName || matchedDoc.title}...`);
