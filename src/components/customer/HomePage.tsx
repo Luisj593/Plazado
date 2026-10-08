@@ -450,14 +450,15 @@ export const HomePage: React.FC = () => {
       )}
 
       {/* Ofertas reales: solo productos publicados que tengan promoPrice válido */}
-      {offerProducts.length > 0 && (
-        <section className="space-y-3.5">
+      {
+        <section id="ofertas" aria-label="Ofertas" className="space-y-3.5">
           <div className="flex items-end justify-between gap-3">
             <div>
-              <h2 className="text-lg sm:text-xl font-black text-slate-950 dark:text-white flex items-center gap-2"><Percent className="w-5 h-5 text-[#f20544]" /> Ofertas destacadas</h2>
+              <h2 className="text-lg sm:text-xl font-black text-slate-950 dark:text-white flex items-center gap-2"><Percent className="w-5 h-5 text-[#f20544]" /> Ofertas</h2>
               <p className="text-xs text-slate-500 dark:text-stone-400">Promociones publicadas actualmente por las tiendas.</p>
             </div>
           </div>
+          {offerProducts.length === 0 && <p className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500 dark:bg-stone-900 dark:border-stone-800">Pronto encontrarás aquí las ofertas publicadas por las tiendas.</p>}
           <div className="flex gap-3 overflow-x-auto pb-2 snap-x scrollbar-none">
             {offerProducts.map(prod => {
               const discount = Math.round((1 - (prod.promoPrice! / prod.price)) * 100);
@@ -481,7 +482,7 @@ export const HomePage: React.FC = () => {
             })}
           </div>
         </section>
-      )}
+      }
 
       {/* ============================================================== */}
       {/* 5. PRODUCTOS DESTACADOS — GRID DE 8 TARJETA MARKETPLACE        */}
@@ -702,6 +703,7 @@ export const HomePage: React.FC = () => {
               Ver todos <ArrowRight className="w-4 h-4" />
             </button>
           </div>
+          {offerProducts.length === 0 && <p className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500 dark:bg-stone-900 dark:border-stone-800">Pronto encontrarás aquí las ofertas publicadas por las tiendas.</p>}
           <div className="flex gap-3 overflow-x-auto pb-2 snap-x scrollbar-none">
             {categoryProducts.map(prod => {
               const store = stores.find(s => s.id === prod.storeId);

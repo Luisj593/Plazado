@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { validateProductOffer } from './src/utils/productOffers';
 import { LEGAL_VERSION, hasCurrentLegalConsent, registrationDocuments } from './src/legal/registration';
 import express, { Request, Response } from 'express';
 import path from 'path';
@@ -439,7 +440,7 @@ async function startServer() {
     res.json({ success: true, products: db.getProducts() });
   });
 
-  app.post('/api/products', (req: Request, res: Response) => {
+  app.post('/api/products', async (req: Request, res: Response) => {
     const caller = getAuthenticatedUser(req);
     if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
     if (caller.role !== 'SUPER_ADMIN' && caller.role !== 'STORE_OWNER') {
@@ -452,14 +453,16 @@ async function startServer() {
         // Never trust a storeId supplied by the client.
         productData.storeId = caller.storeId;
       }
-      const newProd = db.addProduct(productData);
+      const offerError = validateProductOffer(productData.price, productData.promoPrice);
+      if (offerError) return res.status(400).json({ success: false, message: offerError });
+      const newProd = await db.addProduct(productData);
       res.json({ success: true, product: newProd, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message || 'Error creating product' });
     }
   });
 
-  app.put('/api/products/:id', (req: Request, res: Response) => {
+  app.put('/api/products/:id', async (req: Request, res: Response) => {
     const caller = getAuthenticatedUser(req);
     if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
     const existing = db.getProducts().find((p: any) => p.id === req.params.id);
@@ -469,8 +472,16 @@ async function startServer() {
     }
     const safeBody = { ...req.body };
     if (caller.role !== 'SUPER_ADMIN') safeBody.storeId = existing.storeId;
-    const updated = db.updateProduct(req.params.id, safeBody);
-    res.json({ success: true, product: updated, version: db.getVersion() });
+    if (Object.hasOwn(safeBody, 'price') || Object.hasOwn(safeBody, 'promoPrice')) {
+      const offerError = validateProductOffer(safeBody.price ?? existing.price, Object.hasOwn(safeBody, 'promoPrice') ? safeBody.promoPrice : existing.promoPrice);
+      if (offerError) return res.status(400).json({ success: false, message: offerError });
+    }
+    try {
+      const updated = await db.updateProduct(req.params.id, safeBody);
+      res.json({ success: true, product: updated, version: db.getVersion() });
+    } catch (err: any) {
+      res.status(503).json({ success: false, message: 'No se pudo guardar el producto' });
+    }
   });
 
   app.delete('/api/products/:id', (req: Request, res: Response) => {

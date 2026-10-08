@@ -390,6 +390,7 @@ export class FirestoreRepository {
       const ref = doc(this.db, 'products', product.id);
       await setDoc(ref, firestoreSafe({
         ...product,
+        promoPrice: product.promoPrice ?? null,
         updatedAt: new Date().toISOString()
       }), { merge: true });
     } catch (e) {
