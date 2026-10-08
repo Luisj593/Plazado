@@ -44,3 +44,13 @@ await assert.rejects(db.updateSystemSettings({legalEntityRegistered:true}));
 await db.updateSystemSettings({legalEntityRegistered:true,legalBusinessName:'Isolated entity',rnc:'ISOLATED-ONLY',legalAddress:'Isolated address'});
 db=new Harness(structuredClone(persisted));assert.equal(db.memoryData.systemSettings.legalBusinessName,'Isolated entity');assert.equal(db.memoryData.systemSettings.legalEntityRegistered,true);
 console.log('Legal configuration: unregistered state and later entity details persist; incomplete published identity rejected.');
+
+await db.updateSystemSettings({socialLinks:{instagram:' https://www.instagram.com/plazado/ ',tiktok:'https://www.tiktok.com/@plazado',facebook:'https://www.facebook.com/plazado'}});
+db=new Harness(structuredClone(persisted));
+assert.equal(db.memoryData.systemSettings.socialLinks.instagram,'https://www.instagram.com/plazado/');
+await db.updateSystemSettings({socialLinks:{instagram:''}});
+assert.equal(persisted.socialLinks.instagram,'');assert.equal(persisted.socialLinks.tiktok,'https://www.tiktok.com/@plazado');
+for(const socialLinks of [{instagram:'javascript:alert(1)'},{facebook:'https://facebook.com.evil.invalid/x'},{tiktok:'https://evil.invalid/tiktok.com'},{instagram:'https://user:pass@instagram.com/x'},{youtube:'https://youtube.com'},{facebook:42}]) {
+ const before=structuredClone(persisted);await assert.rejects(db.updateSystemSettings({socialLinks}));assert.deepEqual(persisted,before);
+}
+console.log('Social links: official HTTPS domains only, persisted across restart, partial updates preserve other networks, empty disables, invalid links do not write.');

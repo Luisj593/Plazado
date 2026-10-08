@@ -18,7 +18,8 @@ import {
   Layers,
   ArrowRight
 } from 'lucide-react';
-import { AndroidAppConfig } from '../../types';
+import { AndroidAppConfig, SocialLinks } from '../../types';
+import { SOCIAL_NETWORKS, validSocialUrl } from '../common/SocialLinks';
 import { triggerFileDownload } from '../../utils/fileDownloader';
 
 export const AndroidAppManagementTab: React.FC = () => {
@@ -38,6 +39,7 @@ export const AndroidAppManagementTab: React.FC = () => {
     downloadCount: 312
   };
 
+  const [socialLinks, setSocialLinks] = useState<SocialLinks>(systemSettings.socialLinks || {});
   const [isEnabled, setIsEnabled] = useState(appConfig.isEnabled);
   const [appName, setAppName] = useState(appConfig.appName);
   const [versionName, setVersionName] = useState(appConfig.versionName);
@@ -117,6 +119,12 @@ export const AndroidAppManagementTab: React.FC = () => {
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
+    for (const network of SOCIAL_NETWORKS) {
+      if (socialLinks[network.key]?.trim() && !validSocialUrl(socialLinks[network.key], network.domain)) {
+        showNotification(`El enlace de ${network.label} debe usar https://${network.domain}.`, 'error');
+        return;
+      }
+    }
     setIsSaving(true);
 
     const newConfig: AndroidAppConfig = {
@@ -134,12 +142,13 @@ export const AndroidAppManagementTab: React.FC = () => {
       downloadCount: appConfig.downloadCount || 0
     };
 
-    await updateSystemSettings({
-      androidApp: newConfig
+    const saved = await updateSystemSettings({
+      androidApp: newConfig,
+      socialLinks: Object.fromEntries(SOCIAL_NETWORKS.map(({ key }) => [key, socialLinks[key]?.trim() || '']))
     });
 
     setIsSaving(false);
-    showNotification('Configuración de la Aplicación Android (APK) guardada exitosamente.');
+    if (saved) showNotification('Configuración APK y redes sociales guardada exitosamente.');
   };
 
   const handleTestDownload = () => {
@@ -447,6 +456,17 @@ export const AndroidAppManagementTab: React.FC = () => {
               )}
             </div>
 
+            <fieldset className="space-y-3 border-t border-stone-200 pt-4">
+              <legend className="font-bold text-stone-900">Redes sociales de Plazado</legend>
+              <p className="text-xs text-stone-500">Los iconos aparecen debajo de la descarga APK. Deja vacío un enlace para desactivarlo.</p>
+              {SOCIAL_NETWORKS.map(({ key, label, domain }) => (
+                <label key={key} className="block text-sm text-stone-700">
+                  {label}
+                  <input type="url" value={socialLinks[key] || ''} onChange={e => setSocialLinks(previous => ({ ...previous, [key]: e.target.value }))} placeholder={`https://www.${domain}/`} className="mt-1 w-full px-3 py-2 border border-stone-300 rounded-lg text-sm" />
+                </label>
+              ))}
+            </fieldset>
+
             {/* Save Button */}
             <div className="pt-4 border-t border-stone-100 flex items-center justify-end gap-2">
               <button
@@ -455,7 +475,7 @@ export const AndroidAppManagementTab: React.FC = () => {
                 className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs shadow-xs transition-colors flex items-center gap-2"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>{isSaving ? 'Guardando...' : 'Guardar y Publicar Configuración APK'}</span>
+                <span>{isSaving ? 'Guardando...' : 'Guardar APK y Redes Sociales'}</span>
               </button>
             </div>
           </form>

@@ -1420,6 +1420,21 @@ class GlobalDatabase {
         }
       }
       if(patch.legalEntityRegistered!==undefined && typeof patch.legalEntityRegistered!=='boolean') throw new Error('La opción de empresa formalizada debe ser verdadera o falsa');
+      if (patch.socialLinks !== undefined) {
+        if (!patch.socialLinks || typeof patch.socialLinks !== 'object' || Array.isArray(patch.socialLinks)) throw new Error('Enlaces de redes sociales inválidos.');
+        const domains = { instagram: 'instagram.com', tiktok: 'tiktok.com', facebook: 'facebook.com' };
+        const links: NonNullable<SystemSettings['socialLinks']> = {};
+        for (const [key, value] of Object.entries(patch.socialLinks)) {
+          if (!(key in domains) || typeof value !== 'string') throw new Error('Solo se permiten Instagram, TikTok y Facebook.');
+          const network = key as keyof typeof domains;
+          const trimmed = value.trim();
+          if (!trimmed) { links[network] = ''; continue; }
+          const url = new URL(trimmed);
+          if (url.protocol !== 'https:' || url.username || url.password || url.port || !(url.hostname === domains[network] || url.hostname.endsWith('.' + domains[network]))) throw new Error(`El enlace de ${network} debe usar HTTPS y su dominio oficial.`);
+          links[network] = url.href;
+        }
+        patch.socialLinks = { ...this.memoryData.systemSettings.socialLinks, ...links };
+      }
       const next = { ...this.memoryData.systemSettings, ...patch };
       if(next.legalEntityRegistered && (!next.legalBusinessName?.trim() || !next.rnc?.trim())) throw new Error('Completa la razón social y RNC reales antes de publicarlos');
       // Firestore is authoritative across Railway restarts and redeployments.

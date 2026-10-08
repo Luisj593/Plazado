@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { SocialLinks } from './SocialLinks';
 import { useApp } from '../../context/AppContext';
 import { 
   X, 
@@ -228,6 +229,8 @@ Plataforma: PlazaDO.com Marketplace República Dominicana`;
                   <span>Descargar APK ({androidConfig.apkFileSize || '18.6 MB'})</span>
                 </button>
               </div>
+
+              <SocialLinks links={systemSettings.socialLinks} />
 
               {/* Specs & Requirements */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
