@@ -1,4 +1,5 @@
 import React, { useRef, useMemo, useState, useEffect } from 'react';
+import { categorySliderSequence } from '../../utils/categorySlider';
 import { PromoBannerSlider } from './PromoBannerSlider';
 import { useApp } from '../../context/AppContext';
 import { DominicanFlag } from '../common/DominicanFlag';
@@ -52,6 +53,7 @@ export const HomePage: React.FC = () => {
   const [heroImageError, setHeroImageError] = useState(false);
   const [heroSlideIndex, setHeroSlideIndex] = useState(0);
   const [heroPaused, setHeroPaused] = useState(false);
+  const [heroCycle, setHeroCycle] = useState(0);
 
   // Imagen del Header/Hero configurable por el Super Admin
   const heroImageSrc = (!heroImageError && systemSettings?.headerBannerUrl)
@@ -77,27 +79,25 @@ export const HomePage: React.FC = () => {
     return featuredProducts.length > 0 ? featuredProducts : publishedProducts;
   }, [featuredProducts, publishedProducts]);
 
-  // Slider de cabecera: toma productos REALES publicados y los mezcla al azar
-  // cada vez que cambia el catálogo. No crea productos ficticios.
-  const heroProducts = useMemo(() => {
-    const candidates = publishedProducts.filter(p => p.images && p.images.length > 0);
-    // Fisher-Yates para un orden aleatorio real por carga/cambio de catálogo.
-    const shuffled = [...candidates];
-    for (let i = shuffled.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-  }, [publishedProducts]);
+  // One random product per category in each round; all eligible products get a turn.
+  const heroProducts = useMemo(
+    () => categorySliderSequence(publishedProducts),
+    [publishedProducts, heroCycle]
+  );
 
   useEffect(() => {
     if ((systemSettings?.homeHeroMode || 'slider') !== 'slider' || heroProducts.length <= 1 || heroPaused) return;
     const timer = window.setInterval(() => {
-      setHeroSlideIndex(current => (current + 1) % heroProducts.length);
+      if (heroSlideIndex + 1 >= heroProducts.length) {
+        setHeroCycle(cycle => cycle + 1);
+        setHeroSlideIndex(0);
+      } else {
+        setHeroSlideIndex(heroSlideIndex + 1);
+      }
       setHeroImageError(false);
     }, 8000);
     return () => window.clearInterval(timer);
-  }, [heroProducts.length, heroPaused, systemSettings?.homeHeroMode]);
+  }, [heroProducts.length, heroSlideIndex, heroPaused, systemSettings?.homeHeroMode]);
 
   useEffect(() => {
     if (heroSlideIndex >= heroProducts.length) setHeroSlideIndex(0);
