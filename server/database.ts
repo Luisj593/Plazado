@@ -982,6 +982,8 @@ class GlobalDatabase {
     };
   }
 
+  public isFirestoreConnected():boolean { return this.firestoreSyncStatus==='CONNECTED'; }
+
   public getVersion(): number {
     return this.memoryData.version;
   }
@@ -991,146 +993,52 @@ class GlobalDatabase {
     return this.memoryData.stores;
   }
 
-  public addStore(storeData: any): Store {
-    const id = storeData.id || `store-${Date.now()}`;
-    const cleanSlug = (storeData.slug || storeData.name || id).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-    const ownerId = storeData.ownerId || storeData.owner_id || `owner-${id}`;
-
-    // 1. Check for exact id update
-    const existingByIdIndex = this.memoryData.stores.findIndex(s => s.id === id);
-    if (existingByIdIndex !== -1) {
-      const existing = this.memoryData.stores[existingByIdIndex];
-      const merged: Store = {
-        ...existing,
-        ...storeData,
-        id: existing.id,
-        slug: storeData.slug || existing.slug || cleanSlug,
-        ownerId: ownerId || existing.ownerId,
-        owner_id: ownerId || existing.owner_id,
-        status: 'APPROVED',
-        isPublished: true
-      };
-      this.memoryData.stores[existingByIdIndex] = merged;
-      this.commit();
-      return merged;
-    }
-
-    // 2. Ensure unique slug for new store (never overwrite another store on slug collision!)
-    let uniqueSlug = cleanSlug || id;
-    if (this.memoryData.stores.some(s => s.slug === uniqueSlug)) {
-      let counter = 2;
-      while (this.memoryData.stores.some(s => s.slug === `${uniqueSlug}-${counter}`)) {
-        counter++;
-      }
-      uniqueSlug = `${uniqueSlug}-${counter}`;
-    }
-
-    const newStore: Store = {
-      rating: 5.0,
-      reviewCount: 0,
-      salesCount: 0,
-      ...storeData,
-      id,
-      slug: uniqueSlug,
-      ownerId,
-      owner_id: ownerId,
-      status: 'APPROVED',
-      isPublished: true,
-      createdAt: storeData.createdAt || new Date().toISOString()
-    };
-
-    this.memoryData.stores.push(newStore);
-    storesDb.saveStore(newStore);
-    this.addAuditLog('STORE_REGISTERED', id, undefined, `Nueva tienda registrada y protegida globalmente: ${newStore.name}`);
-    this.commit();
-
-    cloudSqlRepo.createStore({
-      id: newStore.id,
-      name: newStore.name,
-      slug: newStore.slug,
-      ownerId: newStore.ownerId || 'system',
-      email: newStore.email,
-      phone: newStore.phone,
-      whatsapp: newStore.whatsapp,
-      address: newStore.address,
-      province: newStore.province,
-      municipality: newStore.municipality,
-      description: newStore.description,
-      logoUrl: newStore.logo,
-      bannerUrl: newStore.banner,
-      shippingConfig: newStore.shippingConfig,
-      bankInfo: newStore.bankInfo,
-      status: newStore.status,
-    }).catch(err => console.error('[CloudSQL] Error syncing createStore:', err));
-
-    firestoreRepo.saveStore(newStore).catch(err => console.error('[Firestore] Error syncing createStore:', err));
-
-    return newStore;
+  public addStore(storeData: any) {
+    return this.runCommerceMutation(() => {
+      const id = storeData.id || `store-${crypto.randomUUID()}`;
+      if(this.memoryData.stores.some(s=>s.id===id)) throw Error('La tienda ya existe');
+      const slug=(storeData.slug || storeData.name || id).toLowerCase().replace(/[^a-z0-9]+/g,'-');
+      if(this.memoryData.stores.some(s=>s.slug===slug)) throw Error('El nombre de enlace de la tienda ya existe');
+      const store:Store={rating:0,reviewCount:0,salesCount:0,...storeData,id,slug,status:storeData.status || 'PENDING',isPublished:storeData.isPublished ?? false,createdAt:storeData.createdAt || new Date().toISOString()};
+      this.memoryData.stores.push(store);
+      this.addAuditLog('STORE_REGISTERED',id,undefined,'Tienda registrada de forma durable');
+      return store;
+    });
   }
 
-  public updateStore(storeId: string, data: Partial<Store>): Store | null {
-    const idx = this.memoryData.stores.findIndex(s => s.id === storeId);
-    if (idx === -1) return null;
-    const prev = this.memoryData.stores[idx];
-    const updated = { ...prev, ...data };
-    this.memoryData.stores[idx] = updated;
-    storesDb.updateStore(storeId, updated);
-    this.addAuditLog('STORE_UPDATED', storeId, prev.name, updated.name);
-    this.commit();
-
-    cloudSqlRepo.updateStore(storeId, {
-      name: updated.name,
-      slug: updated.slug,
-      email: updated.email,
-      phone: updated.phone,
-      whatsapp: updated.whatsapp,
-      address: updated.address,
-      province: updated.province,
-      municipality: updated.municipality,
-      description: updated.description,
-      logoUrl: updated.logo,
-      bannerUrl: updated.banner,
-      shippingConfig: updated.shippingConfig,
-      bankInfo: updated.bankInfo,
-      status: updated.status,
-    }).catch(err => console.error('[CloudSQL] Error syncing updateStore:', err));
-
-    firestoreRepo.saveStore(updated).catch(err => console.error('[Firestore] Error syncing updateStore:', err));
-
-    return updated;
+  public updateStore(storeId:string,data:Partial<Store>) {
+    return this.runCommerceMutation(() => {
+      const index=this.memoryData.stores.findIndex(s=>s.id===storeId);
+      if(index<0) return null;
+      const previous=this.memoryData.stores[index];
+      const updated={...previous,...data,id:previous.id};
+      this.memoryData.stores[index]=updated;
+      this.addAuditLog('STORE_UPDATED',storeId,undefined,'Configuración de tienda guardada');
+      return updated;
+    });
   }
 
-  public updateStoreStatus(storeId: string, status: StoreStatus, reason?: string): Store | null {
-    const store = this.memoryData.stores.find(s => s.id === storeId);
-    if (!store) return null;
-    const prevStatus = store.status;
-    store.status = status;
-    if (status === 'APPROVED' || status === 'active' || status === 'ACTIVE') {
-      store.isPublished = true;
-    } else if (status === 'SUSPENDED' || status === 'REJECTED' || status === 'INACTIVE') {
-      store.isPublished = false;
-    }
-    this.addAuditLog('STORE_STATUS_CHANGE', storeId, prevStatus, `${status}${reason ? ` (Motivo: ${reason})` : ''}`);
-    storesDb.updateStatus(storeId, status, reason);
-    this.commit();
-
-    cloudSqlRepo.updateStore(storeId, {
-      status,
-    }).catch(err => console.error('[CloudSQL] Error syncing store status:', err));
-
-    firestoreRepo.saveStore(store).catch(err => console.error('[Firestore] Error syncing store status:', err));
-
-    return store;
+  public updateStoreStatus(storeId:string,status:StoreStatus,reason?:string) {
+    return this.runCommerceMutation(() => {
+      const store=this.memoryData.stores.find(s=>s.id===storeId);
+      if(!store) return null;
+      if(!['PENDING','IN_REVIEW','APPROVED','REJECTED','SUSPENDED','INACTIVE','active','ACTIVE'].includes(status)) throw Error('Estado de tienda inválido');
+      store.status=status;
+      store.isPublished=['APPROVED','active','ACTIVE'].includes(status);
+      if(reason) store.rejectionReason=reason;
+      this.addAuditLog('STORE_STATUS_CHANGE',storeId,undefined,status);
+      return store;
+    });
   }
 
-  public toggleStorePublish(storeId: string): Store | null {
-    const store = this.memoryData.stores.find(s => s.id === storeId);
-    if (!store) return null;
-    store.isPublished = !store.isPublished;
-    storesDb.togglePublish(storeId);
-    this.addAuditLog('STORE_PUBLISH_TOGGLE', storeId, undefined, store.isPublished ? 'Publicada' : 'Oculta');
-    this.commit();
-    return store;
+  public toggleStorePublish(storeId:string) {
+    return this.runCommerceMutation(() => {
+      const store=this.memoryData.stores.find(s=>s.id===storeId);
+      if(!store) return null;
+      if(!['APPROVED','active','ACTIVE'].includes(store.status)) throw Error('La tienda debe ser aprobada antes de publicarse');
+      store.isPublished=!store.isPublished;
+      return store;
+    });
   }
 
   public deleteStore(storeId: string): boolean {
@@ -1183,7 +1091,11 @@ class GlobalDatabase {
     );
   }
 
-  public assignStoreAdmin(
+  public assignStoreAdmin(storeId:string,email:string,passwordHash:string,name?:string,phone?:string) {
+    return this.runCommerceMutation(() => this.buildassignStoreAdmin(storeId,email,passwordHash,name,phone));
+  }
+
+  private buildassignStoreAdmin(
     storeId: string,
     email: string,
     passwordHash: string,
@@ -1259,20 +1171,6 @@ class GlobalDatabase {
       `Super Admin asignó administrador para la tienda "${store.name}": ${user.email} (${user.name})`
     );
     this.commit();
-
-    // Background sync to persistent providers
-    firestoreRepo.saveUser(user).catch(e => console.error('[Firestore] User sync error in assignStoreAdmin:', e));
-    firestoreRepo.saveStore(store).catch(e => console.error('[Firestore] Store sync error in assignStoreAdmin:', e));
-    cloudSqlRepo.createUser({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      phone: user.phone,
-      avatar: user.avatar,
-      storeId: user.storeId,
-      addresses: user.addresses
-    }).catch(e => console.warn('[CloudSQL] User sync warning in assignStoreAdmin:', e));
 
     return { success: true, user, store };
   }
@@ -1538,37 +1436,29 @@ class GlobalDatabase {
     return this.memoryData.banners;
   }
 
-  public addBanner(bannerData: Omit<Banner, 'id'>): Banner {
-    const newId = `banner-${Date.now()}`;
-    const newBanner: Banner = { ...bannerData, id: newId };
-    this.memoryData.banners.push(newBanner);
-    this.addAuditLog('BANNER_CREATED', newId, undefined, `Banner creado: ${newBanner.title}`);
-    this.commit();
-    // Firestore is the persistent authority for banners. Persist every mutation
-    // immediately so Railway restarts/redeploys cannot remove newly created banners.
-    firestoreRepo.saveBanner(newBanner).catch(e => console.error(`[GlobalDatabase] Error persisting banner ${newId} to Firestore:`, e));
-    return newBanner;
+  public addBanner(bannerData:Omit<Banner,'id'>) {
+    return this.runCommerceMutation(() => {
+      const banner:Banner={...bannerData,id:`banner-${crypto.randomUUID()}`};
+      this.memoryData.banners.push(banner);return banner;
+    });
   }
 
-  public updateBanner(id: string, data: Partial<Banner>): Banner | null {
-    const idx = this.memoryData.banners.findIndex(b => b.id === id);
-    if (idx === -1) return null;
-    this.memoryData.banners[idx] = { ...this.memoryData.banners[idx], ...data };
-    const updatedBanner = this.memoryData.banners[idx];
-    this.addAuditLog('BANNER_UPDATED', id, undefined, `Banner actualizado`);
-    this.commit();
-    firestoreRepo.saveBanner(updatedBanner).catch(e => console.error(`[GlobalDatabase] Error persisting updated banner ${id} to Firestore:`, e));
-    return updatedBanner;
+  public updateBanner(id:string,data:Partial<Banner>) {
+    return this.runCommerceMutation(() => {
+      const index=this.memoryData.banners.findIndex(b=>b.id===id);
+      if(index<0) return null;
+      const banner={...this.memoryData.banners[index],...data,id};
+      this.memoryData.banners[index]=banner;return banner;
+    });
   }
 
-  public deleteBanner(id: string): boolean {
-    const idx = this.memoryData.banners.findIndex(b => b.id === id);
-    if (idx === -1) return false;
-    this.memoryData.banners.splice(idx, 1);
-    this.addAuditLog('BANNER_DELETED', id, undefined, `Banner eliminado`);
-    this.commit();
-    firestoreRepo.deleteBanner(id).catch(e => console.error(`[GlobalDatabase] Error deleting banner ${id} from Firestore:`, e));
-    return true;
+  public deleteBanner(id:string) {
+    // Archive without destroying the production record or its images.
+    return this.runCommerceMutation(() => {
+      const banner=this.memoryData.banners.find(b=>b.id===id);
+      if(!banner) return false;
+      banner.isActive=false;return true;
+    });
   }
 
   // --- FINANCIAL & TRANSACTIONS ---
@@ -2181,9 +2071,10 @@ class GlobalDatabase {
       let result: T, next: GlobalDatabaseData;
       try { result = mutate(); next = this.memoryData; }
       finally { this.memoryData = current; this.stagingCheckout = false; }
-      if ((result as any)?.success === false) return result!;
+      if ((result as any)?.success === false && !(result as any)?.commitFailure) return result!;
       const changes = commerceChanges(previous,next!);
       if (!changes.length) return result!;
+      for(const change of changes) if(change.collection==='users' && change.before && change.after.passwordHash!==change.before.passwordHash) change.after.authVersion=(change.before.authVersion || 0)+1;
       await firestoreRepo.persistCheckout(previous,next!,false);
       for (const change of changes) {
         if (change.collection === 'storeBalances') this.memoryData.storeBalances[change.id]=change.after;
@@ -2192,6 +2083,10 @@ class GlobalDatabase {
           if (change.collection==='products' && index>=0) list[index]={...list[index],stock:change.after.stock,soldCount:change.after.soldCount};
           else if(index>=0) list[index]=change.after;else list.unshift(change.after);
         }
+      }
+      for(const change of changes) {
+        if(change.collection==='users' && change.after.passwordHash) this.setUserCredential(change.id,change.after.passwordHash);
+        if(change.collection==='stores') storesDb.applyDurableStore(change.after);
       }
       this.commit();
       return result!;
@@ -2493,51 +2388,35 @@ class GlobalDatabase {
     return cred;
   }
 
-  public addUser(user: User): User {
-    this.memoryData.users.push(user);
-    if (user.passwordHash) {
-      this.setUserCredential(user.id, user.passwordHash);
-    }
-    this.addAuditLog('USER_CREATED', user.id, undefined, `Usuario creado: ${user.name} (${user.email})`);
-    this.commit();
-
-    // Firestore is the production source of truth: every new account must be
-    // persisted there immediately so it survives Railway redeployments.
-    firestoreRepo.saveUser(user).catch(err => console.error('[Firestore] Error syncing createUser:', err));
-
-    cloudSqlRepo.createUser({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      phone: user.phone,
-      avatar: user.avatar,
-      storeId: user.storeId,
-      addresses: user.addresses,
-    }).catch(err => console.error('[CloudSQL] Error syncing createUser:', err));
-
-    return user;
+  public addUser(user:User) {
+    return this.runCommerceMutation(() => {
+      if(this.memoryData.users.some(u=>u.id===user.id || u.email.toLowerCase()===user.email.toLowerCase())) throw Error('La cuenta ya existe');
+      this.memoryData.users.push(structuredClone(user));return user;
+    });
   }
 
-  public updateUser(userId: string, data: Partial<User>): User | null {
-    const idx = this.memoryData.users.findIndex(u => u.id === userId);
-    if (idx === -1) return null;
-    this.memoryData.users[idx] = { ...this.memoryData.users[idx], ...data };
-    if (data.passwordHash) {
-      this.setUserCredential(userId, data.passwordHash);
-    }
-    this.commit();
+  public updateUser(userId:string,data:Partial<User>) {
+    return this.runCommerceMutation(() => {
+      const index=this.memoryData.users.findIndex(u=>u.id===userId);
+      if(index<0) return null;
+      const updated={...this.memoryData.users[index],...data,id:userId};
+      this.memoryData.users[index]=updated;return updated;
+    });
+  }
 
-    firestoreRepo.saveUser(this.memoryData.users[idx]).catch(err => console.error('[Firestore] Error syncing updateUser:', err));
-    cloudSqlRepo.updateUser(userId, {
-      name: data.name,
-      role: data.role,
-      phone: data.phone,
-      avatar: data.avatar,
-      addresses: data.addresses,
-    }).catch(err => console.error('[CloudSQL] Error syncing updateUser:', err));
-
-    return this.memoryData.users[idx];
+  public registerStoreAccount(user:User,store:Store) {
+    return this.runCommerceMutation(() => {
+      const index=this.memoryData.users.findIndex(u=>u.id===user.id);
+      if(index>=0 && this.memoryData.users[index].isEmailVerified) throw Error('La cuenta ya está verificada');
+      if(this.memoryData.users.some(u=>u.id!==user.id && u.email.toLowerCase()===user.email.toLowerCase())) throw Error('El correo ya pertenece a otra cuenta');
+      if(index<0) this.memoryData.users.push(structuredClone(user));else this.memoryData.users[index]=structuredClone(user);
+      const existing=this.memoryData.stores.find(s=>s.id===store.id);
+      if(existing) {
+        if(existing.ownerId!==user.id && existing.owner_id!==user.id) throw Error('La tienda pertenece a otra cuenta');
+        Object.assign(existing,{isEmailVerified:false});
+      } else this.memoryData.stores.push(structuredClone(store));
+      return {user,store:existing || store};
+    });
   }
 
   public deleteUser(userId: string, deleteAssociatedStore: boolean = false): boolean {
@@ -2595,14 +2474,28 @@ class GlobalDatabase {
     return this.memoryData.users.find(u => u.email.toLowerCase() === clean);
   }
 
-  public setUserVerification(emailOrId: string, verification: UserVerificationInfo): boolean {
-    const clean = emailOrId.trim().toLowerCase();
-    const user = this.memoryData.users.find(u => u.id === emailOrId || u.email.toLowerCase() === clean);
-    if (!user) return false;
-    user.verification = verification;
-    user.isEmailVerified = verification.isVerified;
-    this.commit();
-    return true;
+  public setUserVerification(emailOrId:string,verification:UserVerificationInfo) {
+    return this.runCommerceMutation(() => {
+      const user=this.memoryData.users.find(u=>u.id===emailOrId || u.email.toLowerCase()===emailOrId.toLowerCase());
+      if(!user) return false;
+      user.verification=structuredClone(verification);user.isEmailVerified=verification.isVerified;return true;
+    });
+  }
+
+  public confirmUserEmail(email:string,code:string) {
+    return this.runCommerceMutation(() => {
+      const user=this.memoryData.users.find(u=>u.email.toLowerCase()===email.toLowerCase());
+      if(!user || !user.verification) return {success:false,message:'No existe un registro pendiente para este correo'};
+      if(user.isEmailVerified) return {success:false,message:'Tu cuenta ya está verificada. Inicia sesión con tu contraseña'};
+      const verification=user.verification;
+      if(verification.attempts>=5) return {success:false,message:'Alcanzaste el límite de intentos. Solicita un nuevo código'};
+      if(Date.now()>verification.codeExpiresAt) return {success:false,message:'El código ha expirado. Solicita uno nuevo'};
+      if(code!==verification.code) {verification.attempts++;return {success:false,commitFailure:true,message:'Código incorrecto'};}
+      verification.isVerified=true;verification.verifiedAt=new Date().toISOString();verification.code='';verification.codeExpiresAt=0;user.isEmailVerified=true;
+      const store=this.memoryData.stores.find(s=>s.id===user.storeId);
+      if(store) store.isEmailVerified=true;
+      return {success:true,message:'Correo verificado. Inicia sesión con tu contraseña.',user};
+    });
   }
 
   public getVerificationsList(): Array<{
@@ -2670,7 +2563,11 @@ class GlobalDatabase {
     }).sort((a, b) => new Date(b.registeredAt).getTime() - new Date(a.registeredAt).getTime());
   }
 
-  public approveUserAccount(userIdOrEmail: string, adminEmail: string): { success: boolean; message: string; user?: User } {
+  public approveUserAccount(userIdOrEmail: string, adminEmail: string) {
+    return this.runCommerceMutation(() => this.buildapproveUserAccount(userIdOrEmail,adminEmail));
+  }
+
+  private buildapproveUserAccount(userIdOrEmail: string, adminEmail: string): { success: boolean; message: string; user?: User } {
     const clean = userIdOrEmail.trim().toLowerCase();
     const user = this.memoryData.users.find(u => u.id === userIdOrEmail || u.email.toLowerCase() === clean);
     if (!user) return { success: false, message: 'Usuario no encontrado' };
@@ -2692,6 +2589,7 @@ class GlobalDatabase {
       const store = this.memoryData.stores.find(s => s.id === user.storeId);
       if (store && (store.status === 'PENDING' || store.status === 'IN_REVIEW')) {
         store.status = 'APPROVED';
+        store.isPublished = true;
         store.isEmailVerified = true;
         store.isKycVerified = true;
       }
@@ -2708,7 +2606,11 @@ class GlobalDatabase {
     return { success: true, message: `Cuenta de ${user.name} autorizada y validada exitosamente.`, user };
   }
 
-  public rejectUserAccount(userIdOrEmail: string, adminEmail: string, reason: string): { success: boolean; message: string; user?: User } {
+  public rejectUserAccount(userIdOrEmail: string, adminEmail: string, reason: string) {
+    return this.runCommerceMutation(() => this.buildrejectUserAccount(userIdOrEmail,adminEmail,reason));
+  }
+
+  private buildrejectUserAccount(userIdOrEmail: string, adminEmail: string, reason: string): { success: boolean; message: string; user?: User } {
     const clean = userIdOrEmail.trim().toLowerCase();
     const user = this.memoryData.users.find(u => u.id === userIdOrEmail || u.email.toLowerCase() === clean);
     if (!user) return { success: false, message: 'Usuario no encontrado' };
@@ -2738,7 +2640,11 @@ class GlobalDatabase {
     return { success: true, message: `Documentación de ${user.name} marcada como rechazada.`, user };
   }
 
-  public createSuperAdmin(data: { name: string; email: string; phone: string; passwordHash: string; createdByAdmin: string }): { success: boolean; message: string; user?: User } {
+  public createSuperAdmin(data: {name:string;email:string;phone:string;passwordHash:string;createdByAdmin:string}) {
+    return this.runCommerceMutation(() => this.buildcreateSuperAdmin(data));
+  }
+
+  private buildcreateSuperAdmin(data: { name: string; email: string; phone: string; passwordHash: string; createdByAdmin: string }): { success: boolean; message: string; user?: User } {
     const cleanEmail = data.email.trim().toLowerCase();
     const existing = this.memoryData.users.find(u => u.email.toLowerCase() === cleanEmail);
     if (existing) {
@@ -2769,7 +2675,7 @@ class GlobalDatabase {
       createdAt: new Date().toISOString()
     };
 
-    this.addUser(newAdmin);
+    this.memoryData.users.push(newAdmin);
     this.addAuditLog(
       'SUPER_ADMIN_CREATED',
       newAdmin.id,
@@ -2780,7 +2686,11 @@ class GlobalDatabase {
     return { success: true, message: `Super Administrador ${newAdmin.name} creado exitosamente.`, user: newAdmin };
   }
 
-  public manualVerifyUser(email: string, adminEmail: string, reason?: string): { success: boolean; message: string; user?: User } {
+  public manualVerifyUser(email: string, adminEmail: string, reason?: string) {
+    return this.runCommerceMutation(() => this.buildmanualVerifyUser(email,adminEmail,reason));
+  }
+
+  private buildmanualVerifyUser(email: string, adminEmail: string, reason?: string): { success: boolean; message: string; user?: User } {
     const clean = email.trim().toLowerCase();
     const user = this.memoryData.users.find(u => u.email.toLowerCase() === clean);
     if (!user) return { success: false, message: 'Usuario no encontrado' };
@@ -2818,7 +2728,11 @@ class GlobalDatabase {
     };
   }
 
-  public regenerateUserVerificationCode(email: string, adminEmail: string): { 
+  public regenerateUserVerificationCode(email: string, adminEmail: string) {
+    return this.runCommerceMutation(() => this.buildregenerateUserVerificationCode(email,adminEmail));
+  }
+
+  private buildregenerateUserVerificationCode(email: string, adminEmail: string): { 
     success: boolean; 
     message: string; 
     code?: string; 
@@ -2849,7 +2763,7 @@ class GlobalDatabase {
       'ADMIN_REGENERATE_VERIFICATION_CODE',
       user.id,
       user.email,
-      `Nuevo código generado por Super Admin (${adminEmail}): ${newCode} (Vence en 15m)`,
+      `Nuevo código generado por Super Admin (${adminEmail}) (Vence en 15m)`,
       { id: 'super-admin', name: adminEmail, role: 'SUPER_ADMIN' }
     );
     this.commit();

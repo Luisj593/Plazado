@@ -20,7 +20,7 @@ state=withFunds();state.disputes=[{orderId:'card',status:'OPEN'}];assert.equal(f
 state=withFunds();finance.weeklySettlementsState(state,'isolated');assert.equal(state.storeBalances.s.settledBalance,0);assert.equal(state.settlements.length,1);finance.weeklySettlementsState(state,'isolated');assert.equal(state.settlements.length,1);
 // Actual durable database wrapper: rejected transaction preserves order, stock and balances.
 const source=fs.readFileSync('server/database.ts','utf8');const a=source.indexOf('  private runCommerceMutation'),b=source.indexOf('  public deleteOrder',a);const c=source.indexOf('  public runWeeklySettlementProcess'),d=source.indexOf('  public deleteSettlement',c);
-const code=await transform(`class Harness {memoryData:any;checkoutQueue=Promise.resolve();stagingCheckout=false;constructor(state:any){this.memoryData=structuredClone(state);}commit(){} ${source.slice(a,b)} ${source.slice(c,d)}}`,{loader:'ts'});
+const code=await transform(`class Harness {memoryData:any;checkoutQueue=Promise.resolve();stagingCheckout=false;constructor(state:any){this.memoryData=structuredClone(state);}commit(){}setUserCredential(){} ${source.slice(a,b)} ${source.slice(c,d)}}`,{loader:'ts'});
 let fail=true,writes=0,persisted;
 const repo={persistCheckout:async(previous,next,isNew)=>{assert.equal(isNew,false);if(fail)throw Error('isolated persistence rejection');writes++;persisted=structuredClone(next);}};
 const Harness=new Function('firestoreRepo','commerceChanges','transitionOrder','processSettlementState','requestSettlementState','weeklySettlementsState',code.code+';return Harness;')(repo,commerceChanges,finance.transitionOrder,finance.processSettlementState,finance.requestSettlementState,finance.weeklySettlementsState);

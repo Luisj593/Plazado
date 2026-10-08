@@ -50,3 +50,15 @@ La plataforma sigue sin aprobación para producción abierta. Los resultados de 
 - Checkout de tarjeta/transferencia y webhook genérico permanecen indisponibles hasta integrar/verificar el proveedor real. La preparación de ciclos es administrativa, no un pago automático los viernes.
 - Reparación de conexión: conservar listener del puerto Railway y compatibilidad con el destino histórico 3000. No retirar esa compatibilidad sin verificar la configuración del dominio.
 - Pruebas aisladas: fallos de transacción, reintentos concurrentes, comisión diferida, cancelación, reserva/rechazo/confirmación, referencias y errores de interfaz.
+
+## Alcance de hoy confirmado por el operador
+Piloto con pago contra entrega antes de las 17:00 America/Santo_Domingo. Tarjetas, reembolsos bancarios y transferencias automáticas quedan fuera del piloto.
+
+## Tercera entrega: cuentas y publicación
+- Registro de propietario/tienda, edición de cuenta/contraseña, verificación OTP, aprobación administrativa y banners usan guardado durable antes de responder.
+- Los códigos y sus intentos sobreviven al reinicio; se invalidan al verificar. Cuenta/tienda pendiente no se publica automáticamente.
+- Correo no configurado/rechazado nunca se declara entregado; TLS se verifica y los OTP no se registran en logs. La autenticación SMTP se comprueba en segundo plano sin enviar mensajes.
+- Subir una imagen no equivale a verificar identidad: documentos quedan pendientes de revisión y no se inventan puntuaciones biométricas.
+- Cambiar la contraseña invalida sesiones anteriores; las cuentas existentes conservan sus datos.
+- `/api/health/ready` expone únicamente estados de Firebase Admin, carga durable y SMTP configurado/autenticado; no reemplaza la validación de un flujo real por el operador ni la comprobación de copias externas.
+- El incidente de respaldos en Git, identificación legal y credenciales/roles del entorno siguen requiriendo comprobación operativa. No se ha certificado producción abierta.

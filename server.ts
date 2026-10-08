@@ -13,7 +13,7 @@ import { cloudSqlRepo } from './server/cloudsql-repository';
 import { firestoreRepo } from './server/firestore-repository';
 import { hashPassword, verifyPassword } from './src/utils/security';
 import { User, Store, CustomerRegistrationInput, StoreRegistrationInput, UserRole, isProductPubliclyVisible, isStorePubliclyVisible } from './src/types';
-import { sendRegistrationOtpEmail, verifySmtpConnection } from './server/mailer-service';
+import { sendRegistrationOtpEmail, sendAccountApprovalEmail, verifySmtpConnection } from './server/mailer-service';
 import { generateProductDescription } from './server/ai-service';
 import { storesDb } from './server/stores-database';
 
@@ -30,6 +30,7 @@ export function createSessionToken(user: User): string {
     email: user.email,
     role: user.role,
     storeId: user.storeId,
+    authVersion: user.authVersion || 0,
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days session
   };
@@ -39,7 +40,7 @@ export function createSessionToken(user: User): string {
   return `${head}.${body}.${sig}`;
 }
 
-export function verifySessionToken(token: string): { userId: string; email: string; role: string; storeId?: string } | null {
+export function verifySessionToken(token: string): { userId: string; email: string; role: string; storeId?: string; authVersion?:number } | null {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
@@ -62,6 +63,7 @@ export function getAuthenticatedUser(req: Request): User | null {
   const session = verifySessionToken(token);
   if (!session) return null;
   const user = db.getUserById(session.userId);
+  if(user && (session.authVersion || 0)!==(user.authVersion || 0)) return null;
   return user || null;
 }
 
@@ -103,6 +105,16 @@ async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT || 3000);
   app.set('trust proxy', 1);
+  let smtpVerified=false;
+  const verifyPilotMail = async () => {
+    const config=db.getSystemSettings().mailConfig;
+    if(!(config?.smtpPass || process.env.SMTP_PASS)) {smtpVerified=false;return;}
+    smtpVerified=(await verifySmtpConnection(config)).ok;
+  };
+  // SMTP authentication check sends no email and does not delay the HTTP listener.
+  void verifyPilotMail().catch(()=>{smtpVerified=false;});
+  setInterval(()=>{void verifyPilotMail().catch(()=>{smtpVerified=false;});},300000).unref();
+
 
   // Keep an independent durable copy refreshed while production is running.
   // This protects user-created stores/users from accidental disappearance between deployments.
@@ -176,6 +188,13 @@ async function startServer() {
     res.json({ status: 'ok', version: db.getVersion(), timestamp: new Date().toISOString() });
   });
 
+  app.get('/api/health/ready', (_req:Request,res:Response) => {
+    const settings=db.getSystemSettings(), mail=settings.mailConfig;
+    const checks={firebaseAdmin:firestoreRepo.isAdminReady(),firestoreLoaded:db.isFirestoreConnected(),smtpConfigured:!!(mail?.smtpPass || process.env.SMTP_PASS),smtpVerified};
+    const ready=Object.values(checks).every(Boolean);
+    res.status(ready?200:503).json({status:ready?'ready':'blocked',mode:'CASH_ON_DELIVERY_PILOT',checks,timestamp:new Date().toISOString()});
+  });
+
   // Global Bootstrap (Single-call fast hydration for all clients/devices)
   app.get('/api/bootstrap', (req: Request, res: Response) => {
     const caller = getAuthenticatedUser(req);
@@ -212,7 +231,8 @@ async function startServer() {
     res.json({ success: true, stores: sanitizeMarketplaceState(db.getFullState(), getAuthenticatedUser(req)).stores });
   });
 
-  app.post('/api/stores', (req: Request, res: Response) => {
+  app.post('/api/stores', async (req: Request, res: Response) => {
+    try {
     const caller = getAuthenticatedUser(req);
     if (!caller) {
       return res.status(401).json({ success: false, message: 'No autenticado' });
@@ -222,14 +242,16 @@ async function startServer() {
     }
     try {
       const storeData = req.body;
-      const newStore = db.addStore(storeData);
+      const newStore = await db.addStore(storeData);
       res.json({ success: true, store: newStore, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message || 'Error creating store' });
     }
+    } catch(error:any) {res.status(503).json({success:false,message:error.message || 'No se pudo guardar el cambio'}); }
   });
 
-  app.put('/api/stores/:id', (req: Request, res: Response) => {
+  app.put('/api/stores/:id', async (req: Request, res: Response) => {
+    try {
     const caller = getAuthenticatedUser(req);
     if (!caller) {
       return res.status(401).json({ success: false, message: 'No autenticado' });
@@ -239,23 +261,27 @@ async function startServer() {
     }
     const changes = caller.role === 'SUPER_ADMIN' ? { ...req.body } : editableFields(req.body, STORE_EDIT_FIELDS);
     delete changes.id; delete changes.ownerId; delete changes.owner_id;
-    const updated = db.updateStore(req.params.id, changes);
+    const updated = await db.updateStore(req.params.id, changes);
     if (!updated) return res.status(404).json({ success: false, message: 'Store not found' });
     res.json({ success: true, store: updated, version: db.getVersion() });
+    } catch(error:any) {res.status(503).json({success:false,message:error.message || 'No se pudo guardar el cambio'}); }
   });
 
-  app.patch('/api/stores/:id/status', (req: Request, res: Response) => {
+  app.patch('/api/stores/:id/status', async (req: Request, res: Response) => {
+    try {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) {
       return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     }
     const { status, reason } = req.body;
-    const updated = db.updateStoreStatus(req.params.id, status, reason);
+    const updated = await db.updateStoreStatus(req.params.id, status, reason);
     if (!updated) return res.status(404).json({ success: false, message: 'Store not found' });
     res.json({ success: true, store: updated, version: db.getVersion() });
+    } catch(error:any) {res.status(503).json({success:false,message:error.message || 'No se pudo guardar el cambio'}); }
   });
 
-  app.patch('/api/stores/:id/toggle-publish', (req: Request, res: Response) => {
+  app.patch('/api/stores/:id/toggle-publish', async (req: Request, res: Response) => {
+    try {
     const caller = getAuthenticatedUser(req);
     if (!caller) {
       return res.status(401).json({ success: false, message: 'No autenticado' });
@@ -263,9 +289,10 @@ async function startServer() {
     if (caller.role !== 'SUPER_ADMIN' && caller.storeId !== req.params.id) {
       return res.status(403).json({ success: false, message: 'No tienes autorización para publicar/ocultar esta tienda' });
     }
-    const updated = db.toggleStorePublish(req.params.id);
+    const updated = await db.toggleStorePublish(req.params.id);
     if (!updated) return res.status(404).json({ success: false, message: 'Store not found' });
     res.json({ success: true, store: updated, version: db.getVersion() });
+    } catch(error:any) {res.status(503).json({success:false,message:error.message || 'No se pudo guardar el cambio'}); }
   });
 
   app.delete('/api/stores/:id', (req: Request, res: Response) => {
@@ -309,7 +336,7 @@ async function startServer() {
       }
 
       const passHash = await hashPassword(password);
-      const result = db.assignStoreAdmin(req.params.id, cleanEmail, passHash, name, phone);
+      const result = await db.assignStoreAdmin(req.params.id, cleanEmail, passHash, name, phone);
 
       if (!result.success || !result.user) {
         return res.status(400).json({ success: false, message: result.message || 'No fue posible asignar el administrador.' });
@@ -665,26 +692,32 @@ async function startServer() {
     res.json({ success: true, banners: db.getBanners() });
   });
 
-  app.post('/api/banners', (req: Request, res: Response) => {
+  app.post('/api/banners', async (req: Request, res: Response) => {
+    try {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
-    const b = db.addBanner(req.body);
+    const b = await db.addBanner(req.body);
     res.json({ success: true, banner: b, version: db.getVersion() });
+    } catch(error:any) {res.status(503).json({success:false,message:error.message || 'No se pudo guardar el cambio'}); }
   });
 
-  app.put('/api/banners/:id', (req: Request, res: Response) => {
+  app.put('/api/banners/:id', async (req: Request, res: Response) => {
+    try {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
-    const b = db.updateBanner(req.params.id, req.body);
+    const b = await db.updateBanner(req.params.id, req.body);
     if (!b) return res.status(404).json({ success: false, message: 'Banner not found' });
     res.json({ success: true, banner: b, version: db.getVersion() });
+    } catch(error:any) {res.status(503).json({success:false,message:error.message || 'No se pudo guardar el cambio'}); }
   });
 
-  app.delete('/api/banners/:id', (req: Request, res: Response) => {
+  app.delete('/api/banners/:id', async (req: Request, res: Response) => {
+    try {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
-    const ok = db.deleteBanner(req.params.id);
+    const ok = await db.deleteBanner(req.params.id);
     res.json({ success: ok, version: db.getVersion() });
+    } catch(error:any) {res.status(503).json({success:false,message:error.message || 'No se pudo guardar el cambio'}); }
   });
 
   // --- ORDERS ---
@@ -1170,7 +1203,7 @@ async function startServer() {
         return res.status(400).json({ success: false, message: 'Esta cuenta ya está verificada. Inicia sesión con tu contraseña.' });
       }
       if (existingUser) {
-        db.setUserVerification(existingUser.id, {
+        await db.setUserVerification(existingUser.id, {
           code,
           codeExpiresAt: expiresAt,
           attempts: 0,
@@ -1256,7 +1289,7 @@ async function startServer() {
       });
 
       if (existingUser) {
-        db.setUserVerification(existingUser.id, {
+        await db.setUserVerification(existingUser.id, {
           code: newCode,
           codeExpiresAt: expiresAt,
           attempts: 0,
@@ -1286,7 +1319,7 @@ async function startServer() {
       res.json({
         success: true,
         delivered: mailResult.delivered,
-        message: `Nuevo código de verificación enviado a ${cleanEmail} desde contacto@plazado.com. Por favor revisa tu bandeja de entrada o spam.`,
+        message: mailResult.delivered ? `Código enviado a ${cleanEmail}. Revisa tu correo o spam.` : 'El código se guardó, pero no se pudo enviar el correo. Contacta a soporte.',
         cooldownSeconds: COOLDOWN_SECONDS,
         expiresInSeconds: 900
       });
@@ -1296,117 +1329,16 @@ async function startServer() {
   });
 
   // Verify email confirmation code
-  app.post('/api/auth/verify-code', (req: Request, res: Response) => {
+  app.post('/api/auth/verify-code', async (req:Request,res:Response) => {
     try {
-      const { email, code } = req.body;
-      const cleanEmail = (email || '').trim().toLowerCase();
-      const cleanCode = (code || '').trim();
-
-      if (!cleanEmail || !cleanCode) {
-        return res.status(400).json({ success: false, message: 'Correo y código de verificación son requeridos.' });
-      }
-
-      const user = db.getUserByEmail(cleanEmail);
-      const preRecord = activeVerificationCodes.get(cleanEmail);
-
-      // Check if user is already verified - NEVER issue a token without password verification
-      if (user && user.isEmailVerified === true) {
-        return res.status(400).json({
-          success: false,
-          verified: true,
-          message: 'Tu cuenta ya está verificada. Por favor inicia sesión con tu contraseña.'
-        });
-      }
-
-      const activeCode = user?.verification?.code || preRecord?.code;
-      const expiresAt = user?.verification?.codeExpiresAt || preRecord?.expiresAt || 0;
-      let attempts = user?.verification?.attempts || 0;
-
-      if (!activeCode) {
-        return res.status(400).json({
-          success: false,
-          message: 'No hay un código activo para este correo. Por favor solicita el reenvío de un nuevo código.'
-        });
-      }
-
-      if (attempts >= 5) {
-        return res.status(429).json({
-          success: false,
-          message: 'Has alcanzado el límite de 5 intentos fallidos. Por favor solicita un nuevo código o contacta a contacto@plazado.com.'
-        });
-      }
-
-      if (Date.now() > expiresAt) {
-        activeVerificationCodes.delete(cleanEmail);
-        return res.status(400).json({
-          success: false,
-          expired: true,
-          message: 'El código de verificación ha expirado. Por favor solicita un nuevo código.'
-        });
-      }
-
-      if (activeCode !== cleanCode) {
-        attempts += 1;
-        if (user && user.verification) {
-          user.verification.attempts = attempts;
-          db.setUserVerification(user.id, user.verification);
-        }
-        const remaining = Math.max(0, 5 - attempts);
-        return res.status(400).json({
-          success: false,
-          message: `El código ingresado es incorrecto. Te quedan ${remaining} intento${remaining === 1 ? '' : 's'}.`
-        });
-      }
-
-      // CODE IS CORRECT! Mark user account verified
-      activeVerificationCodes.delete(cleanEmail);
-
-      if (user) {
-        user.isEmailVerified = true;
-        if (user.verification) {
-          user.verification.isVerified = true;
-          user.verification.verifiedAt = new Date().toISOString();
-          db.setUserVerification(user.id, user.verification);
-        } else {
-          db.setUserVerification(user.id, {
-            code: cleanCode,
-            codeExpiresAt: expiresAt,
-            attempts,
-            lastSentAt: Date.now(),
-            isVerified: true,
-            verifiedAt: new Date().toISOString(),
-            resendCount: 0,
-            accountType: user.role === 'STORE_OWNER' ? 'STORE' : 'CUSTOMER'
-          });
-        }
-
-        if (user.storeId) {
-          const st = db.getStores().find(s => s.id === user.storeId);
-          if (st) {
-            st.isEmailVerified = true;
-          }
-        }
-
-        db.addAuditLog('USER_EMAIL_VERIFIED', user.id, undefined, `Usuario ${user.name} (${user.email}) validó su código de correo exitosamente.`);
-        return res.json({
-          success: true,
-          verified: true,
-          user: sanitizeUser(user),
-          message: '¡Tu cuenta y correo electrónico han sido verificados exitosamente! Por favor inicia sesión con tu contraseña.'
-        });
-      }
-
-      res.json({
-        success: true,
-        verified: true,
-        message: 'Código de confirmación verificado con éxito'
-      });
-    } catch (err: any) {
-      res.status(500).json({ success: false, message: err.message || 'Error verificando código' });
-    }
-  });
-
-  // Test SMTP Email configuration from Super Admin
+      const email=(req.body.email || '').trim().toLowerCase(), code=(req.body.code || '').trim();
+      if(!email || !/^\d{6}$/.test(code)) return res.status(400).json({success:false,message:'Correo y código de 6 dígitos requeridos'});
+      const result=await db.confirmUserEmail(email,code);
+      if(!result.success) return res.status(400).json({success:false,message:result.message});
+      activeVerificationCodes.delete(email);
+      res.json({success:true,verified:true,user:result.user ? sanitizeUser(result.user):undefined,message:result.message});
+    } catch(error:any) {res.status(503).json({success:false,message:error.message || 'No se guardó la verificación'});}
+  });  // Test SMTP Email configuration from Super Admin
   app.post('/api/admin/mail/test', async (req: Request, res: Response) => {
     try {
       const admin = getAuthenticatedSuperAdmin(req);
@@ -1515,7 +1447,7 @@ async function startServer() {
 
       const { email } = req.body;
       const cleanEmail = (email || '').trim().toLowerCase();
-      const regenRes = db.regenerateUserVerificationCode(cleanEmail, admin.email);
+      const regenRes = await db.regenerateUserVerificationCode(cleanEmail, admin.email);
       if (!regenRes.success || !regenRes.code) {
         return res.status(400).json({ success: false, message: regenRes.message });
       }
@@ -1547,7 +1479,8 @@ async function startServer() {
   });
 
   // Super Admin: Manually approve verification for an account (e.g. validated via phone/support)
-  app.post('/api/admin/verifications/manual-verify', (req: Request, res: Response) => {
+  app.post('/api/admin/verifications/manual-verify', async (req: Request, res: Response) => {
+    try {
     try {
       const admin = getAuthenticatedSuperAdmin(req);
       if (!admin) {
@@ -1556,7 +1489,7 @@ async function startServer() {
 
       const { email, reason } = req.body;
       const cleanEmail = (email || '').trim().toLowerCase();
-      const manualRes = db.manualVerifyUser(cleanEmail, admin.email, reason);
+      const manualRes = await db.manualVerifyUser(cleanEmail, admin.email, reason);
       if (!manualRes.success) {
         return res.status(400).json({ success: false, message: manualRes.message });
       }
@@ -1565,6 +1498,7 @@ async function startServer() {
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error en verificación manual' });
     }
+    } catch(error:any) {res.status(503).json({success:false,message:error.message || 'No se pudo guardar el cambio'}); }
   });
 
   // Super Admin: Autorizar y validar cuenta (Cédula y Fotografía)
@@ -1581,7 +1515,7 @@ async function startServer() {
         return res.status(400).json({ success: false, message: 'Se requiere ID o correo del usuario.' });
       }
 
-      const result = db.approveUserAccount(target, admin.email);
+      const result = await db.approveUserAccount(target, admin.email);
       if (!result.success) {
         return res.status(400).json(result);
       }
@@ -1594,25 +1528,21 @@ async function startServer() {
           senderName: 'PlazaDO.com - Marketplace Dominicano'
         };
         if (result.user?.email) {
-          await sendRegistrationOtpEmail(
-            result.user.email,
-            result.user.name,
-            'AUTORIZADO',
-            mailConfig
-          );
+          await sendAccountApprovalEmail(result.user.email,result.user.name,mailConfig);
         }
       } catch (e) {
         console.warn('[Mailer] Could not send approval notice email:', e);
       }
 
-      res.json({ success: true, message: result.message, user: result.user, version: db.getVersion() });
+      res.json({ success: true, message: result.message, user: result.user ? sanitizeUser(result.user):undefined, version: db.getVersion() });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error autorizando usuario' });
     }
   });
 
   // Super Admin: Rechazar documentación / cédula
-  app.post('/api/admin/reject-user', (req: Request, res: Response) => {
+  app.post('/api/admin/reject-user', async (req: Request, res: Response) => {
+    try {
     try {
       const admin = getAuthenticatedSuperAdmin(req);
       if (!admin) {
@@ -1625,15 +1555,16 @@ async function startServer() {
         return res.status(400).json({ success: false, message: 'Se requiere ID o correo del usuario.' });
       }
 
-      const result = db.rejectUserAccount(target, admin.email, reason);
+      const result = await db.rejectUserAccount(target, admin.email, reason);
       if (!result.success) {
         return res.status(400).json(result);
       }
 
-      res.json({ success: true, message: result.message, user: result.user, version: db.getVersion() });
+      res.json({ success: true, message: result.message, user: result.user ? sanitizeUser(result.user):undefined, version: db.getVersion() });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error rechazando usuario' });
     }
+    } catch(error:any) {res.status(503).json({success:false,message:error.message || 'No se pudo guardar el cambio'}); }
   });
 
   // Super Admin: Crear nuevo Super Administrador
@@ -1653,7 +1584,7 @@ async function startServer() {
       }
 
       const passHash = await hashPassword(password);
-      const result = db.createSuperAdmin({
+      const result = await db.createSuperAdmin({
         name: name.trim(),
         email: email.trim(),
         phone: (phone || '').trim(),
@@ -1665,7 +1596,7 @@ async function startServer() {
         return res.status(400).json(result);
       }
 
-      res.json({ success: true, message: result.message, user: result.user, version: db.getVersion() });
+      res.json({ success: true, message: result.message, user: result.user ? sanitizeUser(result.user):undefined, version: db.getVersion() });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error creando Super Administrador' });
     }
@@ -1689,7 +1620,7 @@ async function startServer() {
       let code = user.verification?.code;
       // If code expired or missing, regenerate fresh
       if (!code || Date.now() > (user.verification?.codeExpiresAt || 0)) {
-        const regen = db.regenerateUserVerificationCode(cleanEmail, admin.email);
+        const regen = await db.regenerateUserVerificationCode(cleanEmail, admin.email);
         code = regen.code;
       }
 
@@ -1712,7 +1643,7 @@ async function startServer() {
       res.json({
         success: true,
         delivered: mailResult.delivered,
-        message: `Correo reenviado exitosamente a ${cleanEmail} desde contacto@plazado.com.`
+        message: mailResult.delivered ? `Correo enviado a ${cleanEmail}.` : 'El correo no se pudo enviar. Revisa la configuración SMTP.'
       });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error reenviando correo' });
@@ -1734,9 +1665,10 @@ async function startServer() {
         documentIds: registrationDocuments('CUSTOMER').map(doc => doc.id)
       };
       const cleanEmail = (data.email || '').trim().toLowerCase();
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return res.status(400).json({success:false,message:'Ingresa un correo válido'});
       const users = db.getUsers();
 
-      const existingUser = users.find(u => u.email.toLowerCase() === cleanEmail);
+      const existingUser = structuredClone(users.find(u => u.email.toLowerCase() === cleanEmail));
       if (existingUser && existingUser.isEmailVerified === true) {
         return res.status(400).json({
           success: false,
@@ -1750,6 +1682,7 @@ async function startServer() {
       if (!data.password || data.password.length < 10 || !/[A-Z]/.test(data.password) || !/[a-z]/.test(data.password) || !/\d/.test(data.password)) {
         return res.status(400).json({ success: false, message: 'La contraseña debe tener al menos 10 caracteres e incluir mayúscula, minúscula y número.' });
       }
+      if(existingUser?.passwordHash && !(await verifyPassword(data.password,existingUser.passwordHash))) return res.status(409).json({success:false,message:'Ya existe un registro pendiente. Usa su contraseña y completa la verificación o contacta a soporte.'});
       if (data.password !== data.confirmPassword) {
         return res.status(400).json({ success: false, message: 'Las contraseñas no coinciden.' });
       }
@@ -1774,13 +1707,12 @@ async function startServer() {
             cedulaNumber: data.cedulaNumber || existingUser.cedulaNumber || undefined,
             cedulaFrontUrl: data.cedulaFrontUrl || existingUser.kycData?.cedulaFrontUrl || '',
             selfieUrl: data.selfieUrl || existingUser.kycData?.selfieUrl || existingUser.avatar || '',
-            biometricScore: data.biometricScore || existingUser.kycData?.biometricScore || 98.6,
-            biometricStatus: 'VERIFIED',
-            verifiedAt: new Date().toISOString(),
-            livenessPassed: true,
-            facialMatchPassed: true,
+            biometricScore: undefined,
+            biometricStatus: 'PENDING',
+            livenessPassed: false,
+            facialMatchPassed: false,
           };
-          existingUser.isKycVerified = !!(existingUser.kycData.cedulaFrontUrl);
+          existingUser.isKycVerified = false;
         }
         existingUser.verification = {
           code,
@@ -1791,10 +1723,10 @@ async function startServer() {
           resendCount: (existingUser.verification?.resendCount || 0) + 1,
           accountType: 'CUSTOMER'
         };
-        db.setUserVerification(existingUser.id, existingUser.verification);
+        await db.updateUser(existingUser.id,existingUser);
         customerUser = existingUser;
       } else {
-        const newId = `user-cust-${Date.now()}`;
+        const newId = `user-${crypto.createHash('sha256').update(cleanEmail).digest('hex').slice(0,32)}`;
         const hasKycInfo = !!(data.cedulaFrontUrl || data.selfieUrl || data.cedulaNumber);
         customerUser = {
           id: newId,
@@ -1811,13 +1743,12 @@ async function startServer() {
             cedulaNumber: data.cedulaNumber || undefined,
             cedulaFrontUrl: data.cedulaFrontUrl || '',
             selfieUrl: data.selfieUrl || '',
-            biometricScore: data.biometricScore || 98.6,
-            biometricStatus: 'VERIFIED',
-            verifiedAt: new Date().toISOString(),
-            livenessPassed: true,
-            facialMatchPassed: true,
+            biometricScore: undefined,
+            biometricStatus: 'PENDING',
+            livenessPassed: false,
+            facialMatchPassed: false,
           } : undefined,
-          isKycVerified: !!data.cedulaFrontUrl,
+          isKycVerified: false,
           isEmailVerified: false,
           verification: {
             code,
@@ -1830,10 +1761,9 @@ async function startServer() {
           },
           createdAt: new Date().toISOString()
         };
-        db.addUser(customerUser);
+        await db.addUser(customerUser);
       }
 
-      await firestoreRepo.saveUser(customerUser);
       db.addAuditLog('LEGAL_TERMS_ACCEPTED', customerUser.id, undefined, `Aceptación ${legalAcceptance.version} CUSTOMER ${legalAcceptance.acceptedAt}`);
 
       // Automatically dispatch email from contacto@plazado.com
@@ -1859,7 +1789,7 @@ async function startServer() {
         name: customerUser.name,
         accountType: 'CUSTOMER',
         delivered: mailResult.delivered,
-        message: `Código de verificación enviado automáticamente a ${cleanEmail} desde contacto@plazado.com. Introduce el código de 6 dígitos recibido para activar tu cuenta.`,
+        message: mailResult.delivered ? `Código enviado a ${cleanEmail}. Introduce el código recibido.` : 'Tu registro pendiente fue guardado, pero no se pudo enviar el correo. Reintenta el envío o solicita asistencia a contacto@plazado.com.',
         expiresInSeconds: 900
       });
     } catch (err: any) {
@@ -1882,10 +1812,11 @@ async function startServer() {
         documentIds: registrationDocuments('STORE').map(doc => doc.id)
       };
       const cleanEmail = (data.email || '').trim().toLowerCase();
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return res.status(400).json({success:false,message:'Ingresa un correo válido'});
       const users = db.getUsers();
       const stores = db.getStores();
 
-      const existingUser = users.find(u => u.email.toLowerCase() === cleanEmail);
+      const existingUser = structuredClone(users.find(u => u.email.toLowerCase() === cleanEmail));
       if (existingUser && existingUser.isEmailVerified === true) {
         return res.status(400).json({
           success: false,
@@ -1893,7 +1824,7 @@ async function startServer() {
         });
       }
 
-      if (stores.some(s => s.name.toLowerCase() === data.storeName.trim().toLowerCase() && s.email.toLowerCase() !== cleanEmail)) {
+      if (stores.some(s => s.name.toLowerCase() === (data.storeName || '').trim().toLowerCase() && s.email.toLowerCase() !== cleanEmail)) {
         return res.status(400).json({ success: false, message: 'Ya existe una tienda registrada con este nombre comercial.' });
       }
       if (!data.storeName?.trim()) {
@@ -1905,6 +1836,7 @@ async function startServer() {
       if (!data.password || data.password.length < 10 || !/[A-Z]/.test(data.password) || !/[a-z]/.test(data.password) || !/\d/.test(data.password)) {
         return res.status(400).json({ success: false, message: 'La contraseña debe tener al menos 10 caracteres e incluir mayúscula, minúscula y número.' });
       }
+      if(existingUser?.passwordHash && !(await verifyPassword(data.password,existingUser.passwordHash))) return res.status(409).json({success:false,message:'Ya existe un registro pendiente. Usa su contraseña y completa la verificación o contacta a soporte.'});
       if (data.password !== data.confirmPassword) {
         return res.status(400).json({ success: false, message: 'Las contraseñas no coinciden.' });
       }
@@ -1914,19 +1846,18 @@ async function startServer() {
       const codeExpiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
       const passHash = await hashPassword(data.password);
 
-      const userId = existingUser ? existingUser.id : `user-store-${Date.now()}`;
-      const storeId = existingUser?.storeId || `store-${Date.now()}`;
+      const userId = existingUser ? existingUser.id : `user-${crypto.createHash('sha256').update(cleanEmail).digest('hex').slice(0,32)}`;
+      const storeId = existingUser?.storeId || `store-${crypto.createHash('sha256').update(cleanEmail).digest('hex').slice(0,32)}`;
       const storeSlug = data.storeName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
       const kycInfo = data.cedulaFrontUrl ? {
         cedulaNumber: data.cedulaNumber || undefined,
         cedulaFrontUrl: data.cedulaFrontUrl,
         selfieUrl: data.selfieUrl || '',
-        biometricScore: data.biometricScore || 99.1,
-        biometricStatus: 'VERIFIED' as const,
-        verifiedAt: new Date().toISOString(),
-        livenessPassed: true,
-        facialMatchPassed: true,
+        biometricScore: undefined,
+        biometricStatus: 'PENDING' as const,
+        livenessPassed: false,
+        facialMatchPassed: false,
       } : undefined;
 
       const newStore: Store = {
@@ -1952,7 +1883,7 @@ async function startServer() {
         reviewCount: 0,
         salesCount: 0,
         kycData: kycInfo,
-        isKycVerified: !!data.cedulaFrontUrl,
+        isKycVerified: false,
         isEmailVerified: false,
         shippingConfig: {
           type: 'fixed',
@@ -1983,7 +1914,7 @@ async function startServer() {
         addresses: [],
         cedulaNumber: data.cedulaNumber || undefined,
         kycData: kycInfo,
-        isKycVerified: !!data.cedulaFrontUrl,
+        isKycVerified: false,
         isEmailVerified: false,
         verification: {
           code,
@@ -1998,20 +1929,7 @@ async function startServer() {
         createdAt: existingUser ? existingUser.createdAt : new Date().toISOString()
       };
 
-      // Persist the owner + store as one Firestore unit before mutating application memory.
-      // A registration cannot succeed with only one side of the relationship stored.
-      await firestoreRepo.saveStoreRegistrationAtomic(newStoreUser, newStore);
-
-      if (existingUser) {
-        db.updateUser(existingUser.id, newStoreUser);
-      } else {
-        db.addUser(newStoreUser);
-      }
-
-      const existingStore = db.getStores().find(s => s.id === storeId || s.email.toLowerCase() === cleanEmail);
-      if (!existingStore) {
-        db.addStore(newStore);
-      }
+      await db.registerStoreAccount(newStoreUser,newStore);
 
       db.addAuditLog('LEGAL_TERMS_ACCEPTED', userId, storeId, `Aceptación ${legalAcceptance.version} STORE ${legalAcceptance.acceptedAt}`);
 
@@ -2039,7 +1957,7 @@ async function startServer() {
         storeName: data.storeName.trim(),
         accountType: 'STORE',
         delivered: mailResult.delivered,
-        message: `Código de verificación de 6 dígitos enviado automáticamente a ${cleanEmail} desde contacto@plazado.com.`,
+        message: mailResult.delivered ? `Código enviado a ${cleanEmail}. Introduce el código recibido.` : 'El registro pendiente fue guardado, pero el correo no pudo enviarse. Reintenta o solicita asistencia a contacto@plazado.com.',
         expiresInSeconds: 900
       });
     } catch (err: any) {
@@ -2075,7 +1993,7 @@ async function startServer() {
         delete updateData.kycData;
         delete updateData.cedulaNumber;
       }
-      const updated = db.updateUser(req.params.id, updateData);
+      const updated = await db.updateUser(req.params.id, updateData);
       if (!updated) return res.status(404).json({ success: false, message: 'User not found' });
       res.json({ success: true, user: sanitizeUser(updated), version: db.getVersion() });
     } catch (err: any) {
@@ -2097,17 +2015,16 @@ async function startServer() {
         cedulaNumber: cleanCedula || user.cedulaNumber || user.kycData?.cedulaNumber || '',
         cedulaFrontUrl: (cedulaFrontUrl || user.kycData?.cedulaFrontUrl || '').trim(),
         selfieUrl: (selfieUrl || user.kycData?.selfieUrl || user.avatar || '').trim(),
-        biometricScore: biometricScore || user.kycData?.biometricScore || 98.8,
-        biometricStatus: 'VERIFIED' as const,
-        verifiedAt: new Date().toISOString(),
-        livenessPassed: true,
-        facialMatchPassed: true
+        biometricScore: undefined,
+        biometricStatus: 'PENDING' as const,
+        livenessPassed: false,
+        facialMatchPassed: false
       };
 
-      const updatedUser = db.updateUser(user.id, {
+      const updatedUser = await db.updateUser(user.id, {
         cedulaNumber: updatedKyc.cedulaNumber,
         kycData: updatedKyc,
-        isKycVerified: !!updatedKyc.cedulaFrontUrl,
+        isKycVerified: false,
         adminApprovalStatus: 'PENDING',
         avatar: (!user.avatar || user.avatar === '') && updatedKyc.selfieUrl ? updatedKyc.selfieUrl : user.avatar
       });
@@ -2166,7 +2083,7 @@ async function startServer() {
       }
 
       const passHash = await hashPassword(targetPass);
-      const updated = db.updateUser(req.params.id, { passwordHash: passHash });
+      const updated = await db.updateUser(req.params.id, { passwordHash: passHash });
       if (!updated) {
         return res.status(404).json({ success: false, message: 'Usuario no encontrado.' });
       }
