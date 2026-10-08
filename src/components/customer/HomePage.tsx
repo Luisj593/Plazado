@@ -62,8 +62,10 @@ export const HomePage: React.FC = () => {
   const publishedProducts = useMemo(() => {
     return products.filter(p => {
       if (!isProductPubliclyVisible(p)) return false;
+      // A product remains visible while its store relationship is hydrating on a
+      // fresh/mobile client. If the store is present, enforce the store's public state.
       const store = stores.find(s => s.id === p.storeId);
-      return store ? isStorePubliclyVisible(store) : false;
+      return store ? isStorePubliclyVisible(store) : true;
     });
   }, [products, stores]);
 
@@ -250,7 +252,7 @@ export const HomePage: React.FC = () => {
               >
                 
                 {/* Contenedor de la Imagen con badges superpuestos */}
-                <div className="relative w-full h-[270px] sm:h-[350px] lg:h-[470px] xl:h-[500px] overflow-hidden group flex items-center justify-center bg-slate-50 dark:bg-stone-900">
+                <div className="relative w-full h-[300px] sm:h-[350px] lg:h-[470px] xl:h-[500px] overflow-hidden group flex items-center justify-center bg-slate-50 dark:bg-stone-900">
                   <img 
                     src={heroMode === 'slider' && activeHeroProduct && !heroImageError ? activeHeroProduct.images[0] : heroImageSrc} 
                     alt={activeHeroProduct ? activeHeroProduct.name : "Compras en Plazado.com República Dominicana"} 
