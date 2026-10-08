@@ -2065,6 +2065,10 @@ async function startServer() {
         createdAt: existingUser ? existingUser.createdAt : new Date().toISOString()
       };
 
+      // Persist the owner + store as one Firestore unit before mutating application memory.
+      // A registration cannot succeed with only one side of the relationship stored.
+      await firestoreRepo.saveStoreRegistrationAtomic(newStoreUser, newStore);
+
       if (existingUser) {
         db.updateUser(existingUser.id, newStoreUser);
       } else {
