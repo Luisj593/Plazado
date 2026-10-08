@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import bundle from '../../legal/documents.json';
 import { useApp } from '../../context/AppContext';
 import { 
   FileText, 
@@ -24,7 +25,14 @@ import { DominicanFlag } from '../common/DominicanFlag';
 export const LegalAndPoliciesPage: React.FC = () => {
   const { systemSettings, setCurrentView, showNotification, setOpenPolicySlug } = useApp();
 
-  const legalDocs: LegalDocument[] = systemSettings.legalDocuments || [];
+  const canonicalDocs: LegalDocument[] = bundle.documents.map(doc => ({
+    ...doc, category: doc.category as LegalDocument['category'], categoryLabel: doc.title,
+    version: bundle.version, lastUpdated: bundle.effectiveDate, isPublished: true,
+    pdfUrl: bundle.pdfUrl, pdfFileName: 'Plazado-Politicas-y-Terminos.pdf',
+    summaryPoints: doc.sections.slice(0, 3).map(section => section.title)
+  }));
+  const legalDocs: LegalDocument[] = [...canonicalDocs, ...(systemSettings.legalDocuments || [])
+    .filter(doc => doc.isPublished && !canonicalDocs.some(current => current.category === doc.category))];
 
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchFilter, setSearchFilter] = useState('');

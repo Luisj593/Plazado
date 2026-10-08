@@ -1,4 +1,5 @@
 import React from 'react';
+import bundle from '../../legal/documents.json';
 import { useApp } from '../../context/AppContext';
 import { X, ShieldCheck, FileText, CheckCircle2, Download, FileCheck } from 'lucide-react';
 import { triggerFileDownload, downloadOfficialPdfFallback } from '../../utils/fileDownloader';
@@ -91,8 +92,16 @@ PlazaDO.com opera con una comisión comercial fija del **5%** sobre las ventas g
     `;
   }
 
+  const canonicalDoc = bundle.documents.find(doc => doc.id === openPolicySlug);
+  if (canonicalDoc) {
+    title = canonicalDoc.title;
+    content = canonicalDoc.sections.map(section => `${section.title}\n\n${section.paragraphs.join('\n\n')}`).join('\n\n');
+  }
+
   const handleDownloadPdf = () => {
-    if (matchedDoc?.pdfUrl) {
+    if (canonicalDoc) {
+      triggerFileDownload(bundle.pdfUrl, 'Plazado-Politicas-y-Terminos.pdf');
+    } else if (matchedDoc?.pdfUrl) {
       triggerFileDownload(matchedDoc.pdfUrl, matchedDoc.pdfFileName || `${matchedDoc.title}.pdf`);
       showNotification(`Descargando ${matchedDoc.pdfFileName || matchedDoc.title}...`);
     } else {
@@ -136,7 +145,7 @@ PlazaDO.com opera con una comisión comercial fija del **5%** sobre las ventas g
           <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 shrink-0 text-red-600" />
-              <span>Marco legal aplicable: República Dominicana • Vigencia {matchedDoc?.version || systemSettings.policies.customerTermsVersion}</span>
+              <span>Marco legal aplicable: República Dominicana • Vigencia {canonicalDoc ? bundle.version : matchedDoc?.version || systemSettings.policies.customerTermsVersion}</span>
             </div>
 
             <button
@@ -169,7 +178,7 @@ PlazaDO.com opera con una comisión comercial fija del **5%** sobre las ventas g
             onClick={() => setOpenPolicySlug(null)}
             className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
           >
-            Entendido y Aceptar
+            Cerrar
           </button>
         </div>
       </div>

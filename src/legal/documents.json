@@ -1,0 +1,232 @@
+{
+  "version": "2026-10-08.1",
+  "effectiveDate": "2026-10-08",
+  "contactEmail": "contacto@plazado.com",
+  "pdfUrl": "/legal/plazado-politicas-terminos-2026-10-08.pdf",
+  "documents": [
+    {
+      "id": "customer_terms",
+      "category": "customer_terms",
+      "title": "Términos y condiciones para clientes",
+      "description": "Condiciones de registro, compras y uso del marketplace por compradores.",
+      "sections": [
+        {
+          "title": "1. Plataforma y alcance",
+          "paragraphs": [
+            "Plazado.com es un marketplace que conecta clientes con tiendas independientes en República Dominicana. Cada publicación identifica a la tienda que ofrece el producto. La compraventa se celebra con esa tienda; Plazado presta las funciones de plataforma, gestión de pedidos y demás servicios que indique expresamente en la operación. Si Plazado figura como vendedor o presta almacenamiento o despacho, responde por esas funciones según la ley y las condiciones del servicio.",
+            "El canal de contacto de la plataforma es contacto@plazado.com. La identificación del operador y los datos del vendedor deben consultarse en la información legal y comercial del sitio y del pedido. Estas condiciones no sustituyen esa información ni crean una sociedad, RNC o domicilio ficticios."
+          ]
+        },
+        {
+          "title": "2. Registro y seguridad",
+          "paragraphs": [
+            "El titular debe tener al menos 18 años y capacidad legal para contratar. Debe proporcionar datos verdaderos, mantenerlos actualizados y controlar el correo registrado. La verificación del correo mediante código completa el registro; no acredita por sí sola identidad civil, solvencia ni calidad de un vendedor.",
+            "Antes de solicitar el código, el solicitante debe visualizar hasta el final y aceptar expresamente estas condiciones y las políticas comunes de privacidad, devoluciones y entregas. La plataforma registra la versión, el tipo de cuenta y la fecha de aceptación. No se envía el código de registro sin aceptación.",
+            "El usuario es responsable de custodiar su contraseña y códigos. Debe informar inmediatamente sobre accesos no autorizados a contacto@plazado.com. Plazado podrá aplicar controles de seguridad proporcionales, sin excluir su propia responsabilidad legal."
+          ]
+        },
+        {
+          "title": "3. Información y formación del pedido",
+          "paragraphs": [
+            "Antes de confirmar, revisa producto, variante, cantidad, tienda, disponibilidad, precio en pesos dominicanos, impuestos aplicables, costo de envío, cobertura y plazo informado. El total mostrado y aceptado debe coincidir con el cobro. Un cambio de precio, producto o plazo requiere información y consentimiento; no autoriza cobros adicionales automáticos.",
+            "El pedido seguirá los estados indicados en la plataforma y las condiciones de confirmación del vendedor. Si no puede atenderse, se informará al cliente y se tramitará la devolución del importe cobrado que corresponda. Conserva el comprobante y los mensajes de la operación."
+          ]
+        },
+        {
+          "title": "4. Pagos y confirmación de entrega",
+          "paragraphs": [
+            "Solo están disponibles los medios de pago habilitados y mostrados para la operación: tarjeta, transferencia o efectivo contra entrega, según corresponda. No envíes contraseñas bancarias, CVV ni códigos OTP por mensajes o correo.",
+            "Cuando exista un código de entrega, compártelo únicamente después de recibir el pedido. Su validación registra la entrega y puede habilitar la disponibilidad del saldo del vendedor. No elimina garantías, reclamaciones por defectos no evidentes ni otros derechos legales; no aceptes una entrega inexistente."
+          ]
+        },
+        {
+          "title": "5. Derechos y uso responsable",
+          "paragraphs": [
+            "Aplican las políticas comunes de entregas y de devoluciones incluidas en este documento. Puedes reclamar por falta de entrega, daños, defectos, producto incorrecto o incumplimiento de lo ofrecido. Ninguna casilla de aceptación supone renunciar a derechos irrenunciables.",
+            "Se prohíben fraude, suplantación, abuso de códigos, accesos a cuentas ajenas, contenido ilícito y uso de la plataforma para operaciones prohibidas. Las reseñas deben basarse en experiencias reales y respetar la privacidad."
+          ]
+        },
+        {
+          "title": "6. Suspensión, cambios y controversias",
+          "paragraphs": [
+            "Plazado podrá restringir una cuenta ante fraude, incidentes de seguridad o incumplimiento, informando la causa y una vía de revisión cuando sea legal y razonablemente posible. El cierre no extingue pedidos, pagos pendientes, garantías ni reclamaciones existentes.",
+            "Los cambios sustanciales se comunicarán antes de su aplicación y requerirán nueva aceptación cuando corresponda. No alteran retroactivamente los derechos de pedidos ya celebrados. Rige la legislación dominicana, en especial la Ley 358-05 y el marco de comercio electrónico de la Ley 126-02. Puedes acudir a Pro Consumidor y a las autoridades o tribunales competentes sin tener que renunciar a esos recursos."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "store_terms",
+      "category": "store_terms",
+      "title": "Términos y condiciones para tiendas",
+      "description": "Condiciones de publicación, ventas, comisiones y responsabilidades de vendedores.",
+      "sections": [
+        {
+          "title": "1. Titular y aprobación",
+          "paragraphs": [
+            "El solicitante debe ser mayor de edad, tener capacidad para contratar y estar autorizado para representar al negocio. Debe informar identidad y contacto reales, dirección, datos fiscales cuando correspondan y una cuenta de acreditación legítima. La validación de correo no equivale a aprobación de la tienda; la publicación puede requerir revisión administrativa.",
+            "La tienda celebra las ventas con sus clientes y responde por los bienes y servicios que ofrece. Plazado responde por sus propias funciones, incluidas las que asuma expresamente en almacenamiento, cobro o despacho. Ninguna disposición excluye responsabilidades legales obligatorias."
+          ]
+        },
+        {
+          "title": "2. Publicaciones e inventario",
+          "paragraphs": [
+            "La tienda debe publicar imágenes sobre las que tenga derechos, descripciones exactas, precio, variantes, existencias, garantía, impuestos y condiciones de entrega. Debe mantener el catálogo actualizado y no ofrecer mercancía falsificada, robada, ilegal o sujeta a autorización sin contar con ella.",
+            "No puede acceder ni modificar productos, pedidos, datos o saldos de otras tiendas. Los datos de sus compradores solo pueden usarse para ejecutar la venta, dar soporte y cumplir obligaciones legales; no para publicidad no consentida ni cesión a terceros ajenos."
+          ]
+        },
+        {
+          "title": "3. Comisiones y servicios adicionales",
+          "paragraphs": [
+            "La comisión aplicable será la tasa vigente informada en el panel y en el desglose de la operación antes de vender. Su base de cálculo y cualquier impuesto o cargo deben mostrarse de forma clara. Este documento no establece un porcentaje fijo ni autoriza cargos que no se hayan comunicado y aceptado.",
+            "Publicidad, almacenamiento, preparación de pedidos u otros servicios opcionales se rigen por las tarifas y condiciones aceptadas para cada servicio. No se entienden incluidos gratuitamente ni activados por aceptar el registro. Los cambios de tarifas se comunicarán antes de aplicarse y no modificarán retroactivamente ventas ya realizadas."
+          ]
+        },
+        {
+          "title": "4. Cobros, saldos y liquidaciones",
+          "paragraphs": [
+            "Los cobros procesados por la plataforma se reflejan en los saldos y estados de la tienda. Cuando el flujo lo contemple, la confirmación de entrega habilita saldo disponible. Un saldo pendiente o retenido no equivale a dinero transferido.",
+            "Las liquidaciones seguirán el calendario habilitado e informado en el panel. Si se aplica un ciclo semanal de viernes, queda sujeto a días bancarios, confirmación de entrega, validación de cuenta y ajustes justificados. El estado pagado y su comprobante acreditan la ejecución; no se garantiza acreditación bancaria instantánea.",
+            "En pagos en efectivo cobrados por la tienda, las comisiones correspondientes pueden compensarse contra saldos disponibles según el desglose aceptado. Reembolsos, contracargos o retenciones deben tener motivo y soporte identificables, no duplicar cargos y permitir revisión. La tienda puede solicitar aclaración a contacto@plazado.com."
+          ]
+        },
+        {
+          "title": "5. Despacho, devoluciones y fiscalidad",
+          "paragraphs": [
+            "La tienda debe confirmar disponibilidad, preparar el pedido y cumplir cobertura y plazo ofrecidos. No marcará entregas inexistentes ni solicitará el código antes de entregar. Debe atender reclamaciones por los mismos medios utilizados para vender y cumplir garantías y remedios legalmente exigibles.",
+            "La tienda es responsable de sus obligaciones fiscales y de emitir los comprobantes que legalmente correspondan a sus ventas. La plataforma emite los que correspondan a sus propios servicios; un comprobante de pago no sustituye automáticamente una factura fiscal.",
+            "Si se contrata almacenamiento o fulfillment, el inventario recibido, las entradas, salidas, autorizaciones, tarifas, responsabilidad por custodia y procedimiento de incidencias deberán quedar documentados en las condiciones particulares. Esta aceptación no autoriza movimientos de mercancía sin el flujo previsto."
+          ]
+        },
+        {
+          "title": "6. Cumplimiento, cierre y aceptación",
+          "paragraphs": [
+            "Ante fraude o incumplimiento, Plazado podrá suspender publicaciones o la cuenta y aplicar retenciones justificadas, informando el motivo y la vía de revisión cuando proceda. No se autoriza la confiscación automática de saldos legítimos ni la supresión de evidencia de operaciones.",
+            "El cierre o inactividad no elimina obligaciones sobre pedidos, garantías, devoluciones, impuestos y liquidaciones. La terminación y los cambios materiales se comunicarán según corresponda; estas condiciones no ordenan borrar automáticamente una tienda por no publicar.",
+            "La aceptación comprende estos términos y las políticas comunes. Se registra la versión y fecha antes del envío del código. Rigen las leyes dominicanas y los recursos ante las autoridades competentes; la aceptación no limita derechos irrenunciables de los consumidores."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "privacy",
+      "category": "privacy",
+      "title": "Política de privacidad y datos personales",
+      "description": "Tratamiento de información de clientes, tiendas y personas de contacto.",
+      "sections": [
+        {
+          "title": "1. Responsable y datos tratados",
+          "paragraphs": [
+            "Para asuntos de privacidad de Plazado.com, solicitudes e identificación del responsable del tratamiento, escribe a contacto@plazado.com. La información legal del operador publicada en el sitio debe mantenerse actualizada.",
+            "Se tratan datos de registro y contacto, dirección de entrega, información de tienda, productos, pedidos, pagos y acreditaciones, mensajes de soporte, evidencias de reclamaciones, aceptación legal y registros técnicos necesarios para seguridad. Si se solicita cédula, imagen o validación de identidad, debe explicarse en ese flujo qué se recoge y con qué finalidad; no se presume autorización para reutilizar información biométrica con otros fines."
+          ]
+        },
+        {
+          "title": "2. Finalidades y fundamento",
+          "paragraphs": [
+            "Los datos se utilizan para crear y verificar cuentas, gestionar compras y ventas, facilitar entregas y liquidaciones, atender soporte, prevenir fraude y cumplir obligaciones legales. El tratamiento se limita a las finalidades informadas y a la información necesaria.",
+            "Aceptar el registro no autoriza vender datos ni enviar publicidad indiscriminada. Los mensajes necesarios para verificación, pedidos y seguridad se distinguen de comunicaciones comerciales, que deben contar con la autorización que corresponda y un medio de oposición o baja."
+          ]
+        },
+        {
+          "title": "3. Destinatarios y proveedores",
+          "paragraphs": [
+            "Se comunica a la tienda y, cuando proceda, al transportista o almacén la información necesaria para preparar, entregar y atender el pedido. Proveedores de infraestructura, correo, pagos y soporte pueden tratar datos para prestar sus servicios bajo obligaciones de seguridad y confidencialidad. Las autoridades pueden recibir información cuando exista fundamento legal.",
+            "Si un proveedor aloja o procesa datos fuera de República Dominicana, deberán aplicarse las garantías y obligaciones que correspondan. Los datos no se publicarán indiscriminadamente ni se pondrán a disposición de tiendas ajenas al pedido."
+          ]
+        },
+        {
+          "title": "4. Seguridad, pagos y conservación",
+          "paragraphs": [
+            "La plataforma debe aplicar controles de acceso y medidas razonables de seguridad. Ningún sistema garantiza ausencia absoluta de incidentes; cuando ocurran se atenderán y comunicarán conforme a las obligaciones aplicables.",
+            "Los datos de tarjeta deben introducirse únicamente en los medios seguros habilitados por la pasarela. No deben enviarse por soporte. La aceptación no autoriza conservar el CVV ni usar tarjetas para cargos distintos de los aprobados.",
+            "Los datos se conservarán mientras sean necesarios para la relación de servicio, seguridad, obligaciones fiscales, defensa de reclamaciones y otros plazos legalmente exigibles. Después deberán eliminarse o anonimizarse cuando proceda. La eliminación de una cuenta no obliga a destruir registros sujetos a conservación legal."
+          ]
+        },
+        {
+          "title": "5. Derechos y preferencias",
+          "paragraphs": [
+            "Puedes solicitar acceso, actualización, rectificación, supresión u oposición cuando corresponda, escribiendo a contacto@plazado.com e identificando tu cuenta. Solo se pedirá información proporcional para verificar al solicitante. Se responderá dentro de los plazos legalmente aplicables, explicando cualquier limitación legítima.",
+            "Las cookies o almacenamiento necesarios para sesión, seguridad y preferencias se distinguen de analítica o publicidad no esencial. Estas últimas requieren la información y el consentimiento que correspondan; aceptar términos no activa por sí solo seguimiento publicitario.",
+            "Esta política se interpreta conforme a la Ley 172-13. Puedes ejercer los recursos previstos por la ley ante las autoridades competentes."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "returns_refunds",
+      "category": "returns_refunds",
+      "title": "Política de devoluciones, garantías y reembolsos",
+      "description": "Canales y reglas para resolver incidencias con pedidos.",
+      "sections": [
+        {
+          "title": "1. Motivos y derechos",
+          "paragraphs": [
+            "Son motivos de reclamación la falta de entrega, producto incorrecto, daños, defectos, diferencias con lo anunciado y otros incumplimientos. Según el caso y la ley, pueden proceder reparación, sustitución, devolución del precio, cancelación u otros remedios.",
+            "La tienda debe informar las garantías y condiciones de cambios antes de vender. Un plazo operativo, una confirmación de entrega, la apertura del empaque o una regla interna no eliminan automáticamente derechos legales. Los cambios por preferencia personal se sujetan a las condiciones informadas por el vendedor y a la ley aplicable."
+          ]
+        },
+        {
+          "title": "2. Cómo reclamar",
+          "paragraphs": [
+            "Contacta a la tienda por el canal del pedido o escribe a contacto@plazado.com con número de pedido, motivo y evidencias disponibles. Si existe una función de reclamación en el panel, también puedes utilizarla. No es obligatorio usar una función que no esté disponible.",
+            "Comunica las incidencias tan pronto como sea posible, conserva el producto y sus accesorios razonablemente y evita uso adicional si existe riesgo. La falta de una fotografía no impide por sí sola una reclamación válida. No existe en este documento un límite universal de tres días que extinga garantías."
+          ]
+        },
+        {
+          "title": "3. Gestión y devolución",
+          "paragraphs": [
+            "La tienda y la plataforma, según sus funciones, deben comunicar recepción de la reclamación, solución propuesta, instrucciones de devolución y plazo estimado. Si el motivo es imputable al proveedor, no se trasladarán al cliente costos que legalmente deba asumir el proveedor.",
+            "Antes de remitir un artículo, solicita instrucciones seguras y conserva la constancia de entrega. Plazado puede facilitar la comunicación y revisión de evidencias, sin reemplazar la decisión de una autoridad ni impedir acudir a Pro Consumidor."
+          ]
+        },
+        {
+          "title": "4. Reembolsos",
+          "paragraphs": [
+            "Una vez determinado el reembolso, se informará importe, conceptos incluidos, medio y estado. Se utilizará el medio original cuando sea posible; cualquier alternativa legítima deberá informarse y acordarse cuando corresponda. Los tiempos de procesamiento de bancos o pasarelas se comunicarán sin prometer acreditación inmediata.",
+            "No se impondrán cargos, renuncias o descuentos que contravengan la Ley 358-05. El registro de entrega no impide reclamaciones por defectos o incumplimientos posteriores ni la revisión de un cobro duplicado."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shipping_procedures",
+      "category": "shipping_procedures",
+      "title": "Política de entregas y retiro",
+      "description": "Reglas comunes de envío, cobertura y confirmación de recepción.",
+      "sections": [
+        {
+          "title": "1. Responsable, cobertura y costo",
+          "paragraphs": [
+            "La entrega es gestionada por la tienda, transportista o servicio de Plazado indicado en la operación. Antes de comprar deben informarse cobertura, costo, plazo estimado y posibilidad de retiro. No se presupone que Plazado transporta todos los pedidos.",
+            "El cliente debe proporcionar una dirección y contacto correctos. Las variaciones de costo o condiciones posteriores al pedido deben informarse y acordarse, sin cobros no consentidos."
+          ]
+        },
+        {
+          "title": "2. Seguimiento e incidencias",
+          "paragraphs": [
+            "El estado mostrado refleja los eventos registrados; si no hay seguimiento en tiempo real habilitado, no se garantiza localización continua. Ante retrasos, falta de entrega o incidentes, contacta a la tienda y a contacto@plazado.com.",
+            "Un intento fallido o una dirección incorrecta deben documentarse e informarse para acordar solución. No autorizan declarar una entrega realizada ni retener automáticamente el pago completo. Los derechos por incumplimiento se rigen por la política de devoluciones y la ley."
+          ]
+        },
+        {
+          "title": "3. Recepción y código",
+          "paragraphs": [
+            "Revisa el pedido al recibirlo en lo razonablemente posible. Si existe código de entrega, compártelo solo tras la recepción. Si hay un faltante o daño, deja constancia y comunica la incidencia; no permitas que se marque una entrega inexistente.",
+            "La validación registra recepción operativa, pero no equivale a renunciar a garantía ni a reconocer conformidad con defectos no detectables en ese momento. La tienda y la plataforma deben conservar las evidencias necesarias para resolver incidencias."
+          ]
+        }
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "title": "Ley 358-05 y normativa de consumo - Pro Consumidor",
+      "url": "https://proconsumidor.gob.do/transparencia/index.php/leyes.html"
+    },
+    {
+      "title": "Leyes 172-13 y 126-02 - Poder Judicial",
+      "url": "https://observatorio.poderjudicial.gob.do/normas-y-publicaciones/"
+    }
+  ]
+}

@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { RegistrationTermsModal } from './RegistrationTermsModal';
+import { LEGAL_VERSION, LegalAudience } from '../../legal/registration';
 import { useApp } from '../../context/AppContext';
 import { DOMINICAN_PROVINCES } from '../../data/initialData';
 import { BiometricKycVerification, BiometricKycData } from './BiometricKycVerification';
@@ -41,6 +43,16 @@ export const AuthModal: React.FC = () => {
     stores,
     authPurchaseNotice
   } = useApp();
+
+  const [legalAudience, setLegalAudience] = useState<LegalAudience | null>(null);
+  const [continueAfterAcceptance, setContinueAfterAcceptance] = useState(false);
+  const customerFormRef = useRef<HTMLFormElement>(null);
+  const storeFormRef = useRef<HTMLFormElement>(null);
+
+  const openRegistrationTerms = (audience: LegalAudience, continueRegistration = false) => {
+    setContinueAfterAcceptance(continueRegistration);
+    setLegalAudience(audience);
+  };
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
@@ -92,6 +104,10 @@ export const AuthModal: React.FC = () => {
 
   // Reset KYC state when changing modes or opening/closing modal
   useEffect(() => {
+    setLegalAudience(null);
+    setContinueAfterAcceptance(false);
+    setCustTerms(false);
+    setStoreTerms(false);
     setIsCustomerKycOpen(false);
     setIsStoreKycOpen(false);
     setCustError('');
@@ -118,6 +134,17 @@ export const AuthModal: React.FC = () => {
       }, 100);
     }
   }, [authModalMode, isAuthModalOpen]);
+
+  useEffect(() => {
+    if (!continueAfterAcceptance || legalAudience !== null) return;
+    if (authModalMode === 'register_customer' && custTerms) {
+      setContinueAfterAcceptance(false);
+      customerFormRef.current?.requestSubmit();
+    } else if (authModalMode === 'register_store' && storeTerms) {
+      setContinueAfterAcceptance(false);
+      storeFormRef.current?.requestSubmit();
+    }
+  }, [continueAfterAcceptance, legalAudience, custTerms, storeTerms, authModalMode]);
 
   if (!isAuthModalOpen) return null;
 
@@ -247,7 +274,7 @@ export const AuthModal: React.FC = () => {
       return;
     }
     if (!custTerms) {
-      setCustError('Debes aceptar los Términos y Condiciones.');
+      openRegistrationTerms('CUSTOMER', true);
       return;
     }
 
@@ -260,7 +287,10 @@ export const AuthModal: React.FC = () => {
         phone: custPhone,
         password: custPass,
         confirmPassword: custPassConfirm,
-        acceptedTerms: custTerms
+        acceptedTerms: custTerms,
+        legalVersion: LEGAL_VERSION,
+        legalAudience: 'CUSTOMER',
+        legalReadToEnd: custTerms
       });
       if (!res.success) {
         setCustError(res.message || 'Error al registrar cliente');
@@ -285,6 +315,9 @@ export const AuthModal: React.FC = () => {
         password: custPass,
         confirmPassword: custPassConfirm,
         acceptedTerms: custTerms,
+        legalVersion: LEGAL_VERSION,
+        legalAudience: 'CUSTOMER',
+        legalReadToEnd: custTerms,
         cedulaNumber: kycData.cedulaNumber,
         cedulaFrontUrl: kycData.cedulaFrontUrl,
         selfieUrl: kycData.selfieUrl,
@@ -337,7 +370,7 @@ export const AuthModal: React.FC = () => {
       return;
     }
     if (!storeTerms) {
-      setStoreError('Debes aceptar los Términos y Condiciones para Vendedores.');
+      openRegistrationTerms('STORE', true);
       return;
     }
 
@@ -362,7 +395,10 @@ export const AuthModal: React.FC = () => {
         logo: logo.trim() || undefined,
         shippingMethods,
         shippingRate,
-        acceptedTerms: storeTerms
+        acceptedTerms: storeTerms,
+        legalVersion: LEGAL_VERSION,
+        legalAudience: 'STORE',
+        legalReadToEnd: storeTerms
       });
       if (!res.success) {
         setStoreError(res.message || 'Error al registrar tienda');
@@ -399,6 +435,9 @@ export const AuthModal: React.FC = () => {
         shippingMethods,
         shippingRate,
         acceptedTerms: storeTerms,
+        legalVersion: LEGAL_VERSION,
+        legalAudience: 'STORE',
+        legalReadToEnd: storeTerms,
         cedulaNumber: kycData.cedulaNumber,
         cedulaFrontUrl: kycData.cedulaFrontUrl,
         selfieUrl: kycData.selfieUrl,
@@ -416,6 +455,8 @@ export const AuthModal: React.FC = () => {
       setStoreLoading(false);
     }
   };
+
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-950/70 backdrop-blur-xs">
@@ -848,7 +889,7 @@ export const AuthModal: React.FC = () => {
                   </div>
                 )}
 
-                <form onSubmit={handleCustomerSubmit} className="space-y-3">
+                <form ref={customerFormRef} onSubmit={handleCustomerSubmit} className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block font-semibold text-stone-700 mb-1">Nombre *</label>
@@ -925,19 +966,13 @@ export const AuthModal: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="pt-1">
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        required
-                        checked={custTerms}
-                        onChange={(e) => setCustTerms(e.target.checked)}
-                        className="mt-0.5 rounded text-red-600 focus:ring-red-500"
-                      />
-                      <span className="text-[11px] text-stone-600 leading-tight">
-                        Acepto los <a href="#terminos" className="text-red-600 font-bold hover:underline">Términos y Condiciones</a> y la Política de Privacidad de PlazaDO.
-                      </span>
-                    </label>
+                  <div className="pt-1 space-y-2">
+                    <button type="button" onClick={() => openRegistrationTerms('CUSTOMER')} className="text-xs font-bold text-red-700 underline">
+                      { custTerms ? 'Volver a leer términos y políticas' : 'Leer y aceptar términos para clientes' }
+                    </button>
+                    <p className="text-[11px] text-stone-600" role="status">
+                      { custTerms ? 'Términos y políticas aceptados. Puedes solicitar el código.' : 'Debes llegar al final y aceptar antes de recibir el código.' }
+                    </p>
                   </div>
 
                   <button
@@ -946,7 +981,7 @@ export const AuthModal: React.FC = () => {
                     className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors text-xs disabled:opacity-50 mt-2 flex items-center justify-center gap-2 shadow-xs"
                   >
                     <ShieldCheck className="w-4 h-4" />
-                    <span>Continuar con Validación Biométrica y Cédula</span>
+                    <span>Continuar y recibir código de verificación</span>
                   </button>
                 </form>
 
@@ -1034,7 +1069,7 @@ export const AuthModal: React.FC = () => {
                   </div>
                 )}
 
-                <form onSubmit={handleStoreSubmit} className="space-y-3">
+                <form ref={storeFormRef} onSubmit={handleStoreSubmit} className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block font-semibold text-stone-700 mb-1">Nombre Comercial de la Tienda *</label>
@@ -1223,19 +1258,13 @@ export const AuthModal: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="pt-1">
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        required
-                        checked={storeTerms}
-                        onChange={(e) => setStoreTerms(e.target.checked)}
-                        className="mt-0.5 rounded text-stone-900 focus:ring-stone-900"
-                      />
-                      <span className="text-[11px] text-stone-600 leading-tight">
-                        Acepto los <a href="#terminos-vendedor" className="text-stone-900 font-bold hover:underline">Términos y Condiciones para Vendedores</a> de PlazaDO.
-                      </span>
-                    </label>
+                  <div className="pt-1 space-y-2">
+                    <button type="button" onClick={() => openRegistrationTerms('STORE')} className="text-xs font-bold text-red-700 underline">
+                      { storeTerms ? 'Volver a leer términos y políticas' : 'Leer y aceptar términos para tiendas' }
+                    </button>
+                    <p className="text-[11px] text-stone-600" role="status">
+                      { storeTerms ? 'Términos y políticas aceptados. Puedes solicitar el código.' : 'Debes llegar al final y aceptar antes de recibir el código.' }
+                    </p>
                   </div>
 
                   <button
@@ -1244,7 +1273,7 @@ export const AuthModal: React.FC = () => {
                     className="w-full py-2.5 bg-stone-900 hover:bg-stone-800 text-white font-bold rounded-xl transition-colors text-xs disabled:opacity-50 mt-2 flex items-center justify-center gap-2 shadow-xs"
                   >
                     <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    <span>Continuar con Validación Biométrica del Titular</span>
+                    <span>Continuar y recibir código de verificación</span>
                   </button>
                 </form>
 
@@ -1266,6 +1295,18 @@ export const AuthModal: React.FC = () => {
 
         </div>
       </div>
+    {legalAudience && (
+        <RegistrationTermsModal
+          key={legalAudience}
+          audience={legalAudience}
+          onClose={() => { setLegalAudience(null); setContinueAfterAcceptance(false); }}
+          onAccept={() => {
+            if (legalAudience === 'STORE') setStoreTerms(true);
+            else setCustTerms(true);
+            setLegalAudience(null);
+          }}
+        />
+      )}
     </div>
   );
 };
