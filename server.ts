@@ -8,7 +8,7 @@ import { fulfillmentService } from './server/fulfillment-service';
 import { cloudSqlRepo } from './server/cloudsql-repository';
 import { firestoreRepo } from './server/firestore-repository';
 import { hashPassword, verifyPassword } from './src/utils/security';
-import { User, Store, CustomerRegistrationInput, StoreRegistrationInput, UserRole } from './src/types';
+import { User, Store, CustomerRegistrationInput, StoreRegistrationInput, UserRole, isProductPubliclyVisible, isStorePubliclyVisible } from './src/types';
 import { sendRegistrationOtpEmail, verifySmtpConnection } from './server/mailer-service';
 import { generateProductDescription } from './server/ai-service';
 import { storesDb } from './server/stores-database';
@@ -154,11 +154,19 @@ function sanitizeBootstrapForCaller(rawState: any, caller: User | null) {
     };
   }
 
-  // Unauthenticated public visitor
+  // Unauthenticated public visitor: expose the exact same PUBLIC marketplace
+  // catalog used by the web UI. Mobile/desktop must never diverge by session state.
+  const visibleStoreIds = new Set(
+    (rawState.stores || []).filter((s: any) => isStorePubliclyVisible(s)).map((s: any) => s.id)
+  );
+  const publicProducts = (rawState.products || []).filter((p: any) =>
+    isProductPubliclyVisible(p) && (!p.storeId || visibleStoreIds.has(p.storeId))
+  );
+
   return {
     ...rawState,
-    stores: publicStores,
-    products: (rawState.products || []).filter((p: any) => p.status === 'active' || p.status === 'ACTIVE' || !p.status),
+    stores: publicStores.filter((s: any) => isStorePubliclyVisible(s)),
+    products: publicProducts,
     categories: rawState.categories || [],
     banners: rawState.banners || [],
     coupons: rawState.coupons || [],
