@@ -1740,10 +1740,12 @@ export const FulfillmentAdminView: React.FC<FulfillmentAdminViewProps> = ({
                   </div>
 
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       const name = prompt('Nombre de la persona que recibe el paquete:', fo.customerName);
                       if (name) {
-                        deliverFulfillmentOrder(fo.id, { receivedByName: name });
+                        const confirmationCode=window.prompt('Introduce el código de entrega proporcionado por el cliente:');
+                        if(!confirmationCode?.trim()) return;
+                        await deliverFulfillmentOrder(fo.id, { receivedByName: name, confirmationCode:confirmationCode.trim() });
                       }
                     }}
                     className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold shadow-xs cursor-pointer flex items-center gap-1.5 shrink-0"

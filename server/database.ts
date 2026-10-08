@@ -545,6 +545,7 @@ class GlobalDatabase {
         for (const row of rows) merged.set(row.id, row);
         (this.memoryData as any)[key] = Array.from(merged.values());
       }
+      if(firestoreData.fulfillmentConfig) this.memoryData.fulfillmentConfig=firestoreData.fulfillmentConfig;
       if (firestoreData.systemSettings) {
         this.memoryData.systemSettings = { ...this.memoryData.systemSettings, ...firestoreData.systemSettings };
         updated = true;
@@ -2079,10 +2080,11 @@ class GlobalDatabase {
       for(const change of changes) if(change.collection==='users' && change.before && change.after.passwordHash!==change.before.passwordHash) change.after.authVersion=(change.before.authVersion || 0)+1;
       await firestoreRepo.persistCheckout(previous,next!,false);
       for (const change of changes) {
-        if (change.collection === 'storeBalances') this.memoryData.storeBalances[change.id]=change.after;
+        if (change.collection === 'fulfillmentConfig') this.memoryData.fulfillmentConfig=change.after;
+        else if (change.collection === 'storeBalances') this.memoryData.storeBalances[change.id]=change.after;
         else {
           const list=((this.memoryData as any)[change.collection] ||= []),index=list.findIndex((row:any)=>row.id===change.id);
-          if (change.collection==='products' && index>=0) list[index]={...list[index],stock:change.after.stock,soldCount:change.after.soldCount};
+          if (change.collection==='products' && index>=0) list[index]={...list[index],...change.after};
           else if(index>=0) list[index]=change.after;else list.unshift(change.after);
         }
       }
@@ -2096,6 +2098,17 @@ class GlobalDatabase {
     const operation=this.checkoutQueue.then(execute,execute);
     this.checkoutQueue=operation.then(()=>undefined,()=>undefined);
     return operation;
+  }
+
+  public runFulfillmentMutation<T>(mutate:()=>T):Promise<T> {
+    return this.runCommerceMutation(() => {
+      const result=mutate();
+      for(const item of this.memoryData.fulfillmentInventory || []) for(const field of ['available','reserved','inTransit','delivered','totalPhysical','damaged','blocked','inPicking','inPacking','prepared']) {
+        const quantity=(item as any)[field];
+        if(quantity!==undefined && (!Number.isSafeInteger(quantity) || quantity<0)) throw new Error('Inventario de almacén inconsistente. Se requiere revisión antes de guardar');
+      }
+      return result;
+    });
   }
 
   public updateOrderStatus(orderId: string, status: OrderStatus, note?: string, confirmationCode?: string) {

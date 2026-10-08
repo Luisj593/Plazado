@@ -42,3 +42,14 @@ rejectCommit=true;await assert.rejects(repository.persistCheckout(previous,next)
 rejectCommit=false;await repository.persistCheckout(previous,next);assert.equal(documents.get('products/p').stock,3);assert.equal(documents.get(`orders/${valid[0].id}`).paymentStatus,'PENDING');
 await assert.rejects(repository.persistCheckout(previous,next));assert.equal(documents.get('products/p').stock,3);
 console.log('Firestore atomic transaction: all reads precede writes, rejected commit changes nothing, successful commit stores order/stock/balance together, duplicate or concurrent stock change rejected.');
+// Warehouse receipts must persist the newly created inventory and full catalog badge atomically.
+const warehouseBefore=structuredClone(previous),warehouseAfter=structuredClone(previous);
+warehouseBefore.fulfillmentInventory=[];warehouseBefore.storageRequests=[];
+warehouseAfter.fulfillmentInventory=[{id:'warehouse-inventory',available:2,reserved:0,totalPhysical:2}];warehouseAfter.storageRequests=[{id:'receipt',status:'STORED'}];
+warehouseAfter.products[0].stock=7;warehouseAfter.products[0].fulfillmentInventoryId='warehouse-inventory';
+documents.set('products/p',structuredClone(warehouseBefore.products[0]));
+rejectCommit=true;await assert.rejects(repository.persistCheckout(warehouseBefore,warehouseAfter,false));assert.equal(documents.has('fulfillmentInventory/warehouse-inventory'),false);
+rejectCommit=false;await repository.persistCheckout(warehouseBefore,warehouseAfter,false);assert.equal(documents.get('products/p').fulfillmentInventoryId,'warehouse-inventory');assert.equal(documents.get('fulfillmentInventory/warehouse-inventory').available,2);assert.equal(documents.get('storageRequests/receipt').status,'STORED');
+const staleBefore=structuredClone(warehouseAfter),staleAfter=structuredClone(warehouseAfter);staleAfter.fulfillmentInventory[0].available=1;documents.get('fulfillmentInventory/warehouse-inventory').totalPhysical=9;
+await assert.rejects(repository.persistCheckout(staleBefore,staleAfter,false));assert.equal(documents.get('fulfillmentInventory/warehouse-inventory').available,2);
+console.log('Warehouse Firestore transaction: new inventory creation, full product badge, receipt atomicity and stale physical-inventory rejection.');

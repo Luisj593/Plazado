@@ -2280,137 +2280,137 @@ async function startServer() {
     }
   });
 
-  app.post('/api/fulfillment/storage-requests', (req: Request, res: Response) => {
+  app.post('/api/fulfillment/storage-requests', async (req: Request, res: Response) => {
     try {
       const caller = getAuthenticatedUser(req);
       if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
       if (caller.role !== 'SUPER_ADMIN' && !caller.storeId) return res.status(403).json({ success: false, message: 'Solo una tienda o Super Admin puede crear solicitudes de almacén' });
       const payload = { ...req.body };
       if (caller.role !== 'SUPER_ADMIN') payload.storeId = caller.storeId;
-      const result = fulfillmentService.createStorageRequest(payload, caller);
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.createStorageRequest(payload, caller));
       res.json({ success: true, storageRequest: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.patch('/api/fulfillment/storage-requests/:id/status', (req: Request, res: Response) => {
+  app.patch('/api/fulfillment/storage-requests/:id/status', async (req: Request, res: Response) => {
     try {
       const caller = getAuthenticatedUser(req);
       if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
       const { status, notes } = req.body;
-      const result = fulfillmentService.updateStorageRequestStatus(req.params.id, status, notes, caller);
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.updateStorageRequestStatus(req.params.id, status, notes, caller));
       res.json({ success: true, storageRequest: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.post('/api/fulfillment/storage-requests/:id/receive', (req: Request, res: Response) => {
+  app.post('/api/fulfillment/storage-requests/:id/receive', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Operación exclusiva de Super Admin / almacén autorizado.' });
     try {
-      const result = fulfillmentService.processPhysicalReception({
-        requestId: req.params.id,
-        ...req.body
-      }, (req as any).user);
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.processPhysicalReception({
+        ...req.body,
+        requestId: req.params.id
+      }, admin));
       res.json({ success: true, data: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.patch('/api/fulfillment/inventory/:id', (req: Request, res: Response) => {
+  app.patch('/api/fulfillment/inventory/:id', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Operación exclusiva de Super Admin / almacén autorizado.' });
     try {
-      const result = fulfillmentService.adjustInventory({
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.adjustInventory({
         inventoryItemId: req.params.id,
         ...req.body
-      }, (req as any).user);
+      }, admin));
       res.json({ success: true, inventoryItem: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.post('/api/fulfillment/inventory/:id/relocate', (req: Request, res: Response) => {
+  app.post('/api/fulfillment/inventory/:id/relocate', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Operación exclusiva de Super Admin / almacén autorizado.' });
     try {
-      const result = fulfillmentService.relocateInventory({
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.relocateInventory({
         inventoryItemId: req.params.id,
         newLocation: req.body.newLocation
-      }, (req as any).user);
+      }, admin));
       res.json({ success: true, inventoryItem: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.post('/api/fulfillment/inventory/:id/block-toggle', (req: Request, res: Response) => {
+  app.post('/api/fulfillment/inventory/:id/block-toggle', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Operación exclusiva de Super Admin / almacén autorizado.' });
     try {
-      const result = fulfillmentService.blockUnblockInventory({
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.blockUnblockInventory({
         inventoryItemId: req.params.id,
         ...req.body
-      }, (req as any).user);
+      }, admin));
       res.json({ success: true, inventoryItem: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.post('/api/fulfillment/inventory/:id/damage', (req: Request, res: Response) => {
+  app.post('/api/fulfillment/inventory/:id/damage', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Operación exclusiva de Super Admin / almacén autorizado.' });
     try {
-      const result = fulfillmentService.recordDamage({
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.recordDamage({
         inventoryItemId: req.params.id,
         ...req.body
-      }, (req as any).user);
+      }, admin));
       res.json({ success: true, inventoryItem: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.post('/api/fulfillment/orders/:id/confirm-by-store', (req: Request, res: Response) => {
+  app.post('/api/fulfillment/orders/:id/confirm-by-store', async (req: Request, res: Response) => {
     try {
       const caller = getAuthenticatedUser(req);
       if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
       const storeId = caller.role === 'SUPER_ADMIN' ? req.body.storeId : caller.storeId;
       if (!storeId) return res.status(403).json({ success: false, message: 'Tienda no autorizada' });
-      const result = fulfillmentService.confirmOrderByStore(req.params.id, storeId, caller);
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.confirmOrderByStore(req.params.id, storeId, caller));
       res.json({ success: true, fulfillmentOrder: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.post('/api/fulfillment/orders/:id/reject-by-store', (req: Request, res: Response) => {
+  app.post('/api/fulfillment/orders/:id/reject-by-store', async (req: Request, res: Response) => {
     try {
       const caller = getAuthenticatedUser(req);
       if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
       const storeId = caller.role === 'SUPER_ADMIN' ? req.body.storeId : caller.storeId;
       const { reason } = req.body;
       if (!storeId) return res.status(403).json({ success: false, message: 'Tienda no autorizada' });
-      const result = fulfillmentService.rejectOrderByStore(req.params.id, storeId, reason, caller);
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.rejectOrderByStore(req.params.id, storeId, reason, caller));
       res.json({ success: true, fulfillmentOrder: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.post('/api/fulfillment/orders/:id/validate-pick-item', (req: Request, res: Response) => {
+  app.post('/api/fulfillment/orders/:id/validate-pick-item', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Operación exclusiva de Super Admin / almacén autorizado.' });
     try {
-      const result = fulfillmentService.validateAndPickItem({
-        fulfillmentOrderId: req.params.id,
-        ...req.body
-      }, (req as any).user);
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.validateAndPickItem({
+        ...req.body,
+        fulfillmentOrderId: req.params.id
+      }, admin));
       if (!result.success) {
         return res.status(400).json(result);
       }
@@ -2420,123 +2420,123 @@ async function startServer() {
     }
   });
 
-  app.post('/api/fulfillment/orders/:id/complete-packing', (req: Request, res: Response) => {
+  app.post('/api/fulfillment/orders/:id/complete-packing', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Operación exclusiva de Super Admin / almacén autorizado.' });
     try {
-      const result = fulfillmentService.completePacking({
-        fulfillmentOrderId: req.params.id,
-        ...req.body
-      }, (req as any).user);
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.completePacking({
+        ...req.body,
+        fulfillmentOrderId: req.params.id
+      }, admin));
       res.json({ success: true, fulfillmentOrder: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.post('/api/fulfillment/orders/:id/dispatch', (req: Request, res: Response) => {
+  app.post('/api/fulfillment/orders/:id/dispatch', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Operación exclusiva de Super Admin / almacén autorizado.' });
     try {
-      const result = fulfillmentService.dispatchOrder({
-        fulfillmentOrderId: req.params.id,
-        ...req.body
-      }, (req as any).user);
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.dispatchOrder({
+        ...req.body,
+        fulfillmentOrderId: req.params.id
+      }, admin));
       res.json({ success: true, fulfillmentOrder: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.post('/api/fulfillment/orders/:id/deliver', (req: Request, res: Response) => {
+  app.post('/api/fulfillment/orders/:id/deliver', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Operación exclusiva de Super Admin / almacén autorizado.' });
     try {
-      const result = fulfillmentService.deliverOrder({
-        fulfillmentOrderId: req.params.id,
-        ...req.body
-      }, (req as any).user);
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.deliverOrder({
+        ...req.body,
+        fulfillmentOrderId: req.params.id
+      }, admin));
       res.json({ success: true, fulfillmentOrder: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.post('/api/fulfillment/incidences', (req: Request, res: Response) => {
+  app.post('/api/fulfillment/incidences', async (req: Request, res: Response) => {
     const caller = getAuthenticatedUser(req);
     if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
     try {
-      const result = fulfillmentService.createIncidence(req.body, caller);
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.createIncidence(req.body, caller));
       res.json({ success: true, incidence: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.patch('/api/fulfillment/incidences/:id', (req: Request, res: Response) => {
+  app.patch('/api/fulfillment/incidences/:id', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Operación exclusiva de Super Admin / almacén autorizado.' });
     try {
-      const result = fulfillmentService.updateIncidence(req.params.id, req.body, (req as any).user);
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.updateIncidence(req.params.id, req.body, admin));
       res.json({ success: true, incidence: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.post('/api/fulfillment/returns', (req: Request, res: Response) => {
+  app.post('/api/fulfillment/returns', async (req: Request, res: Response) => {
     const caller = getAuthenticatedUser(req);
     if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
     try {
-      const result = fulfillmentService.createReturn(req.body, caller);
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.createReturn(req.body, caller));
       res.json({ success: true, returnRecord: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.post('/api/fulfillment/returns/:id/classify', (req: Request, res: Response) => {
+  app.post('/api/fulfillment/returns/:id/classify', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Operación exclusiva de Super Admin / almacén autorizado.' });
     try {
-      const result = fulfillmentService.classifyReturn({
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.classifyReturn({
         returnId: req.params.id,
         ...req.body
-      }, (req as any).user);
+      }, admin));
       res.json({ success: true, returnRecord: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.post('/api/fulfillment/withdrawals', (req: Request, res: Response) => {
+  app.post('/api/fulfillment/withdrawals', async (req: Request, res: Response) => {
     const caller = getAuthenticatedUser(req);
     if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
     try {
-      const result = fulfillmentService.createWithdrawal(req.body, caller);
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.createWithdrawal(req.body, caller));
       res.json({ success: true, withdrawal: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.patch('/api/fulfillment/withdrawals/:id/status', (req: Request, res: Response) => {
+  app.patch('/api/fulfillment/withdrawals/:id/status', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Operación exclusiva de Super Admin / almacén autorizado.' });
     try {
       const { status, notes } = req.body;
-      const result = fulfillmentService.updateWithdrawalStatus(req.params.id, status, notes, (req as any).user);
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.updateWithdrawalStatus(req.params.id, status, notes, admin));
       res.json({ success: true, withdrawal: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
     }
   });
 
-  app.put('/api/fulfillment/config', (req: Request, res: Response) => {
+  app.put('/api/fulfillment/config', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Operación exclusiva de Super Admin / almacén autorizado.' });
     try {
-      const result = fulfillmentService.updateConfig(req.body, (req as any).user);
+      const result = await db.runFulfillmentMutation(() => fulfillmentService.updateConfig(req.body, admin));
       res.json({ success: true, config: result, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });

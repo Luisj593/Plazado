@@ -12,7 +12,7 @@ function audit(state: any, data: any) { (state.financialAuditLogs ||= []).unshif
 function synchronizeTransaction(state: any, order: any) {
   for (const transaction of state.paymentTransactions || []) if (transaction.orderId === order.id) Object.assign(transaction,{orderStatus:order.status,paymentStatus:order.paymentStatus,settlementStatus:order.settlementStatus,settlementId:order.settlementId});
 }
-export function transitionOrder(state: any, orderId: string, status: string, note?: string, confirmationCode?: string) {
+export function transitionOrder(state: any, orderId: string, status: string, note?: string, confirmationCode?: string, fulfillmentAuthorized=false) {
   const order = state.orders.find((o: any) => o.id === orderId);
   if (!order) return {success:false,message:'Pedido no encontrado'};
   const allowed = ['PENDING','PENDING_STORE_CONFIRMATION','CONFIRMED','PREPARING','READY_FOR_PICKUP','SHIPPED','DELIVERED','CANCELLED'];
@@ -21,7 +21,7 @@ export function transitionOrder(state: any, orderId: string, status: string, not
   if (['DELIVERED','CANCELLED'].includes(order.status)) return {success:false,message:'El pedido ya está cerrado'};
   const progress = ['PENDING','PENDING_STORE_CONFIRMATION','CONFIRMED','PREPARING','READY_FOR_PICKUP','SHIPPED','DELIVERED'];
   if (status !== 'CANCELLED' && progress.indexOf(status) < progress.indexOf(order.status)) return {success:false,message:'No se puede retroceder el estado del pedido'};
-  if (order.fulfillmentOrderId) return {success:false,message:'Este pedido debe gestionarse desde el flujo de Plazado Fulfillment'};
+  if (order.fulfillmentOrderId && !fulfillmentAuthorized) return {success:false,message:'Este pedido debe gestionarse desde el flujo de Plazado Fulfillment'};
   const now = new Date().toISOString();
   if(!Number.isFinite(order.total) || !Number.isFinite(order.plazaCommissionAmount) || order.total<0 || order.plazaCommissionAmount<0) return {success:false,message:'Importes inconsistentes. Requiere conciliación'};
   const balance = ensureBalance(state,order.storeId);
