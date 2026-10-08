@@ -182,7 +182,7 @@ export const HomePage: React.FC = () => {
 
 
   return (
-    <div className="max-w-[1920px] mx-auto px-0 sm:px-3 lg:px-4 space-y-4 pb-10 sm:pb-14 overflow-x-hidden">
+    <div className="max-w-[1600px] mx-auto px-0 sm:px-4 lg:px-6 space-y-5 sm:space-y-6 pb-10 sm:pb-14 overflow-x-hidden">
 
       {/* ============================================================== */}
       {/* 2. HERO PRINCIPAL — REPLICA VISUAL EXACTA DE LA REFERENCIA     */}
@@ -539,7 +539,7 @@ export const HomePage: React.FC = () => {
           /* Grid de 8 productos destacados en Desktop / Carrusel en móvil */
           <div
             ref={productsTrackRef}
-            className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 sm:gap-3 overflow-x-auto sm:overflow-visible pb-2 sm:pb-0"
+            className="flex sm:grid sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2.5 sm:gap-3 overflow-x-auto sm:overflow-visible pb-2 sm:pb-0 snap-x"
           >
             {displayProducts.slice(0, 8).map(prod => {
               const store = stores.find(s => s.id === prod.storeId);
@@ -550,7 +550,7 @@ export const HomePage: React.FC = () => {
               return (
                 <div
                   key={prod.id}
-                  className="bg-white dark:bg-stone-900 rounded-xl border border-slate-200/80 dark:border-stone-800 p-2.5 shadow-2xs hover:shadow-md hover:border-[#f20544]/40 dark:hover:border-rose-700 transition-all flex flex-col justify-between group"
+                  className="min-w-[165px] sm:min-w-0 snap-start bg-white dark:bg-stone-900 rounded-xl border border-slate-200/80 dark:border-stone-800 p-2.5 shadow-2xs hover:shadow-md hover:border-[#f20544]/40 dark:hover:border-rose-700 transition-all flex flex-col justify-between group"
                 >
                   {/* Imagen del Producto en fondo blanco/limpio */}
                   <div 
@@ -785,7 +785,7 @@ export const HomePage: React.FC = () => {
           /* Grid de 6 tiendas horizontales como en la referencia */
           <div
             ref={storesTrackRef}
-            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5 sm:gap-3 overflow-x-auto sm:overflow-visible pb-2 sm:pb-0"
+            className="flex sm:grid sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-2.5 sm:gap-3 overflow-x-auto sm:overflow-visible pb-2 sm:pb-0 snap-x"
           >
             {approvedStores.slice(0, 7).map(store => {
               const category = categories.find(c => c.id === store.categoryId);
