@@ -192,9 +192,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                   className="appearance-none bg-transparent pl-3 pr-7 py-2.5 text-xs font-semibold text-stone-700 dark:text-stone-200 hover:text-slate-900 dark:hover:text-white focus:outline-none cursor-pointer"
                   title="Filtrar por categoría"
                 >
-                  <option value="" className="dark:bg-stone-800 dark:text-stone-900 dark:text-stone-100">Todas las categorías</option>
+                  <option value="" className="bg-white text-stone-900 dark:bg-stone-800 dark:text-stone-100">Todas las categorías</option>
                   {mainCategories.map(cat => (
-                    <option key={cat.id} value={cat.slug} className="dark:bg-stone-800 dark:text-stone-900 dark:text-stone-100">
+                    <option key={cat.id} value={cat.slug} className="bg-white text-stone-900 dark:bg-stone-800 dark:text-stone-100">
                       {cat.name}
                     </option>
                   ))}
@@ -373,8 +373,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
 
               {/* Menú Flotante de Categorías */}
               {categoriesDropdownOpen && (
-                <div className="absolute top-full left-0 mt-1.5 w-64 bg-black dark:bg-black rounded-2xl shadow-xl border border-slate-200 dark:border-stone-700 p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="text-[10px] uppercase font-bold text-slate-400 dark:text-stone-500 px-3 py-1 tracking-wider">
+                <div className="absolute top-full left-0 mt-1.5 w-64 bg-white dark:bg-stone-950 rounded-2xl shadow-xl border border-slate-200 dark:border-stone-700 p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="text-[10px] uppercase font-bold text-slate-600 dark:text-stone-400 px-3 py-1 tracking-wider">
                     Categorías de Plazado
                   </div>
                   <div className="max-h-80 overflow-y-auto space-y-0.5">
@@ -721,7 +721,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                 <button
                   key={cat.id}
                   onClick={() => handleCategoryClick(cat.slug)}
-                  className="text-left px-3 py-2 text-xs font-medium rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-800 flex items-center gap-2"
+                  className="text-left px-3 py-2 text-xs font-medium rounded-xl bg-slate-50 dark:bg-stone-800 hover:bg-slate-100 dark:hover:bg-stone-700 text-slate-800 dark:text-stone-100 flex items-center gap-2"
                 >
                   <span className="text-base shrink-0">{getCategoryEmoji(cat)}</span>
                   <span className="truncate">{cat.name}</span>
