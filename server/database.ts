@@ -477,20 +477,10 @@ class GlobalDatabase {
         }
         storesDb.syncFromFirestore(firestoreData.stores);
       }
-      if (Array.isArray(firestoreData.products) && firestoreData.products.length > 0) {
-        console.log(`[GlobalDatabase] Syncing ${firestoreData.products.length} products from Firestore.`);
-        for (const fsProd of firestoreData.products) {
-          const existingIdx = this.memoryData.products.findIndex(p => p.id === fsProd.id);
-          if (existingIdx === -1) {
-            this.memoryData.products.push(fsProd);
-            updated = true;
-          } else {
-            this.memoryData.products[existingIdx] = {
-              ...fsProd,
-              ...this.memoryData.products[existingIdx]
-            };
-          }
-        }
+      if (Array.isArray(firestoreData.products)) {
+        console.log(`[GlobalDatabase] Loading ${firestoreData.products.length} authoritative products from Firestore.`);
+        this.memoryData.products = [...firestoreData.products];
+        updated = true;
       }
       if (firestoreData.categories && firestoreData.categories.length > 0) {
         console.log(`[GlobalDatabase] Loaded ${firestoreData.categories.length} official categories from Firestore.`);
@@ -755,7 +745,8 @@ class GlobalDatabase {
         }
       }
 
-      if (sqlProducts.length > 0) {
+      // Firestore is authoritative for products; do not restore stale Cloud SQL products into memory.
+      if (false && sqlProducts.length > 0) {
         for (const p of sqlProducts) {
           const existingIdx = this.memoryData.products.findIndex(mp => mp.id === p.id);
           const mappedProd: Product = {
@@ -1305,6 +1296,9 @@ class GlobalDatabase {
     this.addAuditLog('PRODUCT_CREATED', newId, undefined, `Producto publicado: ${newProduct.name} (Tienda: ${newProduct.storeId})`);
     this.commit();
 
+    // Firestore is the production source of truth. Persist every new publication there.
+    firestoreRepo.saveProduct(newProduct).catch(err => console.error('[Firestore] Error syncing createProduct:', err));
+
     cloudSqlRepo.createProduct({
       id: newProduct.id,
       storeId: newProduct.storeId,
@@ -1333,6 +1327,8 @@ class GlobalDatabase {
     this.addAuditLog('PRODUCT_UPDATED', productId, prev.name, updated.name);
     this.commit();
 
+    firestoreRepo.saveProduct(updated).catch(err => console.error('[Firestore] Error syncing updateProduct:', err));
+
     cloudSqlRepo.updateProduct(productId, {
       name: updated.name,
       description: updated.description,
@@ -1356,6 +1352,7 @@ class GlobalDatabase {
     this.addAuditLog('PRODUCT_DELETED', productId, name, 'Producto eliminado');
     this.commit();
 
+    firestoreRepo.deleteProduct(productId).catch(err => console.error('[Firestore] Error syncing deleteProduct:', err));
     cloudSqlRepo.deleteProduct(productId).catch(err => console.error('[CloudSQL] Error syncing deleteProduct:', err));
 
     return true;
