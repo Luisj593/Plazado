@@ -139,39 +139,14 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
                 setSelectedCategorySlug(null);
               }}
               className="text-left flex items-center gap-2.5 group focus:outline-none hover:opacity-95 transition-opacity"
-              title="PlazaDO.com — Comprar y vender en todo RD"
+              title="Plazado.com — Todo en un solo lugar"
             >
-              {customHeaderImage && !headerImageError ? (
-                <div className="w-[220px] h-12 flex items-center justify-center overflow-hidden">
-                  <img 
-                    src={customHeaderImage} 
-                    alt={systemSettings?.platformName || "PlazaDO.com"} 
-                    className="w-full h-full object-contain object-center transition-transform group-hover:scale-[1.02]"
-                    onError={() => setHeaderImageError(true)}
-                  />
-                </div>
-              ) : (
-                <>
-                  {/* Green Shopping Bag Logo */}
-                  <div className="w-10 h-10 rounded-xl bg-[#f20544] flex items-center justify-center text-white shrink-0 shadow-xs">
-                    <svg viewBox="0 0 36 36" className="w-6 h-6 fill-none stroke-white stroke-[2.6] stroke-linecap-round stroke-linejoin-round">
-                      <path d="M11 13 C11 7.5, 25 7.5, 25 13" />
-                      <path d="M7 14 L29 14 L27.5 31 C27.5 33, 25.5 34, 24 34 L12 34 C10.5 34, 8.5 33, 8.5 31 Z" fill="white" />
-                      <path d="M14 23 Q18 28, 22 23" stroke="#f20544" strokeWidth="2.5" />
-                    </svg>
-                  </div>
-
-                  {/* Text: Plazado.com + Slogan */}
-                  <div className="flex flex-col text-left">
-                    <span className="text-3xl font-black text-[#f20544] tracking-tight leading-none">
-                      Plazado<span className="text-emerald-600">.com</span>
-                    </span>
-                    <span className="text-[11px] text-slate-500 dark:text-stone-400 font-medium tracking-tight mt-0.5 leading-none">
-                      Comprar y vender en todo RD
-                    </span>
-                  </div>
-                </>
-              )}
+              <img
+                src={customHeaderImage && !headerImageError ? customHeaderImage : '/plazado-logo-oficial.png'}
+                alt="Plazado.com — Todo en un solo lugar"
+                className="w-[220px] h-[74px] object-contain object-center bg-white rounded-md"
+                onError={customHeaderImage && !headerImageError ? () => setHeaderImageError(true) : undefined}
+              />
             </button>
           </div>
 
@@ -564,28 +539,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
             className="focus:outline-none flex items-center gap-2"
             title="Inicio Plazado.com"
           >
-            {customHeaderImage && !headerImageError ? (
-              <div className="w-[150px] h-10 flex items-center justify-center overflow-hidden">
-                <img 
-                  src={customHeaderImage} 
-                  alt={systemSettings?.platformName || "PlazaDO.com"} 
-                  className="w-full h-full object-contain object-center"
-                  onError={() => setHeaderImageError(true)}
-                />
-              </div>
-            ) : (
-              <>
-                <div className="w-8 h-8 rounded-lg bg-[#f20544] flex items-center justify-center text-white shrink-0 shadow-2xs">
-                  <svg viewBox="0 0 36 36" className="w-5 h-5 fill-none stroke-white stroke-[2.6]">
-                    <path d="M11 13 C11 7.5, 25 7.5, 25 13" />
-                    <path d="M7 14 L29 14 L27.5 31 C27.5 33, 25.5 34, 24 34 L12 34 C10.5 34, 8.5 33, 8.5 31 Z" fill="white" />
-                  </svg>
-                </div>
-                <span className="text-xl font-black text-white tracking-tight leading-none">
-                  Plazado<span className="text-[#f20544]">.com</span>
-                </span>
-              </>
-            )}
+            <img
+                src={customHeaderImage && !headerImageError ? customHeaderImage : '/plazado-logo-oficial.png'}
+                alt="Plazado.com — Todo en un solo lugar"
+                className="w-[150px] h-[50px] object-contain object-center bg-white rounded-md"
+                onError={customHeaderImage && !headerImageError ? () => setHeaderImageError(true) : undefined}
+              />
           </button>
 
           {/* Acciones derechas: Tema Claro/Oscuro + 🛒 Carrito */}
