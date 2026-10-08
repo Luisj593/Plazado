@@ -343,13 +343,9 @@ class GlobalDatabase {
         if (Array.isArray(imm.products) && imm.products.length > 0) {
           activeData.products = [...imm.products];
         }
-        if (Array.isArray(imm.users) && imm.users.length > 0) {
-          for (const u of imm.users) {
-            if (!activeData.users.some(ex => ex.id === u.id || ex.email.toLowerCase() === u.email.toLowerCase())) {
-              activeData.users.push(u);
-            }
-          }
-        }
+        // Never restore users from the immutable local backup. Firestore is the
+        // authoritative identity store; restoring stale users here resurrected
+        // accounts intentionally removed from production.
       }
     }
 
