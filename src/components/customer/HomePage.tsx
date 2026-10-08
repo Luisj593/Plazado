@@ -188,14 +188,14 @@ export const HomePage: React.FC = () => {
       {/* 2. HERO PRINCIPAL — REPLICA VISUAL EXACTA DE LA REFERENCIA     */}
       {/* ============================================================== */}
       <section className="pt-2 sm:pt-4">
-        <div className="relative rounded-none sm:rounded-[20px] overflow-hidden bg-white dark:bg-stone-950 border border-slate-200 dark:border-stone-800 shadow-sm min-h-[380px] sm:min-h-[430px] lg:h-[470px] xl:h-[500px] flex items-center">
+        <div className="relative rounded-none sm:rounded-[24px] overflow-hidden bg-white dark:bg-stone-950 border-y sm:border border-slate-200 dark:border-stone-800 shadow-sm min-h-[380px] sm:min-h-[430px] lg:h-[470px] xl:h-[500px] flex items-center">
           
           {/* Suaves elementos de luz y ambientación de marca */}
           <div className="absolute -right-16 -top-16 w-80 h-80 bg-rose-100/70 dark:bg-rose-900/20 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute -left-16 -bottom-16 w-80 h-80 bg-slate-100 dark:bg-stone-900/40 rounded-full blur-3xl pointer-events-none" />
 
           {/* Contenido en dos zonas perfectamente integradas */}
-          <div className="relative z-10 w-full h-full flex flex-col justify-center px-5 sm:px-10 lg:px-12 py-7 sm:py-8">
+          <div className="relative z-10 w-full h-full flex flex-col justify-center px-5 sm:px-8 lg:px-12 py-7 sm:py-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 items-center gap-3 lg:gap-8 h-full">
               
               {/* ZONA IZQUIERDA: Textos y Botones principales */}
@@ -789,13 +789,13 @@ export const HomePage: React.FC = () => {
           >
             {approvedStores.slice(0, 7).map(store => {
               const category = categories.find(c => c.id === store.categoryId);
-              const categoryName = category?.name || 'Comercio General';
+              const categoryName = category?.name;
 
               return (
                 <div
                   key={store.id}
                   onClick={() => handleStoreSelect(store.slug || store.id)}
-                  className="bg-white dark:bg-stone-900 rounded-xl border border-slate-200/80 dark:border-stone-800 p-2.5 shadow-2xs hover:shadow-md hover:border-[#f20544]/40 dark:hover:border-rose-700 transition-all flex flex-col items-start justify-between gap-2 group cursor-pointer"
+                  className="min-w-[190px] sm:min-w-0 snap-start bg-white dark:bg-stone-900 rounded-xl border border-slate-200/80 dark:border-stone-800 p-2.5 shadow-2xs hover:shadow-md hover:border-[#f20544]/40 dark:hover:border-rose-700 transition-all flex flex-col items-start justify-between gap-2 group cursor-pointer"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     {/* Logo circular grande */}
@@ -817,9 +817,7 @@ export const HomePage: React.FC = () => {
                       <h4 className="font-bold text-xs text-slate-900 dark:text-white group-hover:text-[#f20544] dark:group-hover:text-rose-400 transition-colors truncate">
                         {store.name}
                       </h4>
-                      <p className="text-[10px] text-slate-400 dark:text-stone-500 truncate">
-                        {categoryName}
-                      </p>
+                      {categoryName && <p className="text-[10px] text-slate-400 dark:text-stone-500 truncate">{categoryName}</p>}
                       {typeof store.rating === 'number' && store.rating > 0 && (
                         <div className="flex items-center gap-1 text-[10px] text-amber-500 font-bold mt-0.5">
                           <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
@@ -845,10 +843,10 @@ export const HomePage: React.FC = () => {
       </section>
 
       {/* ============================================================== */}
-      {/* 7. CTA VERDE "¿TIENES UNA TIENDA?" — REPLICA EXACTA            */}
+      {/* 7. CTA FINAL PARA COMERCIOS — IDENTIDAD PLAZADO                  */}}
       {/* ============================================================== */}
       <section>
-        <div className="rounded-xl sm:rounded-2xl bg-gradient-to-r from-[#e6003d] via-[#ff174f] to-[#f20544] text-white p-5 sm:p-7 shadow-md flex flex-col lg:flex-row items-center justify-between gap-6">
+        <div className="rounded-none sm:rounded-2xl bg-gradient-to-r from-[#c90035] via-[#ed1748] to-[#f20544] text-white p-5 sm:p-7 shadow-md flex flex-col lg:flex-row items-center justify-between gap-6">
           
           {/* Zona Izquierda: Icono + Título + Subtítulo */}
           <div className="flex items-center gap-4 text-left w-full lg:w-auto">
