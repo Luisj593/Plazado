@@ -619,6 +619,8 @@ export const CreateBannerModal: React.FC<CreateBannerModalProps> = ({ isOpen, on
                     setTargetValue(categories[0]?.slug || categories[0]?.id || '');
                   } else if (type === 'PRODUCT') {
                     setTargetValue(products[0]?.id || '');
+                  } else if (type === 'REGISTER_USER' || type === 'REGISTER_STORE') {
+                    setTargetValue('');
                   } else {
                     setTargetValue('https://');
                   }
@@ -628,6 +630,8 @@ export const CreateBannerModal: React.FC<CreateBannerModalProps> = ({ isOpen, on
                 <option value="STORE">🏪 Tienda Oficial</option>
                 <option value="CATEGORY">🏷️ Categoría de Catálogo</option>
                 <option value="PRODUCT">📦 Producto Específico</option>
+                <option value="REGISTER_USER">👤 Registro de Usuario</option>
+                <option value="REGISTER_STORE">🏪 Registro de Tienda</option>
                 <option value="URL">🌐 Enlace Externo (URL)</option>
               </select>
             </div>
@@ -672,6 +676,10 @@ export const CreateBannerModal: React.FC<CreateBannerModalProps> = ({ isOpen, on
                     </option>
                   ))}
                 </select>
+              ) : targetType === 'REGISTER_USER' ? (
+                <div className="w-full p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-blue-700 text-xs font-semibold">Dirige al registro de usuario</div>
+              ) : targetType === 'REGISTER_STORE' ? (
+                <div className="w-full p-2.5 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs font-semibold">Dirige al registro de tienda</div>
               ) : (
                 <input
                   type="url"
