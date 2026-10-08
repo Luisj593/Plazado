@@ -2797,6 +2797,7 @@ class GlobalDatabase {
     }
     this.commit();
 
+    firestoreRepo.saveUser(this.memoryData.users[idx]).catch(err => console.error('[Firestore] Error syncing updateUser:', err));
     cloudSqlRepo.updateUser(userId, {
       name: data.name,
       role: data.role,
@@ -2816,14 +2817,15 @@ class GlobalDatabase {
       return false; // Cannot delete Super Admin
     }
 
-    if (deleteAssociatedStore && user.storeId) {
-      this.deleteStore(user.storeId);
-    } else if (user.storeId) {
-      const st = this.memoryData.stores.find(s => s.id === user.storeId);
-      if (st && st.ownerId === userId) {
-        st.ownerId = '';
-        firestoreRepo.saveStore(st).catch(e => console.error('[Firestore] Store update error:', e));
-      }
+    const ownedStores = this.memoryData.stores.filter(s =>
+      s.ownerId === userId || (s as any).owner_id === userId || (user.storeId && s.id === user.storeId)
+    );
+    if (ownedStores.length > 0 && !deleteAssociatedStore) {
+      console.warn(`[GlobalDatabase] Blocked deletion of owner ${userId}: ${ownedStores.length} associated store(s).`);
+      return false;
+    }
+    if (deleteAssociatedStore) {
+      for (const ownedStore of ownedStores) this.deleteStore(ownedStore.id);
     }
 
     this.memoryData.users.splice(idx, 1);
