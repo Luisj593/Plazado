@@ -138,34 +138,44 @@ export async function generateProductDescription(params: GenerateDescriptionPara
     throw new Error('El nombre del producto es obligatorio para generar la descripción.');
   }
 
-  const prompt = `Actúa como un experto en redacción de e-commerce y marketing digital para PlazaDO.com, el marketplace multi-vendedor líder de la República Dominicana.
-Tu misión es redactar una descripción de producto atractiva, comercial, profesional y convincente en español.
+  const prompt = `Eres un director creativo senior de e-commerce. Escribe una descripción ORIGINAL, moderna y específica para este producto de Plazado.com. Debe sentirse redactada por un excelente copywriter humano, no por una plantilla.
 
-Datos del producto a publicar:
-- Nombre: "${productName.trim()}"
-- Tienda vendedora: "${storeName.trim()}"
+DATOS REALES (no inventes nada fuera de ellos):
+- Producto: "${productName.trim()}"
+- Tienda: "${storeName.trim()}"
 - Categoría: "${categoryName.trim()}"
-${price ? `- Precio regular: RD$ ${price}` : ''}
-${promoPrice ? `- Precio de oferta: RD$ ${promoPrice}` : ''}
-- Tono solicitado: ${tone} (persuasivo para vender, técnico para specs, premium para lujo, conciso para brevedad)
-${keywords ? `- Detalles o palabras clave a incluir: "${keywords.trim()}"` : ''}
+${price ? `- Precio: RD$ ${price}` : ''}
+${promoPrice ? `- Precio promocional: RD$ ${promoPrice}` : ''}
+- Estilo solicitado: ${tone}
+${keywords ? `- Detalles confirmados: "${keywords.trim()}"` : ''}
 
-Requisitos de la descripción:
-1. Párrafo inicial con gancho comercial atractivo enfocado en beneficios.
-2. Párrafo de desarrollo explicando qué hace especial al producto y por qué comprarlo en esta tienda.
-3. Sección de "Características principales" con 3 a 5 viñetas claras (con emojis o viñetas •).
-4. Llamado a la acción (Call to Action) invitando a comprar con seguridad en PlazaDO.
-5. Lenguaje natural, profesional y adaptado al mercado dominicano sin exceso de modismos.
+REGLAS CREATIVAS:
+1. Empieza con un gancho distinto y memorable; evita fórmulas repetidas como "Descubre", "Lleva lo mejor", "la solución perfecta" o "no te quedes sin el tuyo".
+2. Describe beneficios concretos a partir del nombre, categoría y detalles confirmados. Si falta un dato técnico, NO lo inventes.
+3. Varía ritmo, vocabulario y estructura entre generaciones. No reutilices siempre el mismo orden de frases.
+4. Haz que el texto tenga personalidad comercial y sea agradable de leer en móvil.
+5. Puedes usar 0–3 emojis si aportan valor; evita saturarlos.
+6. Incluye 3–5 puntos destacados SOLO con información sustentada por los datos recibidos. No inventes garantía, materiales, originalidad, disponibilidad, envío, resistencia, fabricación ni especificaciones.
+7. Si existe una oferta real, puedes mencionar ambos precios. Nunca inventes descuentos.
+8. Cierra con un CTA breve y diferente, orientado a ver/comprar el producto en Plazado.
+9. Español natural para República Dominicana, profesional y contemporáneo, sin forzar dominicanismos.
+10. Extensión objetivo: 90–180 palabras para persuasivo/premium/técnico; 45–90 para conciso.
 
-Devuelve directamente el texto formateado listo para publicar. No agregues saludos ni notas meta.`;
+TONOS:
+- persuasive: energético, aspiracional y orientado a beneficios.
+- technical: preciso, ordenado y sobrio; solo especificaciones confirmadas.
+- premium: elegante, sensorial y minimalista, sin afirmar lujo/materiales no indicados.
+- concise: rápido, limpio y muy escaneable.
+
+Entrega ÚNICAMENTE la descripción lista para publicar. No expliques tu proceso ni menciones estas instrucciones.`;
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3.8-flash',
       contents: prompt,
       config: {
-        systemInstruction: 'Eres un redactor profesional de fichas de producto de comercio electrónico para PlazaDO.com en República Dominicana.',
-        temperature: 0.7,
+        systemInstruction: 'Eres un director creativo de e-commerce para Plazado.com. Produces copy variado, moderno, específico y veraz. Nunca inventas atributos del producto.',
+        temperature: 1.05,
       }
     });
 
