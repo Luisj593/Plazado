@@ -1,4 +1,5 @@
 import React, { useRef, useMemo, useState, useEffect } from 'react';
+import { PromoBannerSlider } from './PromoBannerSlider';
 import { useApp } from '../../context/AppContext';
 import { DominicanFlag } from '../common/DominicanFlag';
 import { isProductPubliclyVisible, isStorePubliclyVisible } from '../../types';
@@ -157,7 +158,7 @@ export const HomePage: React.FC = () => {
     .filter(group => group.products.length > 0);
 
   const activePromoBanners = useMemo(
-    () => [...(banners || [])].filter(b => b.isActive).sort((a, b) => a.order - b.order).slice(0, 3),
+    () => [...(banners || [])].filter(b => b.isActive).sort((a, b) => a.order - b.order),
     [banners]
   );
 
@@ -438,29 +439,7 @@ export const HomePage: React.FC = () => {
 
       </section>
 
-      {/* Promociones configuradas por el Super Admin: nunca se generan banners ficticios */}
-      {activePromoBanners.length > 0 && (
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {activePromoBanners.map((banner, index) => (
-            <button
-              key={banner.id}
-              type="button"
-              onClick={() => handleBannerClick(banner)}
-              className={`relative overflow-hidden rounded-2xl text-left group border border-slate-200 dark:border-stone-800 bg-slate-50 dark:bg-stone-900 ${activePromoBanners.length === 1 ? 'md:col-span-3' : activePromoBanners.length === 2 && index === 0 ? 'md:col-span-2' : ''}`}
-              style={{ aspectRatio: activePromoBanners.length === 1 ? '16 / 5' : '16 / 9', minHeight: '150px' }}
-            >
-              <img src={banner.imageUrl} alt={banner.title} loading="lazy" className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-[1.015] transition-transform duration-300" />
-              <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/25 to-transparent" />
-              <div className="relative z-10 p-5 sm:p-6 max-w-[70%] text-white">
-                {banner.badge && <span className="inline-block mb-2 px-2.5 py-1 rounded-full bg-[#f20544] text-[10px] font-black uppercase tracking-wide">{banner.badge}</span>}
-                <h3 className="text-2xl sm:text-3xl lg:text-4xl font-black leading-[1.08] tracking-tight drop-shadow-sm">{banner.title}</h3>
-                {banner.subtitle && <p className="text-sm sm:text-base lg:text-lg font-medium text-white/95 mt-2 leading-snug line-clamp-3 drop-shadow-sm">{banner.subtitle}</p>}
-                <span className="inline-flex items-center gap-1 mt-3 text-xs font-bold">Explorar <ArrowRight className="w-3.5 h-3.5" /></span>
-              </div>
-            </button>
-          ))}
-        </section>
-      )}
+      <PromoBannerSlider banners={activePromoBanners} onSelect={handleBannerClick} />
 
       {/* Ofertas reales: solo productos publicados que tengan promoPrice válido */}
       {
