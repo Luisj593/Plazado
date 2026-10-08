@@ -17,7 +17,7 @@ for(const [route,audience] of [['register-customer','CUSTOMER'],['register-store
  const end=source.indexOf('\n  });',begin)+8;
  const code=await transform(source.slice(begin,end),{loader:'ts'});
  let handler;const records=[],events=[];
- const db={getUsers:()=>[],getStores:()=>[],getSystemSettings:()=>({}),addUser:u=>records.push(u),addStore:()=>{},addAuditLog:()=>{},getVersion:()=>1};
+ const db={getUsers:()=>[],getStores:()=>[],getSystemSettings:()=>({}),addUser:async u=>{records.push(u);events.push(['persist',u.legalAcceptance]);},registerStoreAccount:async (u,s)=>{records.push(u);events.push(['persist',u.legalAcceptance]);assert.equal(s.status,'PENDING');assert.equal(s.isPublished,false);},addAuditLog:()=>{},getVersion:()=>1};
  const firestoreRepo={saveUser:async u=>events.push(['persist',u.legalAcceptance]),saveStoreRegistrationAtomic:async u=>events.push(['persist',u.legalAcceptance])};
  const deps={app:{post:(_,fn)=>handler=fn},hasCurrentLegalConsent,registrationDocuments,LEGAL_VERSION,db,crypto,hashPassword:async()=> 'test-hash-in-memory',firestoreRepo,sendRegistrationOtpEmail:async()=>{events.push(['mail']);return {delivered:true};}};
  new Function(...Object.keys(deps),code.code)(...Object.values(deps));

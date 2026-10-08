@@ -25,7 +25,7 @@ export const DEFAULT_MAIL_CONFIG: MailConfig = {
  */
 export function cleanAppPassword(pass?: string): string {
   if (!pass) return '';
-  return pass.replace(/\s+/g, '').trim();
+  return pass.trim();
 }
 
 /**
@@ -53,7 +53,7 @@ function createTransporter(config: MailConfig = DEFAULT_MAIL_CONFIG) {
     greetingTimeout: 6000,
     socketTimeout: 10000,
     tls: {
-      rejectUnauthorized: false
+      rejectUnauthorized: true
     }
   });
 }
@@ -82,7 +82,7 @@ export async function verifySmtpConnection(config: MailConfig = DEFAULT_MAIL_CON
     if (friendly.includes('530') || friendly.includes('Authentication Required')) {
       friendly = 'Error 530 de IONOS: Autenticación requerida. Debes ingresar la contraseña de aplicación de 16 caracteres de tu cuenta IONOS.';
     } else if (friendly.includes('535') || friendly.includes('BadCredentials') || friendly.includes('Username and Password not accepted')) {
-      friendly = 'Error 535: Usuario o usuario o contraseña SMTP no aceptados por IONOS. Verifica que la contraseña de 16 caracteres esté correcta.';
+      friendly = 'Error 535: Credenciales SMTP no aceptadas. Verifica la cuenta y contraseña configuradas.';
     }
     return {
       ok: false,
@@ -117,6 +117,7 @@ export async function sendRegistrationOtpEmail(
   const senderAddress = `"${config.senderName}" <${config.senderEmail}>`;
   const subject = `🔐 Tu Código de Confirmación de Registro PlazaDO: ${otpCode}`;
 
+  const escapeHtml=(value:string)=>value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]!));
   const htmlContent = `
 <!DOCTYPE html>
 <html lang="es">
@@ -147,11 +148,11 @@ export async function sendRegistrationOtpEmail(
           <tr>
             <td style="padding: 36px 32px;">
               <h2 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 800; color: #1c1917;">
-                ¡Hola, ${recipientName || 'Usuario'}! 👋
+                ¡Hola, ${escapeHtml(recipientName || 'Usuario')}! 👋
               </h2>
               
               <p style="margin: 0 0 20px 0; font-size: 14px; line-height: 1.6; color: #44403c;">
-                Has iniciado el proceso de creación de cuenta en <strong>Plazado.com</strong>. Para validar que este correo electrónico (<strong>${recipientEmail}</strong>) es verdaderamente tuyo, ingresa el siguiente código de confirmación en la pantalla de registro:
+                Has iniciado el proceso de creación de cuenta en <strong>Plazado.com</strong>. Para validar que este correo electrónico (<strong>${escapeHtml(recipientEmail)}</strong>) es verdaderamente tuyo, ingresa el siguiente código de confirmación en la pantalla de registro:
               </p>
 
               <!-- OTP Code Display Card -->
@@ -223,27 +224,9 @@ Correo oficial de seguridad enviado desde: contacto@plazado.com
 © 2026 Plazado.com República Dominicana.
   `;
 
-  // Check if SMTP password is provided
   if (!pass) {
-    console.warn(`[MailerService] ⚠️ SMTP Password (App Password) not configured in PlazaDO. Sender: ${config.senderEmail}`);
-    console.log(`
-===================================================================
-📨 [PLAZADO RD - REGISTRO DE CORREO (MODO DIRECTO/FALLBACK)]
-De: ${senderAddress}
-Para: ${recipientEmail}
-Asunto: ${subject}
-Código generado: [oculto en registros del servidor]
-Aviso: Falta Contraseña de Aplicación de IONOS en Super Admin > Configuración.
-===================================================================
-    `);
-    return {
-      success: true,
-      delivered: false,
-      simulated: true,
-      reason: 'MISSING_SMTP_PASS',
-      warning: 'Para entrega real en bandeja de entrada Gmail, ingresa la Contraseña de Aplicación de 16 caracteres de IONOS en el Panel Super Admin > Configuración.',
-      messageId: `otp-fallback-${Date.now()}`
-    };
+    console.warn('[MailerService] SMTP credentials are not configured. No email sent.');
+    return {success:false,delivered:false,simulated:false,reason:'MISSING_SMTP_PASS',error:'El envío de correo no está configurado. Contacta a soporte.'};
   }
 
   try {
@@ -256,41 +239,23 @@ Aviso: Falta Contraseña de Aplicación de IONOS en Super Admin > Configuración
       html: htmlContent,
     });
 
-    console.log(`[MailerService] ✅ Email dispatched successfully to ${recipientEmail} from ${config.senderEmail}. MessageId: ${info.messageId}`);
-    return { 
-      success: true, 
-      delivered: true, 
-      simulated: false,
-      messageId: info.messageId 
-    };
+    if (!(info.accepted || []).some((address:any)=>String(address).toLowerCase()===recipientEmail.toLowerCase())) {
+      return {success:false,delivered:false,simulated:false,reason:'SMTP_REJECTED',error:'El servidor de correo no aceptó el destinatario.'};
+    }
+    return {success:true,delivered:true,simulated:false,messageId:info.messageId};
   } catch (err: any) {
     const errMessage = err?.message || String(err);
-    console.error(`[MailerService] ⚠️ SMTP transport error dispatching to ${recipientEmail}:`, errMessage);
-    console.log(`
-===================================================================
-📨 [PLAZADO RD - REGISTRO DE CORREO RECHAZADO POR SERVIDOR SMTP]
-De: ${senderAddress}
-Para: ${recipientEmail}
-Asunto: ${subject}
-Código generado: [oculto en registros del servidor]
-Error devuelto por SMTP: ${errMessage}
-===================================================================
-    `);
-
-    let warning = 'El servidor SMTP rechazó el envío.';
-    if (errMessage.includes('530') || errMessage.includes('Authentication Required')) {
-      warning = 'IONOS SMTP requiere Contraseña de Aplicación de 16 caracteres (2FA). Configúrala en Super Admin > Configuración.';
-    } else if (errMessage.includes('535') || errMessage.includes('BadCredentials')) {
-      warning = 'Credenciales SMTP rechazadas por IONOS. Verifica la contraseña de 16 caracteres en Super Admin.';
-    }
-
-    return { 
-      success: true, 
-      delivered: false, 
-      simulated: true, 
-      error: errMessage,
-      warning,
-      messageId: `otp-error-fallback-${Date.now()}` 
-    };
+    console.error('[MailerService] SMTP dispatch failed:',err?.code || 'SMTP_ERROR');
+    return {success:false,delivered:false,simulated:false,reason:'SMTP_ERROR',error:'No se pudo enviar el correo. Reintenta o contacta a soporte.'};
   }
+}
+
+export async function sendAccountApprovalEmail(recipientEmail:string,recipientName:string,customConfig?:Partial<MailConfig>) {
+  const config={...DEFAULT_MAIL_CONFIG,...customConfig};
+  if(!(config.smtpPass || process.env.SMTP_PASS)) return {success:false,delivered:false};
+  try {
+    const info=await createTransporter(config).sendMail({from:`"${config.senderName}" <${config.senderEmail}>`,to:recipientEmail,subject:'Tu cuenta de Plazado.com fue aprobada',text:`Hola ${recipientName}. Tu cuenta fue revisada y aprobada. Ya puedes iniciar sesión con tu contraseña en Plazado.com. Este aviso no contiene un código de verificación.`});
+    const accepted=(info.accepted || []).some((address:any)=>String(address).toLowerCase()===recipientEmail.toLowerCase());
+    return {success:accepted,delivered:accepted};
+  } catch {return {success:false,delivered:false};}
 }

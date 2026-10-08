@@ -48,9 +48,9 @@ export interface KycVerificationData {
   cedulaNumber?: string;
   cedulaFrontUrl: string;
   selfieUrl: string;
-  biometricScore: number;
+  biometricScore?: number;
   biometricStatus: 'VERIFIED' | 'PENDING' | 'REJECTED';
-  verifiedAt: string;
+  verifiedAt?: string;
   livenessPassed: boolean;
   facialMatchPassed: boolean;
 }
@@ -85,6 +85,7 @@ export interface User {
   storeId?: string; // Solo si role === 'STORE_OWNER'
   addresses: CustomerAddress[];
   passwordHash?: string;
+  authVersion?: number;
   cedulaNumber?: string;
   kycData?: KycVerificationData;
   isKycVerified?: boolean;

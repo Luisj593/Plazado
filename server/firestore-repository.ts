@@ -140,6 +140,8 @@ export class FirestoreRepository {
     return this.db;
   }
 
+  public isAdminReady(): boolean { return this.adminDb !== null; }
+
   public isReady(): boolean {
     return this.isConfigured && this.db !== null;
   }
@@ -468,12 +470,21 @@ export class FirestoreRepository {
       const settingsDoc = await transaction.get(this.adminDb.doc('systemSettings/default'));
       if (isNewCheckout && settingsDoc.exists && (settingsDoc.data().plazaCommissionRate ?? 0.0005) !== (previous.systemSettings.plazaCommissionRate ?? 0.0005)) throw new Error('La comisión cambió. Actualiza el carrito.');
       for (const document of storeDocs) if (isNewCheckout && (!document.exists || !isStorePubliclyVisible(document.data()))) throw new Error('Tienda no disponible');
+      // A transaction must reject duplicate email identities across server instances.
+      for(const change of changes.filter(change=>change.collection==='users')) {
+        const matches=await transaction.get(this.adminDb.collection('users').where('email','==',change.after.email).limit(2));
+        if(matches.docs.some((record:any)=>record.id!==change.id)) throw new Error('El correo ya pertenece a otra cuenta');
+      }
       for (let i = 0; i < changes.length; i++) {
         const change = changes[i], document = documents[i];
         const current = document.exists ? document.data() : null;
         if (!change.before && current) throw new Error('Compra ya registrada. Actualiza el carrito antes de reintentar.');
         if (change.before && (change.collection === 'orders' || change.collection === 'settlements')) {
           if (!current || current.status !== change.before.status || current.paymentStatus !== change.before.paymentStatus || current.settlementStatus !== change.before.settlementStatus) throw new Error('La operación ya cambió en otra sesión. Actualiza antes de reintentar.');
+        }
+        if (['users','stores','banners'].includes(change.collection) && change.before) {
+          if(!current) throw new Error('El registro ya no existe. Actualiza antes de reintentar');
+          for(const key of Object.keys(change.before)) if(JSON.stringify(current[key])!==JSON.stringify(change.before[key])) throw new Error('El registro cambió en otra sesión. Actualiza antes de reintentar');
         }
         if (change.collection === 'products') {
           if (!current || current.stock !== change.before.stock || (isNewCheckout && (!isProductPubliclyVisible(current) || current.price !== change.before.price || (current.promoPrice ?? null) !== (change.before.promoPrice ?? null)))) throw new Error('El inventario o precio cambió. Actualiza el carrito.');

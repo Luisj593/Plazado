@@ -1351,71 +1351,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateStoreStatus = async (storeId: string, status: Store['status'], reason?: string) => {
-    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
-      showNotification('Acceso denegado: Solo el Super Administrador puede cambiar el estado de una tienda', 'error');
-      return;
-    }
-    const store = stores.find(s => s.id === storeId);
-    if (!store) return;
-
     try {
-      const res = await api.updateStoreStatus(storeId, status as StoreStatus, reason);
-      if (res.success && res.store) {
-        setStores(prev => prev.map(s => s.id === storeId ? res.store : s));
-      }
-    } catch (e) {
-      // Optimistic
-      const isPublished = status === 'APPROVED' || status === 'active';
-      setStores(prev => prev.map(s => s.id === storeId ? { ...s, status, isPublished, rejectionReason: reason } : s));
-    }
-
-    if (status === 'APPROVED' || status === 'active') {
-      showNotification(`¡Tienda "${store.name}" APROBADA y publicada globalmente!`, 'success');
-    } else if (status === 'REJECTED') {
-      showNotification(`Solicitud de la tienda "${store.name}" rechazada.`, 'info');
-    } else {
-      showNotification(`Estado de la tienda ${store.name} actualizado a: ${status}`);
-    }
+      const res=await api.updateStoreStatus(storeId,status as StoreStatus,reason);
+      if(!res.success || !res.store) throw Error('No se guardó el cambio de tienda');
+      setStores(prev=>prev.map(s=>s.id===storeId?res.store:s));
+      showNotification('Cambio de tienda guardado','success');
+    } catch(error:any) {showNotification(error.message || 'No se guardó el cambio','error');}
   };
 
   const updateStoreDetails = async (storeId: string, data: Partial<Store>) => {
-    if (currentUser?.role === 'STORE_OWNER' && currentUser?.storeId !== storeId) {
-      showNotification('Violación de seguridad: No tienes permiso para editar esta tienda', 'error');
-      return;
-    }
-
     try {
-      const res = await api.updateStore(storeId, data);
-      if (res.success && res.store) {
-        setStores(prev => prev.map(s => s.id === storeId ? res.store : s));
-      }
-    } catch (e) {
-      setStores(prev => prev.map(s => s.id === storeId ? { ...s, ...data } : s));
-    }
-    showNotification('Configuración de la tienda guardada en la base de datos global');
+      const res=await api.updateStore(storeId,data);
+      if(!res.success || !res.store) throw Error('No se guardó el cambio de tienda');
+      setStores(prev=>prev.map(s=>s.id===storeId?res.store:s));
+      showNotification('Cambio de tienda guardado','success');
+    } catch(error:any) {showNotification(error.message || 'No se guardó el cambio','error');}
   };
 
   const toggleStorePublish = async (storeId: string) => {
-    if (currentUser?.role !== 'SUPER_ADMIN' && (currentUser?.role !== 'STORE_OWNER' || currentUser?.storeId !== storeId)) {
-      showNotification('Violación de seguridad: No tienes permiso para editar esta tienda', 'error');
-      return;
-    }
-
-    const store = stores.find(s => s.id === storeId);
-    if (!store) return;
-
     try {
-      const res = await api.toggleStorePublish(storeId);
-      if (res.success && res.store) {
-        setStores(prev => prev.map(s => s.id === storeId ? res.store : s));
-        showNotification(res.store.isPublished ? `Tienda "${store.name}" publicada globalmente` : `Tienda "${store.name}" despublicada`, res.store.isPublished ? 'success' : 'info');
-      }
-    } catch (e) {
-      const currentlyVisible = isStorePubliclyVisible(store);
-      const nextPublished = !currentlyVisible;
-      const nextStatus = nextPublished ? 'APPROVED' : 'INACTIVE';
-      setStores(prev => prev.map(s => s.id === storeId ? { ...s, isPublished: nextPublished, status: nextStatus as StoreStatus } : s));
-    }
+      const res=await api.toggleStorePublish(storeId);
+      if(!res.success || !res.store) throw Error('No se guardó el cambio de tienda');
+      setStores(prev=>prev.map(s=>s.id===storeId?res.store:s));
+      showNotification('Cambio de tienda guardado','success');
+    } catch(error:any) {showNotification(error.message || 'No se guardó el cambio','error');}
   };
 
   const deleteStore = async (storeId: string) => {
@@ -2026,36 +1985,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // --- BANNERS (Global) ---
   const addBanner = async (banner: Omit<Banner, 'id'>) => {
     try {
-      const res = await api.createBanner(banner);
-      if (res.success && res.banner) {
-        setBanners(prev => [...prev, res.banner]);
-        showNotification('Banner publicitario creado globalmente');
-      }
-    } catch (e) {
-      setBanners(prev => [...prev, { ...banner, id: `banner-${Date.now()}` }]);
-    }
+      const res=await api.createBanner(banner);
+      if(!res.success || !res.banner) throw Error('No se guardó el banner');
+      setBanners(prev=>[...prev,res.banner]);
+      showNotification('Banner guardado','success');
+    } catch(error:any) {showNotification(error.message || 'No se guardó el banner','error');}
   };
 
   const updateBanner = async (id: string, data: Partial<Banner>) => {
     try {
-      const res = await api.updateBanner(id, data);
-      if (res.success && res.banner) {
-        setBanners(prev => prev.map(b => b.id === id ? res.banner : b));
-        showNotification('Banner actualizado globalmente');
-      }
-    } catch (e) {
-      setBanners(prev => prev.map(b => b.id === id ? { ...b, ...data } : b));
-    }
+      const res=await api.updateBanner(id,data);
+      if(!res.success || !res.banner) throw Error('No se guardó el banner');
+      setBanners(prev=>prev.map(b=>b.id===id?res.banner:b));
+      showNotification('Banner guardado','success');
+    } catch(error:any) {showNotification(error.message || 'No se guardó el banner','error');}
   };
 
-  const deleteBanner = async (id: string) => {
+  const deleteBanner = async (id:string) => {
     try {
-      await api.deleteBanner(id);
-      setBanners(prev => prev.filter(b => b.id !== id));
-      showNotification('Banner eliminado');
-    } catch (e) {
-      setBanners(prev => prev.filter(b => b.id !== id));
-    }
+      const res=await api.deleteBanner(id);
+      if(!res.success) throw Error('No se archivó el banner');
+      setBanners(prev=>prev.map(b=>b.id===id?{...b,isActive:false}:b));
+      showNotification('Banner archivado','success');
+    } catch(error:any) {showNotification(error.message || 'No se archivó el banner','error');}
   };
 
   // --- AUDITS & PURGE (Global) ---

@@ -195,6 +195,11 @@ class StoresDatabase {
   /**
    * Adds or updates a store, replicating to all disk vaults and cloud backends.
    */
+  public applyDurableStore(store:Store) {
+    this.storesMap.set(store.id,structuredClone(store));
+    this.persistToDisk();
+  }
+
   public saveStore(storeInput: Partial<Store> & { name: string }): Store {
     const id = storeInput.id || `store-${Date.now()}`;
     const existing = this.storesMap.get(id);
