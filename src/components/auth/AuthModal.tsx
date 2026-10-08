@@ -245,7 +245,7 @@ export const AuthModal: React.FC = () => {
     try {
       const res = await resendVerificationCode(targetEmail);
       if (res.success) {
-        setVerifySuccessNotice('Nuevo código enviado desde contacto@plazado.com. Revisa tu bandeja de entrada o spam.');
+        setVerifySuccessNotice(res.message || 'Código generado. Solicítalo al Super Admin mediante contacto@plazado.com.');
         setResendCooldown(60);
       } else {
         setVerifyError(res.message || 'No se pudo reenviar el código.');
@@ -711,7 +711,7 @@ export const AuthModal: React.FC = () => {
                   Introduce tu Código de Verificación
                 </h2>
                 <p className="text-stone-600 text-xs max-w-sm mx-auto leading-relaxed">
-                  Hemos enviado automáticamente un código de 6 dígitos a:
+                  Para completar tu registro, introduce el código de 6 dígitos correspondiente a:
                 </p>
                 <div className="inline-block bg-stone-100 px-3.5 py-1 rounded-full text-xs font-mono font-bold text-stone-900 border border-stone-300">
                   {pendingVerificationEmail || custEmail || storeEmail || 'tu correo'}
@@ -781,7 +781,7 @@ export const AuthModal: React.FC = () => {
                   Revisa primero tu carpeta de correo no deseado o Spam.
                 </p>
                 <p className="text-[11px] leading-relaxed text-stone-600">
-                  Puedes solicitar el reenvío del código. Si aun así no lo recibes, comunícate con nuestro equipo de soporte a través de:
+                  Por el momento, el Super Admin envía el código manualmente. Solicítalo indicando tu correo de registro a:
                 </p>
                 <div className="bg-white p-2.5 rounded-xl border border-stone-200 flex items-center justify-between gap-2">
                   <span className="font-bold text-stone-900 text-xs">contacto@plazado.com</span>

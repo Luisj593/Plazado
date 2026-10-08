@@ -4,7 +4,7 @@ import {transform} from 'esbuild';
 const source=fs.readFileSync('server/mailer-service.ts','utf8');const code=await transform(source,{loader:'ts',format:'cjs'});const mod={exports:{}};
 let mode='accepted',sent=0,mail,transport;
 const nodemailer={createTransport:config=>{transport=config;return {sendMail:async options=>{sent++;mail=options;if(mode==='error')throw Object.assign(Error('isolated failure'),{code:'ETEST'});return {messageId:'isolated',accepted:mode==='accepted'?[options.to]:[]};},verify:async()=>true};}};
-const logs=[];const env={};
+const logs=[];const env={MAIL_PROVIDER:'SMTP'};
 new Function('module','exports','require','process','console',code.code)(mod,mod.exports,()=>nodemailer,{env},{log:(...v)=>logs.push(v.join(' ')),warn:(...v)=>logs.push(v.join(' ')),error:(...v)=>logs.push(v.join(' '))});
 const send=mod.exports.sendRegistrationOtpEmail;
 let result=await send('fixture@example.invalid','Isolated','123456');assert.equal(result.success,false);assert.equal(result.delivered,false);assert.equal(result.simulated,false);assert.equal(sent,0);
@@ -28,3 +28,8 @@ try {
  assert.ok(requests>0);
 } finally {globalThis.fetch=originalFetch;}
 console.log('HTTPS mail: isolated accepted/rejected/network/malformed responses, verified-domain readiness, no inbox-delivery claim. No real email sent.');
+
+env.MAIL_PROVIDER='MANUAL';const beforeSent=sent;
+result=await send('fixture@example.invalid','Isolated','123456',config);assert.equal(result.delivered,false);assert.equal(result.reason,'MANUAL_DELIVERY_REQUIRED');assert.equal(sent,beforeSent);assert.equal(mod.exports.isMailConfigured(config),false);assert.equal((await mod.exports.verifySmtpConnection(config)).reason,'MANUAL_DELIVERY_REQUIRED');
+delete env.MAIL_PROVIDER;assert.equal(mod.exports.mailProvider(),'MANUAL');
+console.log('Manual delivery: default mode skips automatic transports, preserves truthful pending delivery and requires the administrator to send the code.');

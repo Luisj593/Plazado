@@ -176,7 +176,7 @@ export const UserVerificationsTab: React.FC = () => {
       if (res.success) {
         showNotification(`Cuenta de ${item.name} autorizada y validada exitosamente.`, 'success');
         if (selectedDossier?.id === item.id) {
-          setSelectedDossier(prev => prev ? { ...prev, adminApprovalStatus: 'APPROVED', isApprovedByAdmin: true, isEmailVerified: true } : null);
+          setSelectedDossier(prev => prev ? { ...prev, adminApprovalStatus: 'APPROVED', isApprovedByAdmin: true } : null);
         }
         fetchVerifications(true);
       } else {
@@ -292,28 +292,36 @@ export const UserVerificationsTab: React.FC = () => {
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
-  const openManualVerificationEmail = (item: VerificationItem) => {
-    if (!item.code) {
-      showNotification('Este registro todavía no tiene un código de validación disponible.', 'error');
-      return;
-    }
-    const accountLabel = item.accountType === 'STORE' ? `la tienda ${item.storeName || item.name}` : item.name;
-    const message = `Hola ${item.name},
+  const openManualVerificationEmail = async (item: VerificationItem) => {
+    setActionLoadingId(item.id);
+    try {
+      const active=await api.adminConsultVerificationCode(item.email);
+      if(!active.success) throw new Error(active.message || 'No se pudo consultar el código');
+      if(active.isEmailVerified) throw new Error('Esta cuenta ya está verificada');
+      let code=active.code,expiresAt=active.codeExpiresAt;
+      if(!code || active.isExpired || (active.attempts || 0)>=5) {
+        const fresh=await api.adminGenerateNewVerificationCode(item.email);
+        if(!fresh.success || !fresh.newCode) throw new Error(fresh.message || 'No se pudo guardar un código nuevo');
+        code=fresh.newCode;expiresAt=fresh.expiresAt;
+      }
+      const message=`Para: ${item.email}
+Asunto: Código de verificación de Plazado.com
 
-Gracias por registrarte en Plazado.com.
+Hola ${active.name},
 
-Tu código de validación es: ${item.code}
+Tu código de verificación de Plazado.com es: ${code}
+Vence a las ${new Date(expiresAt!).toLocaleTimeString('es-DO', {timeZone:'America/Santo_Domingo'})} (hora de República Dominicana). Es de un solo uso.
 
-Utiliza este código para completar la verificación de ${accountLabel}.
+Introduce este código en la pantalla de registro para completar la verificación de tu correo. No compartas el código con terceros.
 
-Este código es personal. No lo compartas con terceros.
-
-Saludos,
 Plazado.com
 contacto@plazado.com`;
-    navigator.clipboard.writeText(message).catch(() => undefined);
-    window.open('https://email.ionos.com/appsuite/#!!&app=io.ox/mail&folder=default0/INBOX', '_blank', 'noopener,noreferrer');
-    showNotification(`Mensaje y código ${item.code} copiados. Pégalos en Webmail IONOS para ${item.email}.`, 'success');
+      setConsultModal({open:true,email:active.email,name:active.name,code,codeExpiresAt:expiresAt,isExpired:false,isEmailVerified:false,loading:false});
+      await navigator.clipboard.writeText(message);
+      showNotification('Mensaje copiado. Abre Webmail IONOS y envíalo al correo indicado. El envío aún está pendiente.','info');
+      await fetchVerifications(true);
+    } catch(err:any) {showNotification(err.message || 'No se pudo preparar o copiar el mensaje. Puedes consultar el código y copiarlo manualmente.','error');}
+    finally {setActionLoadingId(null);}
   };
 
   return (
@@ -754,15 +762,16 @@ contacto@plazado.com`;
                           )}
 
                           {/* Envío manual temporal por Webmail IONOS */}
-                          {!item.isEmailVerified && item.code && (
+                          {!item.isEmailVerified && (
                             <button
                               type="button"
                               onClick={() => openManualVerificationEmail(item)}
                               className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-xs"
-                              title={`Copiar mensaje con código ${item.code} y abrir Webmail IONOS para ${item.email}`}
+                              disabled={actionLoadingId===item.id}
+                              title={`Preparar mensaje manual para ${item.email}`}
                             >
                               <Send className="w-3.5 h-3.5" />
-                              <span>Enviar código {item.code}</span>
+                              <span>{actionLoadingId===item.id?'Preparando...':'Preparar envío manual'}</span>
                             </button>
                           )}
 
@@ -1224,10 +1233,13 @@ contacto@plazado.com`;
                 <div className="p-3 bg-stone-100 rounded-xl text-center space-y-1 border border-stone-200">
                   <span className="text-[10px] uppercase font-bold text-stone-500 block">Código Generado:</span>
                   <div className="font-mono text-2xl font-black text-stone-900 tracking-widest">
-                    {consultModal.code || 'NO ASIGNADO'}
+                    {consultModal.code || (consultModal.isEmailVerified ? 'YA VERIFICADO' : 'GENERAR NUEVO')}
                   </div>
                 </div>
 
+                <p className="text-xs text-stone-600">{consultModal.codeExpiresAt && consultModal.code ? `Vence: ${new Date(consultModal.codeExpiresAt).toLocaleTimeString('es-DO',{timeZone:'America/Santo_Domingo'})} (RD).` : 'Usa Preparar envío manual para generar un código vigente.'}</p>
+                <a href="https://email.ionos.com" target="_blank" rel="noopener noreferrer" className="block text-center text-sm font-bold text-blue-700">Abrir Webmail IONOS para enviar</a>
+                <p className="text-xs text-stone-500">Envía desde contacto@plazado.com al correo indicado arriba. Copiar el mensaje no confirma su envío.</p>
                 {consultModal.code && (
                   <button
                     type="button"

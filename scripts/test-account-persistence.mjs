@@ -28,3 +28,14 @@ for(const [name,next,method] of [['updateStoreDetails','toggleStorePublish','upd
  const fn=new Function('api','setStores','setBanners','showNotification',code.code+`;return ${name};`)({[method]:async()=>{throw Error('offline');}},()=>changed++,()=>changed++,()=>{});await fn('s',{});assert.equal(changed,0);
 }
 console.log('Account persistence: atomic owner/store, pending approval preserved, durable/restart-safe OTP, failed writes preserve identity/banner/store, serialized edits, no fake client success.');
+
+const supportParts=between('  public approveUserAccount','  public rejectUserAccount')+source.slice(source.indexOf('  public regenerateUserVerificationCode'),source.indexOf('\n  public ',source.indexOf('  public regenerateUserVerificationCode')+5)>0?source.indexOf('\n  public ',source.indexOf('  public regenerateUserVerificationCode')+5):source.lastIndexOf('\n}'));
+const supportCode=await transform(`class SupportHarness extends Harness {${supportParts}\n}`,{loader:'ts'});
+const SupportHarness=new Function('Harness','crypto',supportCode.code+';return SupportHarness;')(Harness,crypto);
+const support=new SupportHarness({...initial(),users:[structuredClone(user)],stores:[structuredClone(store)]});
+fail=false;await support.approveUserAccount('u','admin@example.invalid');assert.equal(support.memoryData.users[0].isEmailVerified,false);assert.equal(support.memoryData.users[0].verification.code,'123456');assert.equal(support.memoryData.stores[0].isPublished,false);
+fail=true;await assert.rejects(support.regenerateUserVerificationCode(user.email,'admin@example.invalid'));assert.equal(support.memoryData.users[0].verification.code,'123456');
+fail=false;const fresh=await support.regenerateUserVerificationCode(user.email,'admin@example.invalid');assert.equal(fresh.success,true);assert.match(fresh.code,/^\d{6}$/);assert.ok(fresh.expiresAt>Date.now());
+assert.equal((await support.confirmUserEmail(user.email,'123456')).success,false);assert.equal((await support.confirmUserEmail(user.email,fresh.code)).success,true);assert.equal(support.memoryData.stores[0].isPublished,true);
+const already=await support.regenerateUserVerificationCode(user.email,'admin@example.invalid');assert.equal(already.success,false);assert.equal(support.memoryData.users[0].isEmailVerified,true);
+console.log('Manual registration: administrator approval preserves OTP requirement; durable generation/rollback, replaced-code rejection, verified account protection, publication after approval plus OTP.');

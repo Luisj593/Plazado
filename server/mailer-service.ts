@@ -28,10 +28,12 @@ export function cleanAppPassword(pass?: string): string {
   return pass.trim();
 }
 
-export function mailProvider(): 'RESEND'|'SMTP' {
-  return process.env.MAIL_PROVIDER?.toUpperCase()==='RESEND' ? 'RESEND' : 'SMTP';
+export function mailProvider(): 'MANUAL'|'RESEND'|'SMTP' {
+  const provider=process.env.MAIL_PROVIDER?.toUpperCase();
+  return provider==='RESEND' || provider==='SMTP' ? provider : 'MANUAL';
 }
 export function isMailConfigured(config?:Partial<MailConfig>) {
+  if(mailProvider()==='MANUAL') return false;
   return mailProvider()==='RESEND' ? !!process.env.RESEND_API_KEY : !!(config?.smtpPass || process.env.SMTP_PASS);
 }
 async function sendHttpsMail(options:{from:string;to:string;subject:string;text:string;html?:string}) {
@@ -79,6 +81,7 @@ function createTransporter(config: MailConfig = DEFAULT_MAIL_CONFIG) {
  * Verifies if the SMTP credentials are valid
  */
 export async function verifySmtpConnection(config: MailConfig = DEFAULT_MAIL_CONFIG): Promise<{ ok: boolean; message: string; reason?:string }> {
+  if(mailProvider()==='MANUAL') return {ok:false,reason:'MANUAL_DELIVERY_REQUIRED',message:'Entrega manual del código por el Super Admin habilitada. Correo automático desactivado.'};
   if(mailProvider()==='RESEND') {
     if(!process.env.RESEND_API_KEY) return {ok:false,reason:'MISSING_RESEND_API_KEY',message:'Configura RESEND_API_KEY en Railway.'};
     const sender=process.env.MAIL_SENDER_EMAIL || config.senderEmail;
@@ -256,6 +259,7 @@ Correo oficial de seguridad enviado desde: contacto@plazado.com
 © 2026 Plazado.com República Dominicana.
   `;
 
+  if(mailProvider()==='MANUAL') return {success:false,delivered:false,simulated:false,reason:'MANUAL_DELIVERY_REQUIRED',error:'Solicita el código al Super Admin mediante contacto@plazado.com.'};
   if(mailProvider()==='RESEND') return sendHttpsMail({from:senderAddress,to:recipientEmail,subject,text:textContent,html:htmlContent});
 
   if (!pass) {
@@ -286,6 +290,7 @@ Correo oficial de seguridad enviado desde: contacto@plazado.com
 
 export async function sendAccountApprovalEmail(recipientEmail:string,recipientName:string,customConfig?:Partial<MailConfig>) {
   const config={...DEFAULT_MAIL_CONFIG,...customConfig};
+  if(mailProvider()==='MANUAL') return {success:false,delivered:false};
   if(mailProvider()==='RESEND') return sendHttpsMail({from:`Plazado <${process.env.MAIL_SENDER_EMAIL || config.senderEmail}>`,to:recipientEmail,subject:'Tu cuenta de Plazado.com fue aprobada',text:`Hola ${recipientName}. Tu cuenta fue revisada y aprobada. Ya puedes iniciar sesión con tu contraseña en Plazado.com. Este aviso no contiene un código de verificación.`});
   if(!(config.smtpPass || process.env.SMTP_PASS)) return {success:false,delivered:false};
   try {
