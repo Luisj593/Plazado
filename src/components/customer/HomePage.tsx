@@ -654,6 +654,24 @@ export const HomePage: React.FC = () => {
 
       </section>
 
+      {trendingCategories.length > 0 && (
+        <section className="space-y-3.5">
+          <div className="flex items-end justify-between gap-3">
+            <div><h2 className="text-lg sm:text-xl font-black text-slate-950 dark:text-white">Categorías en tendencia</h2><p className="text-xs text-slate-500 dark:text-stone-400">Lo más activo actualmente en Plazado.</p></div>
+            <button type="button" onClick={() => { setSelectedCategorySlug(null); setCurrentView('catalog'); }} className="text-xs sm:text-sm font-bold text-[#f20544] flex items-center gap-1">Ver todas <ArrowRight className="w-4 h-4" /></button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {trendingCategories.map(({ category, count, image }) => (
+              <button key={category.id} type="button" onClick={() => handleCategorySelect(category.slug)} className="relative min-h-[150px] sm:min-h-[180px] overflow-hidden rounded-2xl border border-slate-200 dark:border-stone-800 text-left group bg-slate-900">
+                {image ? <img src={image} alt={category.name} loading="lazy" className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-300" /> : <div className="absolute inset-0 flex items-center justify-center text-6xl bg-slate-100 dark:bg-stone-800">{getCategoryEmoji(category.slug || category.id)}</div>}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+                <div className="absolute inset-x-0 bottom-0 p-3.5 text-white"><h3 className="font-black text-sm sm:text-base leading-tight">{category.name}</h3><p className="text-[10px] sm:text-xs text-white/80 mt-1">{count} {count === 1 ? 'producto publicado' : 'productos publicados'}</p><span className="inline-flex items-center gap-1 text-[10px] font-bold mt-2">Explorar <ArrowRight className="w-3 h-3" /></span></div>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Productos reales segregados por categoría */}
       {categoryProductGroups.map(({ category, products: categoryProducts }) => (
         <section key={category.id} className="space-y-3.5">
