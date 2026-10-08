@@ -183,7 +183,7 @@ interface AppContextType {
     newStatus: OrderStatus, 
     note?: string, 
     providedConfirmationCode?: string
-  ) => { success: boolean; message: string };
+  ) => Promise<{ success: boolean; message: string }>;
 
   // Order In-Platform Chat (PlazaDO Exclusive Channel)
   orderMessages: OrderChatMessage[];
@@ -199,7 +199,7 @@ interface AppContextType {
   settlements: Settlement[];
   paymentTransactions: PaymentTransaction[];
   financialAuditLogs: FinancialAuditLog[];
-  requestSettlement: (storeId: string, notes?: string) => { success: boolean; message: string };
+  requestSettlement: (storeId: string, notes?: string) => Promise<{ success: boolean; message: string }>;
   processSettlement: (settlementId: string, status: Settlement['status'], reference?: string) => void;
   runWeeklySettlements: () => Promise<{ success: boolean; message: string; settlementsCreated?: Settlement[]; totalLiquidated?: number }>;
   refreshFinancials: () => Promise<void>;
@@ -1732,63 +1732,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const updateOrderStatus = (
-    orderId: string, 
-    newStatus: OrderStatus, 
-    note?: string, 
-    providedConfirmationCode?: string
-  ): { success: boolean; message: string } => {
-    const order = orders.find(o => o.id === orderId);
-    if (!order) return { success: false, message: 'Pedido no encontrado' };
-
-    if (currentUser?.role === 'STORE_OWNER' && currentUser?.storeId !== order.storeId) {
-      return { success: false, message: 'Violación de seguridad: No tienes permisos para gestionar pedidos de otra tienda' };
-    }
-
-    if (newStatus === 'DELIVERED') {
-      const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
-      if (!isSuperAdmin) {
-        const expectedCode = (order.deliveryConfirmationCode || '').trim().toUpperCase();
-        const inputCode = (providedConfirmationCode || '').trim().toUpperCase();
-        if (!inputCode || (expectedCode && inputCode !== expectedCode)) {
-          return { 
-            success: false, 
-            message: 'Código de confirmación de entrega inválido. Solicítaselo al cliente que recibió el paquete.' 
-          };
-        }
-      }
-    }
-
-    api.updateOrderStatus(orderId, newStatus, note, providedConfirmationCode).then(res => {
-      if (res.success && res.order) {
-        setOrders(prev => prev.map(o => o.id === orderId ? res.order! : o));
-      }
-    }).catch(console.error);
-
-    const historyItem = {
-      status: newStatus,
-      timestamp: new Date().toISOString(),
-      updatedBy: currentUser ? `${currentUser.name} (${currentUser.role})` : 'Sistema PlazaDO',
-      note: note || (newStatus === 'DELIVERED' ? 'Entrega validada con código secreto del cliente' : undefined)
-    };
-
-    setOrders(prev => prev.map(o => {
-      if (o.id === orderId) {
-        return {
-          ...o,
-          status: newStatus,
-          cancelReason: newStatus === 'CANCELLED' ? (note || o.cancelReason || 'Cancelado por la tienda') : o.cancelReason,
-          cancelledBy: newStatus === 'CANCELLED' ? (currentUser ? `${currentUser.name} (${currentUser.role})` : 'Tienda') : o.cancelledBy,
-          cancelledAt: newStatus === 'CANCELLED' ? new Date().toISOString() : o.cancelledAt,
-          paymentStatus: (newStatus === 'DELIVERED' && o.paymentMethod === 'CASH_ON_DELIVERY') ? 'PAID' : o.paymentStatus,
-          statusHistory: [...(o.statusHistory || []), historyItem]
-        };
-      }
-      return o;
-    }));
-
-    showNotification(`Pedido ${orderId} actualizado a: ${newStatus}`);
-    return { success: true, message: `Estado actualizado a ${newStatus}` };
+  const updateOrderStatus = async (orderId: string, newStatus: OrderStatus, note?: string, providedConfirmationCode?: string): Promise<{success:boolean;message:string}> => {
+    try {
+      const res = await api.updateOrderStatus(orderId,newStatus,note,providedConfirmationCode);
+      if (!res.success || !res.order) return {success:false,message:res.message || 'No se guardó el cambio'};
+      setOrders(prev=>prev.map(o=>o.id===orderId?res.order!:o));
+      const boot = await api.getBootstrap().catch(()=>null);
+      if(boot?.data) applyServerState(boot.data,boot.version || 1);
+      showNotification(res.message,'success');
+      return {success:true,message:res.message};
+    } catch (error:any) { return {success:false,message:error.message || 'No se pudo confirmar el cambio en el servidor'}; }
   };
 
   const deleteOrder = async (orderId: string) => {
@@ -1801,7 +1754,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setOrders(prev => prev.filter(o => o.id !== orderId));
       showNotification(`Pedido #${orderId} eliminado globalmente`);
     } catch (e) {
-      setOrders(prev => prev.filter(o => o.id !== orderId));
+      showNotification('No se eliminó el pedido','error');
     }
   };
 
@@ -1888,37 +1841,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // --- SETTLEMENTS & BALANCES (Global) ---
-  const requestSettlement = (storeId: string, notes?: string): { success: boolean; message: string } => {
-    const bal = storeBalances[storeId];
-    if (!bal || bal.availableBalance < 500) {
-      return { success: false, message: 'El balance disponible mínimo para solicitar liquidación es de RD$ 500' };
-    }
-
-    api.requestSettlement(storeId, notes).then(res => {
-      if (res.success && res.settlement) {
-        setSettlements(prev => [res.settlement!, ...prev]);
-      }
-    }).catch(console.error);
-
-    showNotification('Solicitud de liquidación enviada al servidor central');
-    return { success: true, message: 'Solicitud enviada con éxito' };
+  const requestSettlement = async (storeId: string, notes?: string): Promise<{success:boolean;message:string}> => {
+    try {
+      const res = await api.requestSettlement(storeId,notes);
+      if(!res.success || !res.settlement) return {success:false,message:res.message || 'No se guardó la solicitud'};
+      setSettlements(prev=>[res.settlement!,...prev.filter(s=>s.id!==res.settlement!.id)]);
+      const boot=await api.getBootstrap().catch(()=>null);
+      if(boot?.data) applyServerState(boot.data,boot.version || 1);
+      return {success:true,message:res.message};
+    } catch(error:any) {return {success:false,message:error.message || 'No se pudo guardar la solicitud'};}
   };
 
   const processSettlement = async (settlementId: string, status: Settlement['status'], reference?: string) => {
-    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
-      showNotification('Acceso denegado: Solo el Super Administrador puede procesar liquidaciones', 'error');
-      return;
-    }
-
+    if(currentUser?.role!=='SUPER_ADMIN') {showNotification('Acceso denegado','error');return;}
     try {
-      const res = await api.processSettlement(settlementId, status, reference);
-      if (res.success && res.settlement) {
-        setSettlements(prev => prev.map(s => s.id === settlementId ? res.settlement : s));
-      }
-    } catch (e) {
-      setSettlements(prev => prev.map(s => s.id === settlementId ? { ...s, status } : s));
-    }
-    showNotification(`Liquidación ${settlementId} marcada como: ${status}`);
+      const res=await api.processSettlement(settlementId,status,reference);
+      if(!res.success || !res.settlement) throw Error('No se confirmó el cambio de liquidación');
+      setSettlements(prev=>prev.map(s=>s.id===settlementId?res.settlement:s));
+      const boot=await api.getBootstrap().catch(()=>null);
+      if(boot?.data) applyServerState(boot.data,boot.version || 1);
+      showNotification('Liquidación guardada correctamente','success');
+    } catch(error:any) {showNotification(error.message || 'No se guardó la liquidación','error');}
   };
 
   const deleteSettlement = async (settlementId: string) => {
@@ -1931,7 +1874,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSettlements(prev => prev.filter(s => s.id !== settlementId));
       showNotification(`Liquidación ${settlementId} eliminada`);
     } catch (e) {
-      setSettlements(prev => prev.filter(s => s.id !== settlementId));
+      showNotification('No se eliminó la liquidación','error');
     }
   };
 

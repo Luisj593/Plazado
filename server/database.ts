@@ -1,3 +1,4 @@
+import { transitionOrder, processSettlementState, requestSettlementState, weeklySettlementsState } from './financial-lifecycle';
 import { commerceChanges } from './commerce-changes';
 import fs from 'fs';
 import path from 'path';
@@ -1857,7 +1858,8 @@ class GlobalDatabase {
       const existing = orders.map(order => this.memoryData.orders.find(saved => saved.id === order.id));
       if (existing.every(Boolean)) return existing as Order[];
       if (existing.some(Boolean)) throw new Error('Compra parcialmente registrada. Contacta a soporte.');
-      const previous = this.memoryData;
+      const current = this.memoryData;
+      const previous = structuredClone(current);
       this.memoryData = structuredClone(previous);
       this.stagingCheckout = true;
       let next: GlobalDatabaseData;
@@ -1866,7 +1868,7 @@ class GlobalDatabase {
         created = this.buildCheckout(orders);
         next = this.memoryData;
       } finally {
-        this.memoryData = previous;
+        this.memoryData = current;
         this.stagingCheckout = false;
       }
       await firestoreRepo.persistCheckout(previous, next!);
@@ -2062,7 +2064,7 @@ class GlobalDatabase {
         lastUpdated: new Date().toISOString()
       };
 
-      currentBalance.totalSales += ord.total;
+      if (ord.accountingVersion !== 2) currentBalance.totalSales += ord.total;
 
       const isCard = ord.paymentMethod === 'CARD_AZUL';
       const authCode = ord.cardAuthorizationCode || `AUTH-AUTO-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -2108,8 +2110,8 @@ class GlobalDatabase {
       } else {
         // Efectivo: La tienda cobra directamente.
         // Comisión calculada como deuda pendiente de cobro en liquidación semanal.
-        currentBalance.cashSales = (currentBalance.cashSales || 0) + ord.total;
-        currentBalance.pendingCashCommissions = (currentBalance.pendingCashCommissions || 0) + commission;
+        if (ord.accountingVersion !== 2) currentBalance.cashSales = (currentBalance.cashSales || 0) + ord.total;
+        if (ord.accountingVersion !== 2) currentBalance.pendingCashCommissions = (currentBalance.pendingCashCommissions || 0) + commission;
         ord.paymentStatus = 'PENDING';
 
         this.addFinancialAuditLog({
@@ -2170,95 +2172,37 @@ class GlobalDatabase {
     return orders;
   }
 
-  public updateOrderStatus(orderId: string, status: OrderStatus, note?: string, confirmationCode?: string): { success: boolean; message: string; order?: Order } {
-    const order = this.memoryData.orders.find(o => o.id === orderId);
-    if (!order) return { success: false, message: 'Pedido no encontrado' };
-
-    if (status === 'CANCELLED' && order.paymentMethod !== 'CASH_ON_DELIVERY' && order.paymentStatus === 'PAID') return {success:false,message:'El reembolso debe confirmarse con el proveedor de pago antes de cancelar'};
-    if (status === order.status) return {success:true,message:'El pedido ya tiene este estado',order};
-    if (order.status === 'DELIVERED' || order.status === 'CANCELLED') return {success:false,message:'El pedido ya está cerrado'};
-    if (status === 'DELIVERED') {
-      if (!confirmationCode || !order.deliveryConfirmationCode || confirmationCode.trim().toUpperCase() !== order.deliveryConfirmationCode.toUpperCase()) {
-        return { success: false, message: 'Código secreto de entrega incorrecto.' };
-      }
-
-      cloudSqlRepo.confirmDelivery(orderId, confirmationCode || order.deliveryConfirmationCode || '', 'repartidor')
-        .catch(err => console.error('[CloudSQL] Error syncing confirmDelivery:', err));
-
-      // Regla de seguridad: Solo pedidos entregados se liberan al balance disponible para liquidación
-      const balance = this.memoryData.storeBalances[order.storeId];
-      if (balance) {
-        if (order.paymentMethod === 'CARD_AZUL') {
-          // Trasladar del balance pendiente de tarjeta al balance disponible para el viernes
-          const prevAvail = balance.availableBalance || 0;
-          balance.pendingBalance = Math.max(0, balance.pendingBalance - order.storeNetEarnings);
-          balance.availableBalance = prevAvail + order.storeNetEarnings;
-          balance.lastUpdated = new Date().toISOString();
-
-          this.addFinancialAuditLog({
-            orderId: order.id,
-            storeId: order.storeId,
-            storeName: order.storeName,
-            amount: order.total,
-            commission: order.plazaCommissionAmount,
-            paymentMethod: 'CARD_AZUL',
-            movementType: 'SALE_CARD',
-            actor: 'ORDER_DELIVERY_VALIDATION',
-            previousBalance: prevAvail,
-            newBalance: balance.availableBalance,
-            status: 'AVAILABLE_FOR_SETTLEMENT',
-            notes: `Pedido validado con código de entrega. Fondos netos RD$ ${order.storeNetEarnings} liberados a balance disponible para liquidación semanal del viernes.`
-          });
-        } else {
-          // Efectivo entregado: la comisión queda firme por cobrar
-          order.paymentStatus = 'PAID';
+  private runCommerceMutation<T>(mutate: () => T): Promise<T> {
+    const execute = async () => {
+      const current = this.memoryData;
+      const previous = structuredClone(current);
+      this.memoryData = structuredClone(previous);
+      this.stagingCheckout = true;
+      let result: T, next: GlobalDatabaseData;
+      try { result = mutate(); next = this.memoryData; }
+      finally { this.memoryData = current; this.stagingCheckout = false; }
+      if ((result as any)?.success === false) return result!;
+      const changes = commerceChanges(previous,next!);
+      if (!changes.length) return result!;
+      await firestoreRepo.persistCheckout(previous,next!,false);
+      for (const change of changes) {
+        if (change.collection === 'storeBalances') this.memoryData.storeBalances[change.id]=change.after;
+        else {
+          const list=((this.memoryData as any)[change.collection] ||= []),index=list.findIndex((row:any)=>row.id===change.id);
+          if (change.collection==='products' && index>=0) list[index]={...list[index],stock:change.after.stock,soldCount:change.after.soldCount};
+          else if(index>=0) list[index]=change.after;else list.unshift(change.after);
         }
       }
-      order.paymentStatus = 'PAID';
-    } else if (status === 'CANCELLED') {
-      // Si se cancela un pedido pagado con tarjeta no entregado, revertir del pendingBalance
-      if (order.paymentMethod === 'CARD_AZUL') {
-        const balance = this.memoryData.storeBalances[order.storeId];
-        if (balance) {
-          balance.pendingBalance = Math.max(0, balance.pendingBalance - order.storeNetEarnings);
-          balance.plazaCommissionsPaid = Math.max(0, balance.plazaCommissionsPaid - order.plazaCommissionAmount);
-          balance.lastUpdated = new Date().toISOString();
-        }
-        order.paymentStatus = 'REFUNDED';
-        this.addFinancialAuditLog({
-          orderId: order.id,
-          storeId: order.storeId,
-          storeName: order.storeName,
-          amount: order.total,
-          commission: order.plazaCommissionAmount,
-          paymentMethod: 'CARD_AZUL',
-          movementType: 'REFUND',
-          actor: 'ORDER_CANCELLATION',
-          previousBalance: balance ? balance.pendingBalance + order.storeNetEarnings : 0,
-          newBalance: balance ? balance.pendingBalance : 0,
-          status: 'REFUNDED',
-          notes: `Pedido cancelado antes de entrega. Fondos de tarjeta reembolsados y removidos de balance pendiente.`
-        });
-      }
-    }
+      this.commit();
+      return result!;
+    };
+    const operation=this.checkoutQueue.then(execute,execute);
+    this.checkoutQueue=operation.then(()=>undefined,()=>undefined);
+    return operation;
+  }
 
-    const prevStatus = order.status;
-    order.status = status;
-    if (status === 'CANCELLED') {
-      order.cancelReason = note || 'Cancelado por la tienda';
-      order.cancelledAt = new Date().toISOString();
-      order.cancelledBy = 'Tienda';
-    }
-    order.statusHistory.push({
-      status,
-      timestamp: new Date().toISOString(),
-      updatedBy: status === 'CANCELLED' ? 'Tienda (Cancelación)' : 'Sistema PlazaDO Global',
-      note: note || `Estado actualizado a ${status}`
-    });
-
-    this.addAuditLog('ORDER_STATUS_CHANGE', orderId, prevStatus, `${status}${note ? ` - ${note}` : ''}`);
-    this.commit();
-    return { success: true, message: `Estado actualizado a ${status}`, order };
+  public updateOrderStatus(orderId: string, status: OrderStatus, note?: string, confirmationCode?: string) {
+    return this.runCommerceMutation(() => transitionOrder(this.memoryData,orderId,status,note,confirmationCode));
   }
 
   public deleteOrder(orderId: string): boolean {
@@ -2353,283 +2297,16 @@ class GlobalDatabase {
   }
 
   // 5, 6, 7. LIQUIDACIONES AUTOMÁTICAS LOS VIERNES
-  public runWeeklySettlementProcess(actorName: string = 'SISTEMA_PROGRAMADO_VIERNES'): {
-    success: boolean;
-    message: string;
-    settlementsCreated: Settlement[];
-    totalLiquidated: number;
-    totalCommissionsDeducted: number;
-    totalCashCommissionsDeducted: number;
-    storesProcessed: number;
-  } {
-    const settlementsCreated: Settlement[] = [];
-    let totalLiquidated = 0;
-    let totalCommissionsDeducted = 0;
-    let totalCashCommissionsDeducted = 0;
-    let storesProcessed = 0;
-
-    const cycleDate = new Date().toISOString().slice(0, 10);
-    const activeDisputes = (this.memoryData.disputes || []).filter(d => d.status === 'OPEN' || d.status === 'UNDER_REVIEW');
-
-    this.memoryData.stores.forEach(store => {
-      const balance = this.memoryData.storeBalances[store.id];
-      if (!balance) return;
-
-      // 6. REGLA DE SEGURIDAD: Solo pedidos DELIVERED con settlementStatus === 'PENDING'
-      // Excluyendo pedidos con disputa abierta o cancelados
-      const eligibleOrders = this.memoryData.orders.filter(o => 
-        o.storeId === store.id &&
-        o.status === 'DELIVERED' &&
-        o.settlementStatus === 'PENDING' &&
-        !activeDisputes.some(d => d.orderId === o.id)
-      );
-
-      // Fondos acumulados por ventas de tarjeta
-      const cardGross = eligibleOrders
-        .filter(o => o.paymentMethod === 'CARD_AZUL')
-        .reduce((sum, o) => sum + o.total, 0);
-
-      const cardCommissions = eligibleOrders
-        .filter(o => o.paymentMethod === 'CARD_AZUL')
-        .reduce((sum, o) => sum + (o.plazaCommissionAmount || 0), 0);
-
-      const cardNetEarnings = Math.max(0, cardGross - cardCommissions);
-
-      // También considerar saldo disponible ya consolidado previamente
-      const availableFunds = Math.max(0, balance.availableBalance || 0);
-      const totalAvailablePool = Math.max(cardNetEarnings, availableFunds);
-
-      // Comisiones pendientes por cobrar por ventas en efectivo
-      const pendingCash = balance.pendingCashCommissions || 0;
-      const carriedDebt = balance.carriedOverDebt || 0;
-      const totalOwedCashCommissions = pendingCash + carriedDebt;
-      const adjustments = balance.adjustments || 0;
-
-      // Si no hay fondos de tarjeta ni deudas pendientes, saltar
-      if (totalAvailablePool <= 0 && totalOwedCashCommissions <= 0) {
-        return;
-      }
-
-      storesProcessed++;
-
-      // 7. CUANDO LAS COMISIONES EN EFECTIVO SUPERAN EL BALANCE
-      let payout = 0;
-      let cashDeductedThisCycle = 0;
-      let newCarriedOverDebt = 0;
-
-      if (totalAvailablePool >= (totalOwedCashCommissions + adjustments)) {
-        payout = Number((totalAvailablePool - totalOwedCashCommissions - adjustments).toFixed(2));
-        cashDeductedThisCycle = totalOwedCashCommissions;
-        newCarriedOverDebt = 0;
-      } else {
-        // Comisiones en efectivo superan el balance disponible: Pago es RD$ 0.00
-        payout = 0;
-        cashDeductedThisCycle = Math.max(0, totalAvailablePool - adjustments);
-        newCarriedOverDebt = Number((totalOwedCashCommissions - cashDeductedThisCycle).toFixed(2));
-      }
-
-      // 10. CONFIGURACIÓN BANCARIA DE LAS TIENDAS: Validar cuenta bancaria
-      const bankInfo = store.bankInfo;
-      const hasValidAccount = !!(
-        bankInfo &&
-        bankInfo.accountNumber &&
-        bankInfo.accountNumber.trim() !== '' &&
-        bankInfo.accountNumber.toLowerCase() !== 'pendiente' &&
-        bankInfo.accountNumber.toLowerCase() !== 'pendiente de registrar' &&
-        bankInfo.bank &&
-        bankInfo.bank.trim() !== ''
-      );
-
-      // 11. ESTADOS DE LAS LIQUIDACIONES
-      // Pendiente, Programada, Procesando, Pagada, Fallida, Retenida, Cancelada
-      let status: Settlement['status'] = 'PROGRAMADA' as any;
-      let statusNotes = '';
-      if (!hasValidAccount) {
-        status = 'RETAINED';
-        statusNotes = 'Liquidación RETENIDA: La tienda debe registrar y validar su cuenta bancaria de destino para transferencias ACH.';
-      } else if (payout > 0) {
-        status = 'SCHEDULED';
-        statusNotes = `Liquidación programada para transferencia ACH / LBTR ${bankInfo.bank}.`;
-      } else {
-        status = 'PAID';
-        statusNotes = `Liquidación compensada a RD$ 0.00 por deducción de comisiones de ventas en efectivo. Saldo pendiente arrastrado: RD$ ${newCarriedOverDebt.toLocaleString()}.`;
-      }
-
-      // 12. PROTECCIÓN CONTRA PAGOS DUPLICADOS (Idempotencia)
-      const idempotencyKey = `SETTL-CYCLE-${store.id}-${cycleDate}`;
-      const existingSettlement = this.memoryData.settlements.find(s => s.idempotencyKey === idempotencyKey);
-      if (existingSettlement) {
-        console.log(`[Settlement Engine] Saltando tienda ${store.name} porque ya fue liquidada en este ciclo (${idempotencyKey}).`);
-        return;
-      }
-
-      const settlementId = `SETTL-${cycleDate.replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
-      const newSettlement: Settlement = {
-        id: settlementId,
-        storeId: store.id,
-        storeName: store.name,
-        grossAmount: cardGross > 0 ? cardGross : totalAvailablePool,
-        commissionAmount: cardCommissions,
-        cashCommissionsDeducted: cashDeductedThisCycle,
-        adjustments: adjustments,
-        netAmount: payout,
-        status: status,
-        bankName: bankInfo?.bank || 'Pendiente de registrar',
-        bankAccountType: bankInfo?.accountType || 'CORRIENTE',
-        accountHolder: bankInfo?.accountHolder || store.ownerName,
-        rncOrCedula: bankInfo?.rncOrCedula || 'No especificado',
-        accountNumberMasked: bankInfo?.accountNumber ? `****${bankInfo.accountNumber.slice(-4)}` : '****0000',
-        paymentMethodName: `Transferencia Bancaria ACH (${bankInfo?.bank || 'Pendiente'})`,
-        bankReference: hasValidAccount ? `ACH-BPD-${Date.now()}-${Math.floor(10000 + Math.random() * 90000)}` : undefined,
-        ordersCount: eligibleOrders.length,
-        orderIds: eligibleOrders.map(o => o.id),
-        idempotencyKey: idempotencyKey,
-        notes: statusNotes,
-        createdAt: new Date().toISOString()
-      };
-
-      this.memoryData.settlements.unshift(newSettlement);
-      settlementsCreated.push(newSettlement);
-
-      // Marcar órdenes incluidas como liquidadas
-      eligibleOrders.forEach(ord => {
-        ord.settlementStatus = 'SETTLED';
-        ord.settlementId = settlementId;
-      });
-
-      // Actualizar StoreBalance
-      const prevAvailable = balance.availableBalance;
-      balance.availableBalance = 0;
-      balance.pendingCashCommissions = 0;
-      balance.carriedOverDebt = newCarriedOverDebt;
-      balance.adjustments = 0;
-
-      if (status === 'RETAINED') {
-        balance.retainedBalance = (balance.retainedBalance || 0) + payout;
-      } else {
-        balance.settledBalance = (balance.settledBalance || 0) + payout;
-      }
-      balance.lastUpdated = new Date().toISOString();
-
-      // Totales para respuesta
-      totalLiquidated += payout;
-      totalCommissionsDeducted += cardCommissions;
-      totalCashCommissionsDeducted += cashDeductedThisCycle;
-
-      // 13. AUDITORÍA FINANCIERA OBLIGATORIA
-      this.addFinancialAuditLog({
-        settlementId: settlementId,
-        storeId: store.id,
-        storeName: store.name,
-        amount: payout,
-        commission: cardCommissions + cashDeductedThisCycle,
-        paymentMethod: 'TRANSFERENCIA_ACH',
-        movementType: 'SETTLEMENT_PAYOUT',
-        actor: actorName,
-        previousBalance: prevAvailable,
-        newBalance: balance.availableBalance,
-        externalRef: newSettlement.bankReference,
-        status: status,
-        notes: `Liquidación semanal generada. Bruto: RD$ ${newSettlement.grossAmount.toLocaleString()}, Comisiones tarjeta: RD$ ${cardCommissions.toLocaleString()}, Comisiones efectivo descontadas: RD$ ${cashDeductedThisCycle.toLocaleString()}, Neto a pagar: RD$ ${payout.toLocaleString()}.`
-      });
-    });
-
-    if (settlementsCreated.length > 0) {
-      this.addAuditLog('WEEKLY_SETTLEMENTS_EXECUTED', 'settlements', undefined, `Ciclo semanal ejecutado por ${actorName}: ${settlementsCreated.length} liquidaciones, RD$ ${totalLiquidated.toLocaleString()} netos liquidados.`);
-      this.commit();
-    }
-
-    return {
-      success: true,
-      message: `Ciclo de liquidación semanal completado con éxito. Se generaron ${settlementsCreated.length} liquidaciones para tiendas por RD$ ${totalLiquidated.toLocaleString()}.`,
-      settlementsCreated,
-      totalLiquidated,
-      totalCommissionsDeducted,
-      totalCashCommissionsDeducted,
-      storesProcessed
-    };
+  public runWeeklySettlementProcess(actorName: string = 'SUPER_ADMIN') {
+    return this.runCommerceMutation(() => weeklySettlementsState(this.memoryData, actorName));
   }
 
-  public requestSettlement(storeId: string, notes?: string): { success: boolean; message: string; settlement?: Settlement } {
-    const balance = this.memoryData.storeBalances[storeId];
-    if (!balance || balance.availableBalance < 100) {
-      return { success: false, message: 'El saldo disponible mínimo para solicitar liquidación es de RD$ 100.00' };
-    }
-    const store = this.memoryData.stores.find(s => s.id === storeId);
-    const amount = balance.availableBalance;
-    const pendingCash = balance.pendingCashCommissions || 0;
-    const debt = balance.carriedOverDebt || 0;
-    const totalOwed = pendingCash + debt;
-
-    const netPayout = Math.max(0, amount - totalOwed);
-    const cashDeducted = Math.min(amount, totalOwed);
-    const remainingDebt = Math.max(0, totalOwed - amount);
-
-    const hasValidAccount = !!(
-      store?.bankInfo?.accountNumber &&
-      store.bankInfo.accountNumber.trim() !== '' &&
-      store.bankInfo.accountNumber.toLowerCase() !== 'pendiente' &&
-      store.bankInfo.accountNumber.toLowerCase() !== 'pendiente de registrar'
-    );
-
-    const newSettlement: Settlement = {
-      id: `SETTL-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
-      storeId,
-      storeName: store?.name || storeId,
-      grossAmount: amount,
-      commissionAmount: 0,
-      cashCommissionsDeducted: cashDeducted,
-      adjustments: 0,
-      netAmount: netPayout,
-      status: hasValidAccount ? 'PENDING' : 'RETAINED',
-      bankName: store?.bankInfo?.bank || 'Pendiente',
-      bankAccountType: store?.bankInfo?.accountType || 'CORRIENTE',
-      accountHolder: store?.bankInfo?.accountHolder || store?.ownerName || storeId,
-      rncOrCedula: store?.bankInfo?.rncOrCedula || 'No provisto',
-      paymentMethodName: `Transferencia ${store?.bankInfo?.bank || 'Bancaria'}`,
-      accountNumberMasked: store?.bankInfo?.accountNumber ? `****${store.bankInfo.accountNumber.slice(-4)}` : '****0000',
-      bankReference: `ACH-REQ-${Date.now()}`,
-      notes: notes || (hasValidAccount ? 'Solicitud manual de liquidación anticipada' : 'Retenida: Pendiente registrar cuenta bancaria válida'),
-      createdAt: new Date().toISOString()
-    };
-
-    balance.availableBalance = 0;
-    balance.pendingCashCommissions = 0;
-    balance.carriedOverDebt = remainingDebt;
-    balance.lastUpdated = new Date().toISOString();
-
-    this.memoryData.settlements.unshift(newSettlement);
-    this.addAuditLog('SETTLEMENT_REQUESTED', newSettlement.id, undefined, `Liquidación solicitada por tienda ${storeId} de RD$ ${amount}. Neto: RD$ ${netPayout}`);
-    this.commit();
-    return { success: true, message: `Solicitud de liquidación por RD$ ${netPayout.toLocaleString()} enviada a revisión`, settlement: newSettlement };
+  public requestSettlement(storeId: string, notes?: string) {
+    return this.runCommerceMutation(() => requestSettlementState(this.memoryData, storeId, notes));
   }
 
-  public processSettlement(settlementId: string, status: Settlement['status'], reference?: string): Settlement | null {
-    const s = this.memoryData.settlements.find(item => item.id === settlementId);
-    if (!s) return null;
-    const prev = s.status;
-    s.status = status;
-    if (reference) s.bankReference = reference;
-    if (status === 'PAID') {
-      s.paidAt = new Date().toISOString();
-      const b = this.memoryData.storeBalances[s.storeId];
-      if (b) {
-        b.settledBalance += s.netAmount;
-        if (prev === 'RETAINED') {
-          b.retainedBalance = Math.max(0, b.retainedBalance - s.netAmount);
-        }
-        b.lastUpdated = new Date().toISOString();
-      }
-    } else if (status === 'REJECTED' || status === 'CANCELLED') {
-      const b = this.memoryData.storeBalances[s.storeId];
-      if (b) {
-        b.availableBalance += s.netAmount;
-        b.lastUpdated = new Date().toISOString();
-      }
-    }
-    this.addAuditLog('SETTLEMENT_PROCESSED', settlementId, prev, `${status} (${reference || ''})`);
-    this.commit();
-    return s;
+  public processSettlement(settlementId: string, status: Settlement['status'], reference?: string): Promise<Settlement | null> {
+    return this.runCommerceMutation(() => processSettlementState(this.memoryData,settlementId,status,reference));
   }
 
   public deleteSettlement(id: string): boolean {

@@ -723,7 +723,7 @@ async function startServer() {
     }
   });
 
-  app.patch('/api/orders/:id/status', (req: Request, res: Response) => {
+  app.patch('/api/orders/:id/status', async (req: Request, res: Response) => {
     const caller = getAuthenticatedUser(req);
     if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
     const order = db.getOrders().find((o: any) => o.id === req.params.id);
@@ -732,8 +732,10 @@ async function startServer() {
       return res.status(403).json({ success: false, message: 'No autorizado para cambiar el estado de esta orden' });
     }
     const { status, note, confirmationCode } = req.body;
-    const result = db.updateOrderStatus(req.params.id, status, note, confirmationCode);
-    res.json({ ...result, version: db.getVersion() });
+    try {
+      const result = await db.updateOrderStatus(req.params.id, status, note, confirmationCode);
+      res.status(result.success ? 200 : 400).json({ ...result, ...("order" in result && result.order ? {order:safeOrder(result.order,caller)}:{}), version: db.getVersion() });
+    } catch (error: any) { res.status(503).json({success:false,message:error.message}); }
   });
 
   // In-platform order chat messaging (PlazaDO exclusive communication channel)
@@ -802,15 +804,19 @@ async function startServer() {
   // Dedicated delivery confirmation endpoint validating the secret delivery code
   app.post('/api/delivery/confirm', async (req: Request, res: Response) => {
     try {
-      const { orderId, deliveryCode, confirmedBy } = req.body;
+      const caller = getAuthenticatedUser(req);
+      if (!caller) return res.status(401).json({success:false,message:'No autenticado'});
+      const { orderId, deliveryCode } = req.body;
+      const order = db.getOrders().find(o => o.id === orderId);
+      if (!order || (caller.role !== 'SUPER_ADMIN' && caller.storeId !== order.storeId && caller.id !== order.customerId)) return res.status(403).json({success:false,message:'No autorizado'});
       if (!orderId || !deliveryCode) {
         return res.status(400).json({ success: false, message: 'ID de orden y código secreto de entrega requeridos.' });
       }
-      const result = db.updateOrderStatus(orderId, 'DELIVERED', 'Validación exitosa de código de entrega', deliveryCode);
+      const result = await db.updateOrderStatus(orderId, 'DELIVERED', 'Validación exitosa de código de entrega', deliveryCode);
       if (!result.success) {
         return res.status(400).json(result);
       }
-      res.json({ success: true, message: 'Entrega confirmada y liquidación habilitada', order: result.order, version: db.getVersion() });
+      res.json({ success: true, message: 'Entrega confirmada y liquidación habilitada', order: safeOrder(result.order,caller), version: db.getVersion() });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error validando entrega' });
     }
@@ -863,8 +869,7 @@ async function startServer() {
   app.delete('/api/orders/:id', (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
-    const ok = db.deleteOrder(req.params.id);
-    res.json({ success: ok, version: db.getVersion() });
+    res.status(409).json({success:false,message:'El historial financiero debe conservarse. Cancela el pedido mediante su flujo de estados.'});
   });
 
   // --- BALANCES & SETTLEMENTS ---
@@ -900,14 +905,14 @@ async function startServer() {
   });
 
   // Ejecución automática semanal de los viernes
-  app.post('/api/admin/settlements/run-weekly', (req: Request, res: Response) => {
+  app.post('/api/admin/settlements/run-weekly', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) {
       return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     }
     try {
       const { actorName } = req.body || {};
-      const result = db.runWeeklySettlementProcess(actorName || admin.name || 'Super Admin Plazado.com');
+      const result = await db.runWeeklySettlementProcess(actorName || admin.name || 'Super Admin Plazado.com');
       res.json({ ...result, version: db.getVersion() });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error ejecutando ciclo de liquidación semanal' });
@@ -932,27 +937,11 @@ async function startServer() {
   });
 
   // Webhook centralizado de procesamiento de pagos
-  app.post('/api/payments/webhook', (req: Request, res: Response) => {
-    try {
-      // Payment providers must authenticate server-to-server webhooks with a shared secret.
-      // Refuse processing in production when the secret has not been configured.
-      const configuredSecret = process.env.PAYMENT_WEBHOOK_SECRET;
-      const providedSecret = req.headers['x-plazado-webhook-secret'];
-      if (process.env.NODE_ENV === 'production' && !configuredSecret) {
-        return res.status(503).json({ success: false, message: 'Webhook de pagos no configurado de forma segura.' });
-      }
-      if (configuredSecret && providedSecret !== configuredSecret) {
-        return res.status(401).json({ success: false, message: 'Firma de webhook inválida.' });
-      }
-      const payload = req.body;
-      const result = db.processPaymentWebhook(payload);
-      res.json({ ...result, version: db.getVersion() });
-    } catch (err: any) {
-      res.status(500).json({ success: false, message: err.message || 'Error en webhook' });
-    }
+  app.post('/api/payments/webhook', (_req: Request, res: Response) => {
+    res.status(503).json({success:false,message:'La integración del proveedor de pagos está pendiente de validación. No se registró ningún cobro.'});
   });
 
-  app.post('/api/settlements', (req: Request, res: Response) => {
+  app.post('/api/settlements', async (req: Request, res: Response) => {
     const caller = getAuthenticatedUser(req);
     if (!caller) {
       return res.status(401).json({ success: false, message: 'No autenticado' });
@@ -961,19 +950,23 @@ async function startServer() {
     if (caller.role !== 'SUPER_ADMIN' && caller.storeId !== storeId) {
       return res.status(403).json({ success: false, message: 'No puedes solicitar liquidaciones para otra tienda' });
     }
-    const result = db.requestSettlement(storeId, notes);
-    res.json({ ...result, version: db.getVersion() });
+    try {
+      const result = await db.requestSettlement(storeId, notes);
+      res.status(result.success ? 200 : 400).json({ ...result, version: db.getVersion() });
+    } catch (error: any) { res.status(503).json({success:false,message:error.message}); }
   });
 
-  app.patch('/api/settlements/:id', (req: Request, res: Response) => {
+  app.patch('/api/settlements/:id', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) {
       return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     }
     const { status, reference } = req.body;
-    const updated = db.processSettlement(req.params.id, status, reference);
-    if (!updated) return res.status(404).json({ success: false, message: 'Settlement not found' });
-    res.json({ success: true, settlement: updated, version: db.getVersion() });
+    try {
+      const updated = await db.processSettlement(req.params.id, status, reference);
+      if (!updated) return res.status(404).json({ success: false, message: 'Liquidación no encontrada' });
+      res.json({ success: true, settlement: updated, version: db.getVersion() });
+    } catch (error: any) { res.status(503).json({success:false,message:error.message}); }
   });
 
   app.delete('/api/settlements/:id', (req: Request, res: Response) => {
@@ -981,8 +974,7 @@ async function startServer() {
     if (!admin) {
       return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     }
-    const ok = db.deleteSettlement(req.params.id);
-    res.json({ success: ok, version: db.getVersion() });
+    res.status(409).json({success:false,message:'El historial de liquidaciones debe conservarse. Usa rechazo o cancelación para liberar fondos.'});
   });
 
   // --- DISPUTES ---
