@@ -193,11 +193,11 @@ export const CustomerPortal: React.FC = () => {
     setDisputeModalOpen(true);
   };
 
-  const handleSubmitDispute = (e: React.FormEvent) => {
+  const handleSubmitDispute = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!disputeOrder || !disputeDesc.trim()) return;
 
-    createDispute({
+    const saved=await createDispute({
       orderId: disputeOrder.id,
       storeId: disputeOrder.storeId,
       storeName: disputeOrder.storeName,
@@ -210,6 +210,7 @@ export const CustomerPortal: React.FC = () => {
       refundAmount: disputeOrder.total
     });
 
+    if(!saved) return;
     setDisputeModalOpen(false);
     setDisputeDesc('');
     setActiveTab('disputes');

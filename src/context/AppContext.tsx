@@ -206,8 +206,8 @@ interface AppContextType {
 
   // Disputes & Claims
   disputes: Dispute[];
-  createDispute: (data: Omit<Dispute, 'id' | 'status' | 'createdAt'>) => void;
-  resolveDispute: (disputeId: string, status: Dispute['status'], resolutionNotes: string) => void;
+  createDispute: (data: Omit<Dispute, 'id' | 'status' | 'createdAt'>) => Promise<boolean>;
+  resolveDispute: (disputeId: string, status: Dispute['status'], resolutionNotes: string) => Promise<boolean>;
 
   // Favorites & Reviews
   favorites: { productIds: string[]; storeIds: string[] };
@@ -1889,41 +1889,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // --- DISPUTES (Global) ---
   const createDispute = async (data: Omit<Dispute, 'id' | 'status' | 'createdAt'>) => {
     try {
-      const res = await api.createDispute(data);
-      if (res.success && res.dispute) {
-        setDisputes(prev => [res.dispute, ...prev]);
-        showNotification('Reclamación registrada en el servidor central.');
-      }
-    } catch (e) {
-      const disp: Dispute = { ...data, id: `DISP-${Date.now()}`, status: 'OPEN', createdAt: new Date().toISOString() };
-      setDisputes(prev => [disp, ...prev]);
-    }
+      const res=await api.createDispute(data);
+      if(!res.success || !res.dispute) throw new Error(res.message || 'No se pudo guardar la reclamación');
+      setDisputes(prev=>[res.dispute,...prev]);showNotification('Reclamación registrada');return true;
+    } catch(e:any) {showNotification(e.message || 'No se pudo guardar la reclamación','error');return false;}
   };
 
-  const resolveDispute = async (disputeId: string, status: Dispute['status'], resolutionNotes: string) => {
+  const resolveDispute = async (disputeId:string,status:Dispute['status'],resolutionNotes:string) => {
     try {
-      const res = await api.resolveDispute(disputeId, status, resolutionNotes);
-      if (res.success && res.dispute) {
-        setDisputes(prev => prev.map(d => d.id === disputeId ? res.dispute : d));
-      }
-    } catch (e) {
-      setDisputes(prev => prev.map(d => d.id === disputeId ? { ...d, status, resolutionNotes } : d));
-    }
-    showNotification('Reclamación resuelta en el sistema global');
+      const res=await api.resolveDispute(disputeId,status,resolutionNotes);
+      if(!res.success || !res.dispute) throw new Error(res.message || 'No se pudo guardar la resolución');
+      setDisputes(prev=>prev.map(d=>d.id===disputeId?res.dispute:d));showNotification('Resolución guardada');return true;
+    } catch(e:any) {showNotification(e.message || 'No se pudo guardar la resolución','error');return false;}
   };
 
-  const deleteDispute = async (disputeId: string) => {
-    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
-      showNotification('Acceso denegado: Solo el Super Administrador puede eliminar reclamaciones', 'error');
-      return;
-    }
-    try {
-      await api.deleteDispute(disputeId);
-      setDisputes(prev => prev.filter(d => d.id !== disputeId));
-      showNotification(`Reclamación #${disputeId} eliminada`);
-    } catch (e) {
-      setDisputes(prev => prev.filter(d => d.id !== disputeId));
-    }
+  const deleteDispute = async (_disputeId:string) => {
+    showNotification('Las reclamaciones se conservan como historial. Documenta la resolución y cierra el caso.','error');
   };
 
   // --- FAVORITES ---

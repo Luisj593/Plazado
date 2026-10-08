@@ -13,7 +13,7 @@ import { cloudSqlRepo } from './server/cloudsql-repository';
 import { firestoreRepo } from './server/firestore-repository';
 import { hashPassword, verifyPassword } from './src/utils/security';
 import { User, Store, CustomerRegistrationInput, StoreRegistrationInput, UserRole, isProductPubliclyVisible, isStorePubliclyVisible } from './src/types';
-import { sendRegistrationOtpEmail, sendAccountApprovalEmail, verifySmtpConnection } from './server/mailer-service';
+import { sendRegistrationOtpEmail, sendAccountApprovalEmail, verifySmtpConnection, isMailConfigured, mailProvider } from './server/mailer-service';
 import { generateProductDescription } from './server/ai-service';
 import { storesDb } from './server/stores-database';
 
@@ -109,7 +109,7 @@ async function startServer() {
   let smtpFailureReason:string | undefined;
   const verifyPilotMail = async () => {
     const config=db.getSystemSettings().mailConfig;
-    if(!(config?.smtpPass || process.env.SMTP_PASS)) {smtpVerified=false;return;}
+    if(!isMailConfigured(config)) {smtpVerified=false;smtpFailureReason=mailProvider()==='RESEND'?'MISSING_RESEND_API_KEY':'MISSING_SMTP_PASS';return;}
     const result=await verifySmtpConnection(config);
     smtpVerified=result.ok;smtpFailureReason=result.reason;
   };
@@ -192,9 +192,9 @@ async function startServer() {
 
   app.get('/api/health/ready', (_req:Request,res:Response) => {
     const settings=db.getSystemSettings(), mail=settings.mailConfig;
-    const checks={firebaseAdmin:firestoreRepo.isAdminReady(),firestoreLoaded:db.isFirestoreConnected(),smtpConfigured:!!(mail?.smtpPass || process.env.SMTP_PASS),smtpVerified};
+    const checks={firebaseAdmin:firestoreRepo.isAdminReady(),firestoreLoaded:db.isFirestoreConnected(),smtpConfigured:isMailConfigured(mail),smtpVerified};
     const ready=Object.values(checks).every(Boolean);
-    res.status(ready?200:503).json({status:ready?'ready':'blocked',mode:'CASH_ON_DELIVERY_PILOT',checks,...(!smtpVerified && smtpFailureReason ? {smtpFailureReason}:{}),timestamp:new Date().toISOString()});
+    res.status(ready?200:503).json({status:ready?'ready':'blocked',mode:'CASH_ON_DELIVERY_PILOT',mailProvider:mailProvider(),checks,...(!smtpVerified && smtpFailureReason ? {smtpFailureReason}:{}),timestamp:new Date().toISOString()});
   });
 
   // Global Bootstrap (Single-call fast hydration for all clients/devices)
@@ -1028,7 +1028,8 @@ async function startServer() {
     return res.json({ success: true, disputes: all.filter(d => d.customerId === caller.id) });
   });
 
-  app.post('/api/disputes', (req: Request, res: Response) => {
+  app.post('/api/disputes', async (req: Request, res: Response) => {
+    try {
     const caller = getAuthenticatedUser(req);
     if (!caller) {
       return res.status(401).json({ success: false, message: 'No autenticado' });
@@ -1049,19 +1050,22 @@ async function startServer() {
       customerId: order.customerId,
       createdBy: caller.id
     };
-    const disp = db.createDispute(safeDispute);
+    const disp = await db.createDispute(safeDispute);
     res.json({ success: true, dispute: disp, version: db.getVersion() });
+    } catch(err:any) {res.status(400).json({success:false,message:err.message || 'No se pudo guardar la reclamación'});}
   });
 
-  app.patch('/api/disputes/:id', (req: Request, res: Response) => {
+  app.patch('/api/disputes/:id', async (req: Request, res: Response) => {
+    try {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) {
       return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     }
     const { status, resolutionNotes } = req.body;
-    const updated = db.resolveDispute(req.params.id, status, resolutionNotes);
+    const updated = await db.resolveDispute(req.params.id, status, resolutionNotes);
     if (!updated) return res.status(404).json({ success: false, message: 'Dispute not found' });
     res.json({ success: true, dispute: updated, version: db.getVersion() });
+    } catch(err:any) {res.status(400).json({success:false,message:err.message || 'No se pudo guardar la reclamación'});}
   });
 
   app.delete('/api/disputes/:id', (req: Request, res: Response) => {
@@ -1069,8 +1073,7 @@ async function startServer() {
     if (!admin) {
       return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     }
-    const ok = db.deleteDispute(req.params.id);
-    res.json({ success: ok, version: db.getVersion() });
+    res.status(409).json({success:false,message:'Las reclamaciones se conservan como historial. Documenta la resolución y cierra el caso.'});
   });
 
   // --- REVIEWS ---
@@ -1230,7 +1233,7 @@ async function startServer() {
         'VERIFICATION_EMAIL_DISPATCHED',
         cleanEmail,
         mailConfig.senderEmail || 'contacto@plazado.com',
-        `Código de verificación generado y enviado desde contacto@plazado.com. Entregado por SMTP: ${mailResult.delivered ? 'SÍ' : 'NO (Registro en servidor)'}`
+        `Código de verificación generado y enviado desde contacto@plazado.com. Aceptado por el proveedor de correo: ${mailResult.delivered ? 'SÍ' : 'NO'}`
       );
 
       res.json({
@@ -1315,7 +1318,7 @@ async function startServer() {
         'VERIFICATION_CODE_RESENT',
         cleanEmail,
         mailConfig.senderEmail || 'contacto@plazado.com',
-        `Código de verificación reenviado a ${cleanEmail} desde contacto@plazado.com. Entregado por SMTP: ${mailResult.delivered ? 'SÍ' : 'NO'}`
+        `Código de verificación reenviado a ${cleanEmail} desde contacto@plazado.com. Aceptado por el proveedor de correo: ${mailResult.delivered ? 'SÍ' : 'NO'}`
       );
 
       res.json({
@@ -1367,7 +1370,7 @@ async function startServer() {
       if (sendRes.delivered) {
         res.json({
           success: true,
-          message: `¡Prueba exitosa! Correo de verificación entregado a ${targetEmail} desde ${config.senderEmail}.`
+          message: `¡Prueba exitosa! Correo de verificación aceptado para envío a ${targetEmail} desde ${config.senderEmail}.`
         });
       } else {
         res.status(400).json({
@@ -1781,7 +1784,7 @@ async function startServer() {
         'USER_REGISTER_PENDING',
         customerUser.id,
         undefined,
-        `Cliente ${customerUser.name} (${customerUser.email}) registrado. Código de verificación enviado automáticamente desde contacto@plazado.com. Entregado por SMTP: ${mailResult.delivered ? 'SÍ' : 'NO'}`
+        `Cliente ${customerUser.name} (${customerUser.email}) registrado. Código de verificación enviado automáticamente desde contacto@plazado.com. Aceptado por el proveedor de correo: ${mailResult.delivered ? 'SÍ' : 'NO'}`
       );
 
       res.json({
@@ -1948,7 +1951,7 @@ async function startServer() {
         'STORE_REGISTER_PENDING',
         storeId,
         undefined,
-        `Tienda ${newStore.name} registrada por ${data.ownerName} (${cleanEmail}). Código de verificación enviado automáticamente desde contacto@plazado.com. Entregado por SMTP: ${mailResult.delivered ? 'SÍ' : 'NO'}`
+        `Tienda ${newStore.name} registrada por ${data.ownerName} (${cleanEmail}). Código de verificación enviado automáticamente desde contacto@plazado.com. Aceptado por el proveedor de correo: ${mailResult.delivered ? 'SÍ' : 'NO'}`
       );
 
       res.json({
