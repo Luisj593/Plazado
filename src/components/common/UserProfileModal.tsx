@@ -539,12 +539,27 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                 </div>
 
                 {currentUser.role === 'STORE_OWNER' && currentStore && (
-                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
-                    <span className="font-semibold text-amber-900 block">Comercio Vinculado:</span>
-                    <div className="text-amber-800 text-xs font-bold mt-0.5 flex items-center gap-1.5">
-                      <Store className="w-3.5 h-3.5 text-amber-700" />
-                      <span>{currentStore.name} ({currentStore.province})</span>
+                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                      <span className="font-semibold text-amber-900 block">Comercio Vinculado:</span>
+                      <div className="text-amber-800 text-xs font-bold mt-0.5 flex items-center gap-1.5">
+                        <Store className="w-3.5 h-3.5 text-amber-700" />
+                        <span>{currentStore.name} ({currentStore.province})</span>
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      id="profile-manage-my-store-btn"
+                      onClick={() => {
+                        setCurrentView('store_dashboard');
+                        onClose();
+                      }}
+                      className="shrink-0 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Store className="w-3.5 h-3.5" />
+                      <span>Administrar mi tienda</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 )}
 
