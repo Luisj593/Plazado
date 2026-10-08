@@ -612,12 +612,13 @@ async function startServer() {
     res.json({ success: true, settings: safeSettings });
   });
 
-  app.put('/api/settings', (req: Request, res: Response) => {
+  app.put('/api/settings', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) {
       return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     }
-    const updated = db.updateSystemSettings(req.body);
+    try {
+    const updated = await db.updateSystemSettings(req.body);
     if (req.body.mailConfig) {
       if (req.body.mailConfig.smtpPass) {
         process.env.SMTP_PASS = req.body.mailConfig.smtpPass;
@@ -636,6 +637,10 @@ async function startServer() {
       }
     }
     res.json({ success: true, settings: updated, version: db.getVersion() });
+    } catch (error: any) {
+      const invalidRate = error.message === 'El porcentaje de comisión debe ser un número entre 0 y 100.';
+      res.status(invalidRate ? 400 : 503).json({ success: false, message: invalidRate ? error.message : 'No se pudo guardar la configuración de forma permanente. Intenta nuevamente.' });
+    }
   });
 
   // --- CONFIGURACIÓN DE PAGOS & PROVEEDORES CENTRALES (PLAZADO.COM) ---
