@@ -1742,23 +1742,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       : (currentUser?.name || order.customerName || 'Cliente');
     const senderId = currentUser?.id || (isStoreUser ? order.storeId : order.customerId);
 
-    // Optimistic local update
-    const tempMsg: OrderChatMessage = {
-      id: `MSG-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      orderId,
-      storeId: order.storeId,
-      customerId: order.customerId,
-      senderId,
-      senderName,
-      senderRole,
-      message: message.trim(),
-      createdAt: new Date().toISOString(),
-      readByCustomer: senderRole === 'CUSTOMER',
-      readByStore: senderRole === 'STORE'
-    };
-
-    setOrderMessages(prev => [...prev, tempMsg]);
-
     try {
       const res = await api.sendOrderMessage(orderId, {
         storeId: order.storeId,
@@ -1769,27 +1752,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         message: message.trim()
       });
       if (res.success && res.message) {
-        setOrderMessages(prev => prev.map(m => m.id === tempMsg.id ? res.message : m));
+        setOrderMessages(prev => [...prev.filter(m=>m.id!==res.message.id),res.message]);
+        return true;
       }
-      return true;
+      showNotification('No se pudo guardar el mensaje','error');
+      return false;
     } catch (e) {
-      console.error('Error sending order chat message:', e);
-      return true; // Already displayed optimistically
+      showNotification('No se pudo enviar el mensaje. Conserva el texto e inténtalo nuevamente.','error');
+      return false;
     }
   };
 
   const markOrderMessagesAsRead = async (orderId: string, role?: 'CUSTOMER' | 'STORE') => {
     const targetRole = role || (currentUser?.role === 'STORE_OWNER' || currentUser?.storeId ? 'STORE' : 'CUSTOMER');
-    setOrderMessages(prev => prev.map(m => {
-      if (m.orderId === orderId) {
-        if (targetRole === 'CUSTOMER') return { ...m, readByCustomer: true };
-        if (targetRole === 'STORE') return { ...m, readByStore: true };
-      }
-      return m;
-    }));
     try {
-      await api.markOrderMessagesAsRead(orderId, targetRole);
-    } catch (e) {}
+      const res=await api.markOrderMessagesAsRead(orderId,targetRole);
+      if(!res.success) return;
+      setOrderMessages(prev=>prev.map(m=>m.orderId!==orderId?m:{...m,...(targetRole==='CUSTOMER'?{readByCustomer:true}:{readByStore:true})}));
+    } catch { /* Preserve unread state when the durable update fails. */ }
   };
 
   const getOrderUnreadCount = (orderId: string, forRole: 'CUSTOMER' | 'STORE'): number => {

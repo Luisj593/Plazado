@@ -95,3 +95,8 @@ El operador pospuso el correo automático hasta poder pagar Railway Pro. El modo
 Procedimiento: Super Admin → Verificaciones → usuario o tienda pendiente → Preparar envío manual. El servidor consulta el código vigente o guarda uno nuevo si expiró; el panel copia un mensaje con destinatario y vencimiento. Abrir Webmail IONOS, usar contacto@plazado.com y enviar al correo registrado. La plataforma no afirma que copiar el mensaje equivalga a enviarlo. El destinatario introduce el código en el registro; caduca en 15 minutos y se consume una vez. Aprobar documentos no sustituye la verificación OTP. Las cuentas existentes verificadas no se desverifican al solicitar otro código.
 
 `/api/health/ready` muestra explícitamente `registrationDelivery=SUPER_ADMIN_MANUAL` y `automaticEmailReady=false`. La disponibilidad técnica con asistencia manual no certifica producción abierta, respaldo restaurable ni el flujo real completo. Sigue pendiente la revisión operativa de logística/almacén, recuperación de acceso, privacidad del historial Git y restauración externa de Firestore.
+
+
+## Conversaciones de pedidos
+
+Mensajes y estados de lectura se guardan en una transacción de Firestore antes de confirmarse. Los remitentes y el acceso se determinan por la sesión y el pedido. El texto escrito se conserva cuando falla el envío; el cliente no crea mensajes ficticios locales ni marca lectura si el servidor falla. Identificadores aleatorios y límite de 5000 caracteres por mensaje. Pruebas aisladas de reinicio, rechazo de escritura y fallos de interfaz.

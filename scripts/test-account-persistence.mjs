@@ -5,7 +5,7 @@ import {build,transform} from 'esbuild';
 const changes=await build({entryPoints:['server/commerce-changes.ts'],bundle:true,platform:'node',format:'cjs',write:false});const cm={exports:{}};new Function('module','exports',changes.outputFiles[0].text)(cm,cm.exports);
 const source=fs.readFileSync('server/database.ts','utf8');
 const between=(a,b)=>source.slice(source.indexOf(a),source.indexOf(b,source.indexOf(a)));
-const parts=[between('  private runCommerceMutation','  public updateOrderStatus'),between('  public addUser','  public deleteUser'),between('  public addStore','  public deleteStore'),between('  public addBanner','  // --- FINANCIAL'),between('  public setUserVerification','  public getVerificationsList')];
+const parts=[between('  private runCommerceMutation','  public updateOrderStatus'),between('  public addUser','  public deleteUser'),between('  public addStore','  public deleteStore'),between('  public addBanner','  // --- FINANCIAL'),between('  public setUserVerification','  public getVerificationsList'),between('  public addOrderMessage','  // --- BALANCES')];
 const compiled=await transform(`class Harness {memoryData:any;checkoutQueue=Promise.resolve();stagingCheckout=false;constructor(state:any){this.memoryData=structuredClone(state);}commit(){}addAuditLog(){}setUserCredential(){} ${parts.join('\n')}}`,{loader:'ts'});
 let fail=false,writes=0,stored;
 const firestoreRepo={persistCheckout:async (previous,next,newCheckout)=>{assert.equal(newCheckout,false);if(fail)throw Error('isolated rejection');writes++;stored=structuredClone(next);}};
@@ -39,3 +39,13 @@ fail=false;const fresh=await support.regenerateUserVerificationCode(user.email,'
 assert.equal((await support.confirmUserEmail(user.email,'123456')).success,false);assert.equal((await support.confirmUserEmail(user.email,fresh.code)).success,true);assert.equal(support.memoryData.stores[0].isPublished,true);
 const already=await support.regenerateUserVerificationCode(user.email,'admin@example.invalid');assert.equal(already.success,false);assert.equal(support.memoryData.users[0].isEmailVerified,true);
 console.log('Manual registration: administrator approval preserves OTP requirement; durable generation/rollback, replaced-code rejection, verified account protection, publication after approval plus OTP.');
+
+const chat=new Harness({...initial(),orderMessages:[]});const message={orderId:'o',storeId:'s',customerId:'u',senderId:'u',senderName:'Fixture',senderRole:'CUSTOMER',message:'Isolated message'};
+fail=true;await assert.rejects(chat.addOrderMessage(message));assert.equal(chat.memoryData.orderMessages.length,0);
+fail=false;const saved=await chat.addOrderMessage(message);assert.equal(stored.orderMessages[0].id,saved.id);assert.equal(saved.readByStore,false);
+const restoredChat=new Harness(stored);fail=true;await assert.rejects(restoredChat.markOrderMessagesAsRead('o','STORE'));assert.equal(restoredChat.memoryData.orderMessages[0].readByStore,false);
+fail=false;await restoredChat.markOrderMessagesAsRead('o','STORE');assert.equal(stored.orderMessages[0].readByStore,true);
+await assert.rejects(chat.addOrderMessage({...message,message:'x'.repeat(5001)}));
+const ui=fs.readFileSync('src/context/AppContext.tsx','utf8'),start=ui.indexOf('  const sendOrderMessage = async'),end=ui.indexOf('  const markOrderMessagesAsRead',start);const chatCode=await transform(ui.slice(start,end),{loader:'ts'});
+for(const offline of [true,false]) {let changes=0;const fn=new Function('orders','currentUser','api','setOrderMessages','showNotification',chatCode.code+';return sendOrderMessage;')([{id:'o',storeId:'s',customerId:'u'}],{id:'u',role:'CUSTOMER'},{sendOrderMessage:async()=>{if(offline)throw Error('offline');return {success:false};}},()=>changes++,()=>{});assert.equal(await fn('o','Isolated'),false);assert.equal(changes,0);}
+console.log('Order chat: durable messages/read status, restart and rejected-write preservation, bounded payloads, no fake client send confirmation.');

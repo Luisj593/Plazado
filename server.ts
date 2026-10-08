@@ -787,7 +787,7 @@ async function startServer() {
     res.json({ success: true, messages });
   });
 
-  app.post('/api/orders/:id/messages', (req: Request, res: Response) => {
+  app.post('/api/orders/:id/messages', async (req: Request, res: Response) => {
     try {
       const caller = getAuthenticatedUser(req);
       if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
@@ -802,10 +802,10 @@ async function startServer() {
       const senderId = caller.id;
       const senderName = caller.name || 'Usuario PlazaDO';
       const senderRole = caller.role === 'SUPER_ADMIN' ? 'ADMIN' : caller.storeId === order.storeId ? 'STORE' : 'CUSTOMER';
-      if (!message || !message.trim()) {
-        return res.status(400).json({ success: false, message: 'El mensaje no puede estar vacío.' });
+      if (typeof message!=='string' || !message.trim() || message.length>5000) {
+        return res.status(400).json({ success: false, message: 'El mensaje debe contener entre 1 y 5000 caracteres.' });
       }
-      const newMsg = db.addOrderMessage({
+      const newMsg = await db.addOrderMessage({
         orderId: req.params.id,
         storeId,
         customerId,
@@ -820,7 +820,7 @@ async function startServer() {
     }
   });
 
-  app.patch('/api/orders/:id/messages/read', (req: Request, res: Response) => {
+  app.patch('/api/orders/:id/messages/read', async (req: Request, res: Response) => {
     try {
       const caller = getAuthenticatedUser(req);
       if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
@@ -830,7 +830,7 @@ async function startServer() {
         return res.status(403).json({ success: false, message: 'No autorizado para este pedido' });
       }
       const role = caller.storeId === order.storeId || caller.role === 'SUPER_ADMIN' ? 'STORE' : 'CUSTOMER';
-      db.markOrderMessagesAsRead(req.params.id, role);
+      await db.markOrderMessagesAsRead(req.params.id, role);
       res.json({ success: true, version: db.getVersion() });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message });
