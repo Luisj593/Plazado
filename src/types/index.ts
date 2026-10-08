@@ -525,7 +525,7 @@ export interface Banner {
   subtitle?: string;
   badge?: string;
   imageUrl: string;
-  targetType: 'PRODUCT' | 'STORE' | 'CATEGORY' | 'PROMO' | 'URL';
+  targetType: 'PRODUCT' | 'STORE' | 'CATEGORY' | 'PROMO' | 'URL' | 'REGISTER_USER' | 'REGISTER_STORE';
   targetValue: string;
   isActive: boolean;
   order: number;
