@@ -142,9 +142,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
               title="Plazado.com — Todo en un solo lugar"
             >
               <img
-                src={customHeaderImage && !headerImageError ? customHeaderImage : '/plazado-logo-oficial.png'}
+                src={customHeaderImage && !headerImageError ? customHeaderImage : '/plazado-logo-integrado.png'}
                 alt="Plazado.com — Todo en un solo lugar"
-                className="w-[220px] h-[74px] object-contain object-center bg-white rounded-md"
+                className="w-[220px] h-[74px] object-contain object-center dark:brightness-150"
                 onError={customHeaderImage && !headerImageError ? () => setHeaderImageError(true) : undefined}
               />
             </button>
@@ -513,7 +513,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
       {/* ============================================================== */}
       {/* 10. HEADER MÓVIL (Mobile Viewport Only)                         */}
       {/* ============================================================== */}
-      <div className="md:hidden px-3 pt-2 pb-2 bg-black dark:bg-black border-b border-slate-200/80 dark:border-stone-800">
+      <div className="md:hidden px-3 pt-2 pb-2 bg-white dark:bg-stone-950 border-b border-slate-200/80 dark:border-stone-800">
         
         {/* Primera línea: ☰ | Logo Plazado.com | Tema & 🛒 */}
         <div className="flex items-center justify-between gap-2 pb-2">
@@ -540,9 +540,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenCart }) => {
             title="Inicio Plazado.com"
           >
             <img
-                src={customHeaderImage && !headerImageError ? customHeaderImage : '/plazado-logo-oficial.png'}
+                src={customHeaderImage && !headerImageError ? customHeaderImage : '/plazado-logo-integrado.png'}
                 alt="Plazado.com — Todo en un solo lugar"
-                className="w-[150px] h-[50px] object-contain object-center bg-white rounded-md"
+                className="w-[150px] h-[50px] object-contain object-center dark:brightness-150"
                 onError={customHeaderImage && !headerImageError ? () => setHeaderImageError(true) : undefined}
               />
           </button>
