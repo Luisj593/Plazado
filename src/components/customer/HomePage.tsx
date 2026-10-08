@@ -1,5 +1,5 @@
 import React, { useRef, useMemo, useState, useEffect } from 'react';
-import { categorySliderSequence } from '../../utils/categorySlider';
+import { useProductRotation } from '../../utils/useProductRotation';
 import { PromoBannerSlider } from './PromoBannerSlider';
 import { useApp } from '../../context/AppContext';
 import { DominicanFlag } from '../common/DominicanFlag';
@@ -51,10 +51,7 @@ export const HomePage: React.FC = () => {
   } = useApp();
 
   const [heroImageError, setHeroImageError] = useState(false);
-  const [heroSlideIndex, setHeroSlideIndex] = useState(0);
-  const [heroPhotoIndex, setHeroPhotoIndex] = useState(0);
   const [heroPaused, setHeroPaused] = useState(false);
-  const [heroCycle, setHeroCycle] = useState(0);
 
   // Imagen del Header/Hero configurable por el Super Admin
   const heroImageSrc = (!heroImageError && systemSettings?.headerBannerUrl)
@@ -80,44 +77,11 @@ export const HomePage: React.FC = () => {
     return featuredProducts.length > 0 ? featuredProducts : publishedProducts;
   }, [featuredProducts, publishedProducts]);
 
-  // One random product per category in each round; all eligible products get a turn.
-  const heroProducts = useMemo(
-    () => categorySliderSequence(publishedProducts),
-    [publishedProducts, heroCycle]
-  );
-
-  useEffect(() => {
-    if ((systemSettings?.homeHeroMode || 'slider') !== 'slider' || heroProducts.length === 0 || (heroProducts.length === 1 && heroProducts[0].images.length <= 1) || heroPaused) return;
-    const timer = window.setInterval(() => {
-      const images = heroProducts[heroSlideIndex]?.images || [];
-      if (heroPhotoIndex + 1 < images.length) {
-        setHeroPhotoIndex(heroPhotoIndex + 1);
-        setHeroImageError(false);
-        return;
-      }
-      if (heroSlideIndex + 1 >= heroProducts.length) {
-        setHeroCycle(cycle => cycle + 1);
-        setHeroSlideIndex(0);
-      } else {
-        setHeroSlideIndex(heroSlideIndex + 1);
-      }
-      setHeroImageError(false);
-                          setHeroPhotoIndex(0);
-    }, 8000);
-    return () => window.clearInterval(timer);
-  }, [heroProducts, heroSlideIndex, heroPhotoIndex, heroPaused, systemSettings?.homeHeroMode]);
-
-  useEffect(() => {
-    if (heroSlideIndex >= heroProducts.length) setHeroSlideIndex(0);
-  }, [heroProducts.length, heroSlideIndex]);
-
   const heroMode = systemSettings?.homeHeroMode || 'slider';
+  const rotation = useProductRotation(publishedProducts, heroMode === 'slider', heroPaused);
+  const heroProducts = rotation.products;
+  const heroSlideIndex = rotation.index;
   const activeHeroProduct = heroMode === 'slider' ? heroProducts[heroSlideIndex] : undefined;
-  useEffect(() => {
-    setHeroPhotoIndex(0);
-    setHeroImageError(false);
-  }, [activeHeroProduct?.id]);
-
   const heroOfferDiscount = activeHeroProduct && Number.isFinite(activeHeroProduct.price) &&
     typeof activeHeroProduct.promoPrice === 'number' && Number.isFinite(activeHeroProduct.promoPrice) &&
     activeHeroProduct.promoPrice > 0 && activeHeroProduct.promoPrice < activeHeroProduct.price
@@ -273,13 +237,15 @@ export const HomePage: React.FC = () => {
                 
                 {/* Contenedor de la Imagen con badges superpuestos */}
                 <div className="relative w-full h-[300px] sm:h-[350px] lg:h-[470px] xl:h-[500px] overflow-hidden group flex items-center justify-center bg-slate-50 dark:bg-stone-900">
-                  <img 
-                    src={heroMode === 'slider' && activeHeroProduct && !heroImageError ? (activeHeroProduct.images[heroPhotoIndex] || activeHeroProduct.images[0]) : heroImageSrc} 
+                  <button type="button" className="w-full h-full" onClick={() => activeHeroProduct && setSelectedProductId(activeHeroProduct.id)} aria-label={activeHeroProduct ? `Ver producto: ${activeHeroProduct.name}` : 'Imagen de portada'}>
+                  <img
+                    src={heroMode === 'slider' && activeHeroProduct ? rotation.image : heroImageSrc} 
                     alt={activeHeroProduct ? activeHeroProduct.name : "Compras en Plazado.com República Dominicana"} 
-                    className={`w-full h-full object-center bg-slate-50 dark:bg-stone-900 transition-all duration-700 ${heroMode === 'slider' && activeHeroProduct && !heroImageError ? 'object-contain' : 'object-cover'}`}
+                    className={`w-full h-full object-center bg-slate-50 dark:bg-stone-900 transition-all duration-700 ${heroMode === 'slider' && activeHeroProduct ? 'object-contain' : 'object-cover'}`}
                     loading="eager"
-                    onError={() => setHeroImageError(true)}
+                    onError={event => activeHeroProduct ? rotation.rejectImage(event.currentTarget.getAttribute('src') || '') : setHeroImageError(true)}
                   />
+                  </button>
                   
                   {heroOfferDiscount !== null && (
                     <div className="absolute top-4 left-4 z-20 pointer-events-none rounded-xl bg-[#f20544] px-3 py-2 text-white shadow-lg" aria-label={`Oferta: ${heroOfferDiscount.toLocaleString('es-DO')}% de descuento`}>
@@ -293,9 +259,9 @@ export const HomePage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          setHeroSlideIndex(i => (i - 1 + heroProducts.length) % heroProducts.length);
+                          rotation.select((heroSlideIndex - 1 + heroProducts.length) % heroProducts.length);
                           setHeroImageError(false);
-                          setHeroPhotoIndex(0);
+
                         }}
                         className="absolute left-3 top-1/2 -translate-y-1/2 z-30 w-9 h-9 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-[#f20544] transition-colors"
                         aria-label="Producto anterior"
@@ -305,9 +271,9 @@ export const HomePage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          setHeroSlideIndex(i => (i + 1) % heroProducts.length);
+                          rotation.next();
                           setHeroImageError(false);
-                          setHeroPhotoIndex(0);
+
                         }}
                         className="absolute right-3 top-1/2 -translate-y-1/2 z-30 w-9 h-9 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-[#f20544] transition-colors"
                         aria-label="Producto siguiente"
@@ -320,9 +286,9 @@ export const HomePage: React.FC = () => {
                             key={index}
                             type="button"
                             onClick={() => {
-                              setHeroSlideIndex(index);
+                              rotation.select(index);
                               setHeroImageError(false);
-                          setHeroPhotoIndex(0);
+
                             }}
                             className={`h-2 rounded-full transition-all ${index === heroSlideIndex ? 'w-6 bg-[#f20544]' : 'w-2 bg-white/70'}`}
                             aria-label={`Ir al producto ${index + 1}`}
@@ -334,8 +300,8 @@ export const HomePage: React.FC = () => {
 
                   {heroMode === 'slider' && activeHeroProduct && activeHeroProduct.images?.length > 1 && (
                     <div className="absolute right-3 top-3 z-30 hidden sm:flex flex-col gap-2">
-                      {activeHeroProduct.images.map((image, index) => (
-                        <button key={image + index} type="button" onClick={() => { setHeroPhotoIndex(index); setHeroImageError(false); }} className="w-14 h-14 lg:w-16 lg:h-16 rounded-xl overflow-hidden bg-white/95 border-2 border-white shadow-md">
+                      {rotation.images.map((image, index) => (
+                        <button key={image + index} type="button" onClick={() => { rotation.selectPhoto(image); }} className="w-14 h-14 lg:w-16 lg:h-16 rounded-xl overflow-hidden bg-white/95 border-2 border-white shadow-md">
                           <img src={image} alt={`${activeHeroProduct.name} ${index + 1}`} loading="lazy" className="w-full h-full object-contain" />
                         </button>
                       ))}
