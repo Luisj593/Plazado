@@ -61,12 +61,13 @@ function createTransporter(config: MailConfig = DEFAULT_MAIL_CONFIG) {
 /**
  * Verifies if the SMTP credentials are valid
  */
-export async function verifySmtpConnection(config: MailConfig = DEFAULT_MAIL_CONFIG): Promise<{ ok: boolean; message: string }> {
+export async function verifySmtpConnection(config: MailConfig = DEFAULT_MAIL_CONFIG): Promise<{ ok: boolean; message: string; reason?:string }> {
   const pass = cleanAppPassword(config.smtpPass || process.env.SMTP_PASS);
   if (!pass) {
     return {
       ok: false,
-      message: 'Falta la contraseña SMTP de IONOS. Genera una en tu cuenta de IONOS > Seguridad > Contraseñas de aplicaciones y guárdala aquí.'
+      reason: 'MISSING_SMTP_PASS',
+      message: 'Falta la contraseña de la cuenta de correo SMTP. Configúrala desde el panel seguro.'
     };
   }
 
@@ -86,6 +87,7 @@ export async function verifySmtpConnection(config: MailConfig = DEFAULT_MAIL_CON
     }
     return {
       ok: false,
+      reason: ['EAUTH','ETIMEDOUT','ECONNECTION','ESOCKET','ETLS','ECONNREFUSED','EDNS'].includes(err?.code) ? err.code : 'SMTP_ERROR',
       message: friendly
     };
   }

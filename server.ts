@@ -106,10 +106,12 @@ async function startServer() {
   const PORT = Number(process.env.PORT || 3000);
   app.set('trust proxy', 1);
   let smtpVerified=false;
+  let smtpFailureReason:string | undefined;
   const verifyPilotMail = async () => {
     const config=db.getSystemSettings().mailConfig;
     if(!(config?.smtpPass || process.env.SMTP_PASS)) {smtpVerified=false;return;}
-    smtpVerified=(await verifySmtpConnection(config)).ok;
+    const result=await verifySmtpConnection(config);
+    smtpVerified=result.ok;smtpFailureReason=result.reason;
   };
   // SMTP authentication check sends no email and does not delay the HTTP listener.
   void verifyPilotMail().catch(()=>{smtpVerified=false;});
@@ -192,7 +194,7 @@ async function startServer() {
     const settings=db.getSystemSettings(), mail=settings.mailConfig;
     const checks={firebaseAdmin:firestoreRepo.isAdminReady(),firestoreLoaded:db.isFirestoreConnected(),smtpConfigured:!!(mail?.smtpPass || process.env.SMTP_PASS),smtpVerified};
     const ready=Object.values(checks).every(Boolean);
-    res.status(ready?200:503).json({status:ready?'ready':'blocked',mode:'CASH_ON_DELIVERY_PILOT',checks,timestamp:new Date().toISOString()});
+    res.status(ready?200:503).json({status:ready?'ready':'blocked',mode:'CASH_ON_DELIVERY_PILOT',checks,...(!smtpVerified && smtpFailureReason ? {smtpFailureReason}:{}),timestamp:new Date().toISOString()});
   });
 
   // Global Bootstrap (Single-call fast hydration for all clients/devices)

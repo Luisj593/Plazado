@@ -230,7 +230,7 @@ class GlobalDatabase {
       }
     } else if (activeData.stores.length > 0) {
       for (const st of activeData.stores) {
-        storesDb.saveStore(st);
+        storesDb.applyDurableStore(st);
       }
     }
 
@@ -1418,7 +1418,9 @@ class GlobalDatabase {
           throw new Error('El porcentaje de comisión debe ser un número entre 0 y 100.');
         }
       }
+      if(patch.legalEntityRegistered!==undefined && typeof patch.legalEntityRegistered!=='boolean') throw new Error('La opción de empresa formalizada debe ser verdadera o falsa');
       const next = { ...this.memoryData.systemSettings, ...patch };
+      if(next.legalEntityRegistered && (!next.legalBusinessName?.trim() || !next.rnc?.trim())) throw new Error('Completa la razón social y RNC reales antes de publicarlos');
       // Firestore is authoritative across Railway restarts and redeployments.
       // Do not change memory or acknowledge success until the write succeeds.
       await firestoreRepo.saveSystemSettings(next);

@@ -37,3 +37,10 @@ for(const scenario of ['network-error','rejected','success']) {
  if(scenario!=='success')assert.equal(notices[0][1],'error');
 }
 console.log('Interface: success only on server confirmation; network/rejection failures do not overwrite saved settings.');
+
+await db.updateSystemSettings({legalEntityRegistered:false,legalBusinessName:'',rnc:'',legalAddress:''});
+db=new Harness(structuredClone(persisted));assert.equal(db.memoryData.systemSettings.legalEntityRegistered,false);assert.equal(db.memoryData.systemSettings.rnc,'');
+await assert.rejects(db.updateSystemSettings({legalEntityRegistered:true}));
+await db.updateSystemSettings({legalEntityRegistered:true,legalBusinessName:'Isolated entity',rnc:'ISOLATED-ONLY',legalAddress:'Isolated address'});
+db=new Harness(structuredClone(persisted));assert.equal(db.memoryData.systemSettings.legalBusinessName,'Isolated entity');assert.equal(db.memoryData.systemSettings.legalEntityRegistered,true);
+console.log('Legal configuration: unregistered state and later entity details persist; incomplete published identity rejected.');

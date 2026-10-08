@@ -189,22 +189,22 @@ export class FirestoreRepository {
         placementsSnap,
         messagesSnap
       ] = await Promise.all([
-        getDocs(collection(this.db, 'stores')).catch(e => { console.warn('stores read err:', e); return { docs: [] }; }),
-        getDocs(collection(this.db, 'products')).catch(e => { console.warn('products read err:', e); return { docs: [] }; }),
+        getDocs(collection(this.db, 'stores')),
+        getDocs(collection(this.db, 'products')),
         getDocs(collection(this.db, 'users')), // Critical: never treat a failed users read as an empty authoritative collection.
-        getDocs(collection(this.db, 'categories')).catch(e => { console.warn('categories read err:', e); return { docs: [] }; }),
-        getDocs(collection(this.db, 'orders')).catch(e => { console.warn('orders read err:', e); return { docs: [] }; }),
-        getDocs(collection(this.db, 'banners')).catch(e => { console.warn('banners read err:', e); return { docs: [] }; }),
-        getDocs(collection(this.db, 'coupons')).catch(e => { console.warn('coupons read err:', e); return { docs: [] }; }),
-        getDoc(doc(this.db, 'systemSettings', 'default')).catch(e => { console.warn('settings read err:', e); return { exists: () => false, data: () => null }; }),
-        getDocs(collection(this.db, 'storeBalances')).catch(e => { console.warn('balances read err:', e); return { docs: [] }; }),
-        getDocs(collection(this.db, 'settlements')).catch(e => { console.warn('settlements read err:', e); return { docs: [] }; }),
-        getDocs(collection(this.db, 'disputes')).catch(e => { console.warn('disputes read err:', e); return { docs: [] }; }),
-        getDocs(collection(this.db, 'reviews')).catch(e => { console.warn('reviews read err:', e); return { docs: [] }; }),
-        getDocs(collection(this.db, 'paymentGateways')).catch(e => { console.warn('gateways read err:', e); return { docs: [] }; }),
-        getDocs(collection(this.db, 'advertisements')).catch(e => { console.warn('ads read err:', e); return { docs: [] }; }),
-        getDocs(collection(this.db, 'adPlacements')).catch(e => { console.warn('placements read err:', e); return { docs: [] }; }),
-        getDocs(collection(this.db, 'orderMessages')).catch(e => { console.warn('messages read err:', e); return { docs: [] }; })
+        getDocs(collection(this.db, 'categories')),
+        getDocs(collection(this.db, 'orders')),
+        getDocs(collection(this.db, 'banners')),
+        getDocs(collection(this.db, 'coupons')),
+        getDoc(doc(this.db, 'systemSettings', 'default')),
+        getDocs(collection(this.db, 'storeBalances')),
+        getDocs(collection(this.db, 'settlements')),
+        getDocs(collection(this.db, 'disputes')),
+        getDocs(collection(this.db, 'reviews')),
+        getDocs(collection(this.db, 'paymentGateways')),
+        getDocs(collection(this.db, 'advertisements')),
+        getDocs(collection(this.db, 'adPlacements')),
+        getDocs(collection(this.db, 'orderMessages'))
       ]);
 
       const stores: Store[] = storesSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Store));

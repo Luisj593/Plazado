@@ -15,7 +15,7 @@ export function safeOrder(order: any, caller: any) {
 }
 export function publicSettings(settings: any, admin = false) {
   if (admin) return settings;
-  return pick(settings, ['platformName','logoUrl','headerBannerUrl','homeHeroMode','plazaCommissionRate','defaultCommissionRate','contactEmail','contactPhone','socialLinks','maintenanceMode','appDownloadUrl','androidApkUrl','privacyPolicyUrl','termsUrl','legalBusinessName','rnc','whatsappCommercial','itbisTaxRate','currency','currencySymbol','logoType','logoDarkUrl','faviconType','faviconUrl','headerBannerType','activePaymentMethods','deliveryIntegration','policies','legalDocuments','androidApp']);
+  return pick(settings, ['platformName','logoUrl','headerBannerUrl','homeHeroMode','plazaCommissionRate','defaultCommissionRate','contactEmail','contactPhone','socialLinks','maintenanceMode','appDownloadUrl','androidApkUrl','privacyPolicyUrl','termsUrl','legalBusinessName','legalEntityRegistered','legalAddress','rnc','whatsappCommercial','itbisTaxRate','currency','currencySymbol','logoType','logoDarkUrl','faviconType','faviconUrl','headerBannerType','activePaymentMethods','deliveryIntegration','policies','legalDocuments','androidApp']);
 }
 export function sanitizeMarketplaceState(raw: any, caller: any) {
   const admin = caller?.role === 'SUPER_ADMIN';

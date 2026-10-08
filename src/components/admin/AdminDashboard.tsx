@@ -209,8 +209,10 @@ export const AdminDashboard: React.FC = () => {
     setDefaultCommRate(systemSettings.defaultCommissionRate * 100);
   }, [systemSettings.plazaCommissionRate, systemSettings.defaultCommissionRate]);
   const [whatsappComm, setWhatsappComm] = useState(systemSettings.whatsappCommercial);
-  const [rncVal, setRncVal] = useState(systemSettings.rnc);
-  const [businessName, setBusinessName] = useState(systemSettings.legalBusinessName);
+  const [rncVal, setRncVal] = useState(systemSettings.legalEntityRegistered ? systemSettings.rnc : '');
+  const [businessName, setBusinessName] = useState(systemSettings.legalEntityRegistered ? systemSettings.legalBusinessName : '');
+  const [legalRegistered,setLegalRegistered]=useState(systemSettings.legalEntityRegistered===true);
+  const [legalAddress,setLegalAddress]=useState(systemSettings.legalAddress || '');
   const [isRunningSettlements, setIsRunningSettlements] = useState(false);
 
   // Mailer settings state
@@ -277,8 +279,8 @@ export const AdminDashboard: React.FC = () => {
   const [userRoleFilter, setUserRoleFilter] = useState<string>('all');
 
   // Metrics
-  const totalMarketplaceGross = orders.reduce((acc, o) => acc + o.total, 0);
-  const totalPlazaCommissionEarned = orders.reduce((acc, o) => acc + o.plazaCommissionAmount, 0);
+  const totalMarketplaceGross = orders.filter(o=>o.status==='DELIVERED' && o.paymentStatus==='PAID').reduce((acc, o) => acc + o.total, 0);
+  const totalPlazaCommissionEarned = orders.filter(o=>o.status==='DELIVERED' && o.paymentStatus==='PAID').reduce((acc, o) => acc + o.plazaCommissionAmount, 0);
   const totalEscrowHeld = Object.values(storeBalances).reduce((acc, b) => acc + (b.pendingBalance || 0), 0);
   const pendingStoreRequests = stores.filter(s => s.status === 'PENDING' || s.status === 'IN_REVIEW');
   const activeStores = stores.filter(s => s.status === 'APPROVED');
@@ -325,12 +327,12 @@ export const AdminDashboard: React.FC = () => {
     return matchesSearch && matchesRole;
   });
 
-  const handlePaySettlement = (e: React.FormEvent) => {
+  const handlePaySettlement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payingSettlement || !bankRefInput.trim()) return;
 
-    processSettlement(payingSettlement.id, 'PAID', bankRefInput.trim());
-    showNotification(`Liquidación ${payingSettlement.id} confirmada con ref: ${bankRefInput.trim()}`);
+    const saved=await processSettlement(payingSettlement.id, 'PAID', bankRefInput.trim());
+    if(!saved) return;
     setPayingSettlement(null);
     setBankRefInput('');
   };
@@ -358,8 +360,10 @@ export const AdminDashboard: React.FC = () => {
       plazaCommissionRate: Number(plazaCommRate) / 100,
       defaultCommissionRate: Number(defaultCommRate) / 100,
       whatsappCommercial: whatsappComm,
-      rnc: rncVal,
-      legalBusinessName: businessName,
+      legalEntityRegistered: legalRegistered,
+      rnc: rncVal.trim(),
+      legalBusinessName: businessName.trim(),
+      legalAddress: legalAddress.trim(),
       mailConfig: {
         senderEmail: mailSenderEmail.trim() || 'contacto@plazado.com',
         senderName: mailSenderName.trim() || 'PlazaDO.com - Marketplace Dominicano',
@@ -2845,9 +2849,14 @@ ${message}`);
               </div>
 
               <div>
+                <label className="flex items-center gap-2 mb-3 text-sm font-semibold"><input type="checkbox" checked={legalRegistered} onChange={e=>setLegalRegistered(e.target.checked)} /> Empresa formalizada: publicar razón social y RNC</label>
+                <p className="text-xs text-stone-500 mb-3">Puedes completar estos datos más adelante. Mientras no actives esta opción, la página mostrará solamente Plazado.com.</p>
                 <label className="block font-semibold text-stone-700 mb-1">Razón Social Fiscal</label>
                 <input
                   type="text"
+                  disabled={!legalRegistered}
+                  required={legalRegistered}
+                  placeholder="Completar al formalizar la empresa"
                   value={businessName}
                   onChange={(e) => setBusinessName(e.target.value)}
                   className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-lg outline-none"
@@ -2858,12 +2867,19 @@ ${message}`);
                 <label className="block font-semibold text-stone-700 mb-1">RNC Corporativo</label>
                 <input
                   type="text"
+                  disabled={!legalRegistered}
+                  required={legalRegistered}
+                  placeholder="Sin RNC asignado"
                   value={rncVal}
                   onChange={(e) => setRncVal(e.target.value)}
                   className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-lg outline-none font-mono"
                 />
               </div>
             </div>
+
+            <label className="block text-sm font-semibold">Dirección comercial / del operador
+              <input type="text" value={legalAddress} onChange={e=>setLegalAddress(e.target.value)} placeholder="Completar más adelante" className="mt-1 w-full p-2.5 border border-stone-300 rounded-lg" />
+            </label>
 
             {/* SERVICIO DE CORREO ELECTRÓNICO (DISPARADOR DE REGISTROS) */}
             <div className="pt-4 border-t border-stone-200 space-y-4">

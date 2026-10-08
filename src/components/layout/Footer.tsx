@@ -55,7 +55,7 @@ export const Footer: React.FC = () => {
             <div>
               <h4 className="text-sm font-bold text-stone-950 dark:text-white">Pagos Seguros en RD$</h4>
               <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-                Integrado con pasarela AZUL, transferencias y pago contra entrega.
+                Pago en efectivo al recibir tu pedido. Confirma la entrega con tu código.
               </p>
             </div>
           </div>
@@ -163,7 +163,7 @@ export const Footer: React.FC = () => {
                 onClick={() => handleOpenPolicy('commission_policy')}
                 className="hover:text-stone-950 dark:text-white transition-colors"
               >
-                Comisión (5% Inicial)
+                Comisión ({Number(((systemSettings.plazaCommissionRate ?? 0.0005)*100).toFixed(4))}%)
               </button>
             </li>
           </ul>
@@ -202,7 +202,7 @@ export const Footer: React.FC = () => {
                 onClick={() => handleOpenPolicy('payments')}
                 className="hover:text-stone-950 dark:text-white transition-colors"
               >
-                Políticas de Pagos (AZUL)
+                Políticas de Pagos
               </button>
             </li>
             <li className="pt-2 border-t border-stone-200 dark:border-stone-800">
@@ -232,7 +232,7 @@ export const Footer: React.FC = () => {
       {/* Bottom Legal bar */}
       <div className="max-w-7xl mx-auto px-4 pt-6 border-t border-stone-200 dark:border-stone-800 text-xs text-stone-500 flex flex-col sm:flex-row justify-between items-center gap-4">
         <p>
-          © {new Date().getFullYear()} PlazaDO.com ({systemSettings.legalBusinessName} – RNC: {systemSettings.rnc}). Todos los derechos reservados.
+          © {new Date().getFullYear()} Plazado.com{systemSettings.legalEntityRegistered && systemSettings.legalBusinessName ? ` · ${systemSettings.legalBusinessName}${systemSettings.rnc ? ` · RNC: ${systemSettings.rnc}` : ''}` : ''}. Todos los derechos reservados.
         </p>
         <div className="flex items-center gap-3">
           <span>Moneda: <strong>DOP (RD$)</strong></span>

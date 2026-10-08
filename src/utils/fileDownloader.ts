@@ -163,7 +163,7 @@ export const downloadOfficialPdfFallback = (doc: {
 
   <div class="footer">
     <div>
-      ${doc.legalBusinessName || 'PlazaDO Soluciones Tecnológicas SRL'} • RNC: ${doc.rnc || '132-94812-3'}<br>
+      ${doc.legalBusinessName || 'Plazado.com'}${doc.rnc ? ` • RNC: ${doc.rnc}` : ''}<br>
       Contacto: ${doc.contactEmail || 'contacto@plazado.com'} • WhatsApp: ${doc.whatsappCommercial || '809-449-3325'}
     </div>
     <div style="text-align: right;">
