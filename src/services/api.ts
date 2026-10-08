@@ -259,11 +259,11 @@ export const api = {
   },
 
   // Disputes
-  async createDispute(data: Omit<Dispute, 'id' | 'status' | 'createdAt'>): Promise<{ success: boolean; dispute: Dispute; version: number }> {
+  async createDispute(data: Omit<Dispute, 'id' | 'status' | 'createdAt'>): Promise<{ success: boolean; dispute: Dispute; version: number; message?:string }> {
     return request('/api/disputes', { method: 'POST', body: JSON.stringify(data) });
   },
 
-  async resolveDispute(id: string, status: Dispute['status'], resolutionNotes: string): Promise<{ success: boolean; dispute: Dispute; version: number }> {
+  async resolveDispute(id: string, status: Dispute['status'], resolutionNotes: string): Promise<{ success: boolean; dispute: Dispute; version: number; message?:string }> {
     return request(`/api/disputes/${id}`, { method: 'PATCH', body: JSON.stringify({ status, resolutionNotes }) });
   },
 

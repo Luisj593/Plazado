@@ -28,6 +28,23 @@ export function cleanAppPassword(pass?: string): string {
   return pass.trim();
 }
 
+export function mailProvider(): 'RESEND'|'SMTP' {
+  return process.env.MAIL_PROVIDER?.toUpperCase()==='RESEND' ? 'RESEND' : 'SMTP';
+}
+export function isMailConfigured(config?:Partial<MailConfig>) {
+  return mailProvider()==='RESEND' ? !!process.env.RESEND_API_KEY : !!(config?.smtpPass || process.env.SMTP_PASS);
+}
+async function sendHttpsMail(options:{from:string;to:string;subject:string;text:string;html?:string}) {
+  if(!process.env.RESEND_API_KEY) return {success:false,delivered:false,simulated:false,reason:'MISSING_RESEND_API_KEY',error:'Falta configurar el proveedor de correo HTTPS.'};
+  try {
+    const response=await fetch('https://api.resend.com/emails',{method:'POST',redirect:'error',headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({...options,to:[options.to]}),signal:AbortSignal.timeout(10000)});
+    const result=await response.json();
+    if(!response.ok || !result.id) return {success:false,delivered:false,simulated:false,reason:'MAIL_API_REJECTED',error:'El proveedor rechazó el envío. Revisa la clave y el dominio verificado.'};
+    // Legacy delivered means accepted by the transport, not inbox delivery.
+    return {success:true,delivered:true,accepted:true,deliveryConfirmed:false,simulated:false,messageId:String(result.id)};
+  } catch {return {success:false,delivered:false,simulated:false,reason:'MAIL_API_CONNECTION',error:'No se pudo conectar al proveedor de correo.'};}
+}
+
 /**
  * Creates a nodemailer transport based on configuration
  */
@@ -62,6 +79,19 @@ function createTransporter(config: MailConfig = DEFAULT_MAIL_CONFIG) {
  * Verifies if the SMTP credentials are valid
  */
 export async function verifySmtpConnection(config: MailConfig = DEFAULT_MAIL_CONFIG): Promise<{ ok: boolean; message: string; reason?:string }> {
+  if(mailProvider()==='RESEND') {
+    if(!process.env.RESEND_API_KEY) return {ok:false,reason:'MISSING_RESEND_API_KEY',message:'Configura RESEND_API_KEY en Railway.'};
+    const sender=process.env.MAIL_SENDER_EMAIL || config.senderEmail;
+    const domain=sender?.split('@')[1]?.toLowerCase();
+    if(!domain) return {ok:false,reason:'INVALID_MAIL_SENDER',message:'Configura MAIL_SENDER_EMAIL con el dominio verificado.'};
+    try {
+      const response=await fetch('https://api.resend.com/domains',{redirect:'error',headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`},signal:AbortSignal.timeout(10000)});
+      const result=await response.json();
+      if(!response.ok) return {ok:false,reason:'MAIL_API_AUTH',message:'No se pudo verificar el proveedor. La clave debe permitir consultar dominios.'};
+      const verified=result.data?.some((entry:any)=>entry.name?.toLowerCase()===domain && entry.status==='verified' && entry.capabilities?.sending!=='disabled');
+      return verified ? {ok:true,message:'Proveedor HTTPS accesible y dominio del remitente verificado. La recepción final se valida con un registro real.'} : {ok:false,reason:'MAIL_DOMAIN_UNVERIFIED',message:'Verifica el dominio del remitente en Resend antes de activar registros.'};
+    } catch {return {ok:false,reason:'MAIL_API_CONNECTION',message:'No se pudo conectar al proveedor HTTPS.'};}
+  }
   const pass = cleanAppPassword(config.smtpPass || process.env.SMTP_PASS);
   if (!pass) {
     return {
@@ -81,7 +111,7 @@ export async function verifySmtpConnection(config: MailConfig = DEFAULT_MAIL_CON
   } catch (err: any) {
     let friendly = err?.message || 'Error de conexión SMTP desconocido';
     if (friendly.includes('530') || friendly.includes('Authentication Required')) {
-      friendly = 'Error 530 de IONOS: Autenticación requerida. Debes ingresar la contraseña de aplicación de 16 caracteres de tu cuenta IONOS.';
+      friendly = 'Error 530 de IONOS: Autenticación requerida. Verifica el usuario completo y la contraseña del buzón de correo.';
     } else if (friendly.includes('535') || friendly.includes('BadCredentials') || friendly.includes('Username and Password not accepted')) {
       friendly = 'Error 535: Credenciales SMTP no aceptadas. Verifica la cuenta y contraseña configuradas.';
     }
@@ -116,7 +146,7 @@ export async function sendRegistrationOtpEmail(
   };
 
   const pass = cleanAppPassword(config.smtpPass || process.env.SMTP_PASS);
-  const senderAddress = `"${config.senderName}" <${config.senderEmail}>`;
+  const senderAddress = `"${config.senderName.replace(/["\r\n]/g, '')}" <${process.env.MAIL_SENDER_EMAIL || config.senderEmail}>`;
   const subject = `🔐 Tu Código de Confirmación de Registro PlazaDO: ${otpCode}`;
 
   const escapeHtml=(value:string)=>value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]!));
@@ -226,6 +256,8 @@ Correo oficial de seguridad enviado desde: contacto@plazado.com
 © 2026 Plazado.com República Dominicana.
   `;
 
+  if(mailProvider()==='RESEND') return sendHttpsMail({from:senderAddress,to:recipientEmail,subject,text:textContent,html:htmlContent});
+
   if (!pass) {
     console.warn('[MailerService] SMTP credentials are not configured. No email sent.');
     return {success:false,delivered:false,simulated:false,reason:'MISSING_SMTP_PASS',error:'El envío de correo no está configurado. Contacta a soporte.'};
@@ -254,6 +286,7 @@ Correo oficial de seguridad enviado desde: contacto@plazado.com
 
 export async function sendAccountApprovalEmail(recipientEmail:string,recipientName:string,customConfig?:Partial<MailConfig>) {
   const config={...DEFAULT_MAIL_CONFIG,...customConfig};
+  if(mailProvider()==='RESEND') return sendHttpsMail({from:`Plazado <${process.env.MAIL_SENDER_EMAIL || config.senderEmail}>`,to:recipientEmail,subject:'Tu cuenta de Plazado.com fue aprobada',text:`Hola ${recipientName}. Tu cuenta fue revisada y aprobada. Ya puedes iniciar sesión con tu contraseña en Plazado.com. Este aviso no contiene un código de verificación.`});
   if(!(config.smtpPass || process.env.SMTP_PASS)) return {success:false,delivered:false};
   try {
     const info=await createTransporter(config).sendMail({from:`"${config.senderName}" <${config.senderEmail}>`,to:recipientEmail,subject:'Tu cuenta de Plazado.com fue aprobada',text:`Hola ${recipientName}. Tu cuenta fue revisada y aprobada. Ya puedes iniciar sesión con tu contraseña en Plazado.com. Este aviso no contiene un código de verificación.`});

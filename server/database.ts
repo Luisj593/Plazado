@@ -2264,37 +2264,34 @@ class GlobalDatabase {
     return this.memoryData.disputes;
   }
 
-  public createDispute(data: Omit<Dispute, 'id' | 'status' | 'createdAt'>): Dispute {
-    const newId = `disp-${Date.now()}`;
-    const newDispute: Dispute = {
-      ...data,
-      id: newId,
-      status: 'OPEN',
-      createdAt: new Date().toISOString()
-    };
-    this.memoryData.disputes.unshift(newDispute);
-    this.addAuditLog('DISPUTE_OPENED', newId, undefined, `Disputa abierta para orden ${data.orderId}`);
-    this.commit();
-    return newDispute;
+  public createDispute(data: Omit<Dispute, 'id' | 'status' | 'createdAt'>): Promise<Dispute> {
+    return this.runCommerceMutation(() => {
+      const order=this.memoryData.orders.find(o=>o.id===data.orderId);
+      if(!order) throw new Error('Pedido no encontrado');
+      if(!['WRONG_ITEM','NOT_RECEIVED','DAMAGED','DESCRIPTION_MISMATCH','DELIVERY_ISSUE'].includes(data.issueType) || !data.description?.trim() || data.description.length>5000) throw new Error('Tipo o descripción de reclamación inválidos');
+      if(this.memoryData.disputes.some(d=>d.orderId===order.id && !['CLOSED','RESOLVED'].includes(d.status))) throw new Error('El pedido ya tiene una reclamación abierta');
+      for(const settlement of this.memoryData.settlements.filter(s=>['PENDING','RETAINED'].includes(s.status) && s.orderIds?.includes(order.id))) processSettlementState(this.memoryData,settlement.id,'REJECTED');
+      const dispute:Dispute={id:`disp-${crypto.randomUUID()}`,orderId:order.id,storeId:order.storeId,storeName:order.storeName,customerId:order.customerId,customerName:order.customerName,customerEmail:data.customerEmail,issueType:data.issueType,description:data.description.trim(),refundRequested:!!data.refundRequested,refundAmount:Math.max(0,Math.min(Number(data.refundAmount)||0,order.total)),status:'OPEN',createdAt:new Date().toISOString()};
+      order.activeDisputeId=dispute.id;
+      this.memoryData.disputes.unshift(dispute);
+      this.addAuditLog('DISPUTE_OPENED',dispute.id,undefined,`Reclamación del pedido ${order.id}`);
+      return dispute;
+    });
   }
 
-  public resolveDispute(disputeId: string, status: Dispute['status'], resolutionNotes: string): Dispute | null {
-    const disp = this.memoryData.disputes.find(d => d.id === disputeId);
-    if (!disp) return null;
-    disp.status = status;
-    disp.resolutionNotes = resolutionNotes;
-    this.addAuditLog('DISPUTE_RESOLVED', disputeId, undefined, `Disputa resuelta como ${status}`);
-    this.commit();
-    return disp;
-  }
-
-  public deleteDispute(id: string): boolean {
-    const idx = this.memoryData.disputes.findIndex(d => d.id === id);
-    if (idx === -1) return false;
-    this.memoryData.disputes.splice(idx, 1);
-    this.addAuditLog('DISPUTE_DELETED', id, undefined, 'Disputa eliminada');
-    this.commit();
-    return true;
+  public resolveDispute(disputeId:string,status:Dispute['status'],resolutionNotes:string):Promise<Dispute|null> {
+    return this.runCommerceMutation(() => {
+      const dispute=this.memoryData.disputes.find(d=>d.id===disputeId);
+      if(!dispute) return null;
+      if(!['UNDER_REVIEW','WAITING_RESPONSE','RESOLVED','CLOSED'].includes(status)) throw new Error('Estado de reclamación inválido');
+      if(['CLOSED','RESOLVED'].includes(dispute.status) && status!==dispute.status) throw new Error('La reclamación ya fue cerrada');
+      if(['CLOSED','RESOLVED'].includes(status) && !resolutionNotes?.trim()) throw new Error('Documenta la resolución antes de cerrar');
+      const order=this.memoryData.orders.find(o=>o.id===dispute.orderId);
+      if(order && ['CLOSED','RESOLVED'].includes(status) && order.activeDisputeId===disputeId) order.activeDisputeId=null;
+      dispute.status=status;dispute.resolutionNotes=String(resolutionNotes || '').trim().slice(0,5000);
+      this.addAuditLog('DISPUTE_RESOLVED',disputeId,undefined,`Estado ${status}. El cierre no ejecuta un reembolso bancario`);
+      return dispute;
+    });
   }
 
   // --- REVIEWS ---

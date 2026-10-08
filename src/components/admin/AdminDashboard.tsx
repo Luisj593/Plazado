@@ -337,16 +337,16 @@ export const AdminDashboard: React.FC = () => {
     setBankRefInput('');
   };
 
-  const handleResolveDispute = (e: React.FormEvent) => {
+  const handleResolveDispute = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resolvingDispute) return;
 
-    resolveDispute(
+    const saved=await resolveDispute(
       resolvingDispute.id, 
       disputeResolutionStatus,
       disputeResolutionNote
     );
-    showNotification(`Disputa #${resolvingDispute.id} resuelta.`);
+    if(!saved) return;
     setResolvingDispute(null);
     setDisputeResolutionNote('');
   };

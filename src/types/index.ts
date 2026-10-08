@@ -346,6 +346,7 @@ export interface OrderStatusHistoryItem {
 }
 
 export interface Order {
+  activeDisputeId?: string | null;
   accountingVersion?: number; // New orders recognize cash sale on validated delivery
   id: string; // ej: "ORD-2026-8912"
   orderGroupCode: string; // Agrupador de checkout multi-tienda ej: "CHK-7712"

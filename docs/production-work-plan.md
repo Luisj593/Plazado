@@ -71,3 +71,18 @@ Piloto con pago contra entrega antes de las 17:00 America/Santo_Domingo. Tarjeta
 - La web describe el piloto contra entrega y muestra la comisión configurada. El panel no confirma un desembolso cuando el servidor lo rechaza.
 - Verificación operativa tras tercera entrega: Firebase Admin=true, Firestore cargado=true, SMTP configurado=true, autenticación SMTP=false. El piloto sigue bloqueado por correo hasta resolver la causa.
 - Pendiente obligatorio: hacer privado el repositorio o sanear su historial y revisar credenciales expuestas. Retirar archivos del árbol actual NO elimina sus versiones anteriores; la conexión GitHub actual no ofrece administración de visibilidad.
+
+
+## Activación del correo HTTPS — 8 octubre 2026
+
+El operador confirmó Railway Free/Trial/Hobby y eligió correo por HTTPS. SMTP no está habilitado en esos planes. El adaptador Resend está implementado; necesita configuración externa antes de admitir nuevos registros.
+
+1. En Resend, agregar el dominio `plazado.com` y publicar en IONOS los registros DNS que Resend indique para verificar el envío. Conservar los registros MX del buzón IONOS. No inventar valores DNS.
+2. Crear una clave con permisos para envío y consulta de dominios (el diagnóstico consulta `GET /domains` sin enviar correos). Guardarla únicamente como variable secreta de Railway.
+3. Configurar en el servicio Railway `MAIL_PROVIDER=RESEND`, `RESEND_API_KEY=<clave secreta>` y `MAIL_SENDER_EMAIL=contacto@plazado.com`. No pegar la clave en conversaciones, Git ni documentos. Volver a desplegar.
+4. Verificar `/api/health/ready`: proveedor RESEND, Firestore cargado, administrador Firebase y proveedor de correo verificado. La API acepta el correo para envío; esto no confirma recepción en la bandeja. Validar la recepción mediante el registro de un usuario real autorizado.
+5. Antes del piloto, hacer privado el repositorio y revisar los secretos y datos históricos expuestos. Los once archivos fueron preservados y retirados del árbol actual; continúan en el historial Git. La conexión instalada no tiene permisos de administración para cambiar la visibilidad.
+
+Las reclamaciones ahora se guardan de forma atómica junto con el bloqueo del pedido. Abrir un caso rechaza una liquidación pendiente que incluya el pedido y libera la reserva; el administrador debe revisar los casos antes de volver a solicitarla. El cierre requiere una resolución documentada y no afirma haber realizado un reembolso. El historial de reclamaciones no se elimina.
+
+No se ejecutaron compras, registros, reembolsos ni correos de prueba sobre datos reales. La activación externa, la recepción real del código y una comprobación de restauración del respaldo de Firestore siguen pendientes; el archivo preservado del repositorio no sustituye ese respaldo.
