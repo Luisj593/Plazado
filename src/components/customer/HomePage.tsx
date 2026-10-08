@@ -3,7 +3,6 @@ import { useApp } from '../../context/AppContext';
 import { DominicanFlag } from '../common/DominicanFlag';
 import { isProductPubliclyVisible, isStorePubliclyVisible } from '../../types';
 import { CategoryIcon, getCategoryEmoji } from '../../utils/categoryIcons';
-import { INITIAL_CATEGORIES } from '../../data/initialData';
 import { 
   Store, 
   ArrowRight, 
@@ -159,6 +158,19 @@ export const HomePage: React.FC = () => {
       .filter(p => typeof p.promoPrice === 'number' && p.promoPrice > 0 && p.promoPrice < p.price)
       .slice(0, 8),
     [publishedProducts]
+  );
+
+  const trendingCategories = useMemo(
+    () => mainCategories
+      .map(category => ({
+        category,
+        count: publishedProducts.filter(product => product.categoryId === category.id).length,
+        image: publishedProducts.find(product => product.categoryId === category.id && product.images?.[0])?.images?.[0]
+      }))
+      .filter(item => item.count > 0)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6),
+    [mainCategories, publishedProducts]
   );
 
   const handleBannerClick = (banner: any) => {
