@@ -235,7 +235,7 @@ export const HomePage: React.FC = () => {
 
                   <div className="flex flex-wrap items-center gap-2.5 pt-1">
                     <button type="button" onClick={() => activeHeroProduct ? setSelectedProductId(activeHeroProduct.id) : setCurrentView('catalog')} className="px-5 py-3 bg-[#f20544] hover:bg-[#d9043d] text-white rounded-full text-sm font-bold shadow-md transition-all flex items-center gap-2"><ShoppingCart className="w-4 h-4" /><span>{activeHeroProduct ? 'Ver producto' : 'Comprar ahora'}</span><ArrowRight className="w-4 h-4" /></button>
-                    <button type="button" onClick={() => setCurrentView('sell_with_us')} className="px-5 py-3 bg-white dark:bg-stone-800 text-slate-800 dark:text-white rounded-full text-sm font-bold border border-slate-300 dark:border-stone-700 flex items-center gap-2"><Store className="w-4 h-4 text-[#f20544]" />Crear mi tienda</button>
+
                   </div>
                 </div>
               </div>
