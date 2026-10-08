@@ -200,7 +200,7 @@ interface AppContextType {
   paymentTransactions: PaymentTransaction[];
   financialAuditLogs: FinancialAuditLog[];
   requestSettlement: (storeId: string, notes?: string) => Promise<{ success: boolean; message: string }>;
-  processSettlement: (settlementId: string, status: Settlement['status'], reference?: string) => void;
+  processSettlement: (settlementId: string, status: Settlement['status'], reference?: string) => Promise<boolean>;
   runWeeklySettlements: () => Promise<{ success: boolean; message: string; settlementsCreated?: Settlement[]; totalLiquidated?: number }>;
   refreshFinancials: () => Promise<void>;
 
@@ -1812,7 +1812,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const processSettlement = async (settlementId: string, status: Settlement['status'], reference?: string) => {
-    if(currentUser?.role!=='SUPER_ADMIN') {showNotification('Acceso denegado','error');return;}
+    if(currentUser?.role!=='SUPER_ADMIN') {showNotification('Acceso denegado','error');return false;}
     try {
       const res=await api.processSettlement(settlementId,status,reference);
       if(!res.success || !res.settlement) throw Error('No se confirmó el cambio de liquidación');
@@ -1820,7 +1820,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const boot=await api.getBootstrap().catch(()=>null);
       if(boot?.data) applyServerState(boot.data,boot.version || 1);
       showNotification('Liquidación guardada correctamente','success');
-    } catch(error:any) {showNotification(error.message || 'No se guardó la liquidación','error');}
+      return true;
+    } catch(error:any) {showNotification(error.message || 'No se guardó la liquidación','error');return false;}
   };
 
   const deleteSettlement = async (settlementId: string) => {

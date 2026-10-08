@@ -67,30 +67,7 @@ export const INITIAL_STORES: Store[] = [];
 
 export const INITIAL_PRODUCTS: Product[] = [];
 
-export const INITIAL_USERS: User[] = [
-  {
-    id: 'user-super-admin',
-    name: 'Luis Jiménez',
-    email: 'Luis.jimenez@msn.com',
-    role: 'SUPER_ADMIN',
-    phone: '809-449-3325',
-    avatar: '',
-    passwordHash: '$2b$10$976iN/8lgyrlwBQUknbEcuPeBWn.SReKDTPI07KT0QDMiwNpHGh6K', // Matthias8325 (bcrypt)
-    addresses: [],
-    createdAt: '2026-01-01T00:00:00Z'
-  },
-  {
-    id: 'user-super-admin-2',
-    name: 'Luis Jiménez',
-    email: 'luiss.jimeness@gmail.com',
-    role: 'SUPER_ADMIN',
-    phone: '809-449-3325',
-    avatar: '',
-    passwordHash: '$2b$10$976iN/8lgyrlwBQUknbEcuPeBWn.SReKDTPI07KT0QDMiwNpHGh6K', // Matthias8325 (bcrypt)
-    addresses: [],
-    createdAt: '2026-01-01T00:00:00Z'
-  }
-];
+export const INITIAL_USERS: User[] = [];
 
 export const INITIAL_ORDERS: Order[] = [];
 
@@ -202,10 +179,12 @@ export const DEFAULT_ANDROID_APP_CONFIG: AndroidAppConfig = {
 
 export const INITIAL_SETTINGS: SystemSettings = {
   platformName: 'PlazaDO.com',
-  legalBusinessName: 'PlazaDO Soluciones Tecnológicas SRL',
-  rnc: '132-94812-3',
-  contactEmail: 'Luis.jimenez@msn.com',
-  contactPhone: '809-555-7529',
+  legalEntityRegistered: false,
+  legalBusinessName: '',
+  legalAddress: '',
+  rnc: '',
+  contactEmail: 'contacto@plazado.com',
+  contactPhone: '',
   whatsappCommercial: '809-449-3325', // Solicitado en el prompt
   plazaCommissionRate: 0.0005, // 0.05% solicitado en el prompt (Monto * 0.0005)
   defaultCommissionRate: 0.0005, // 0.05%
@@ -255,123 +234,9 @@ export const INITIAL_SETTINGS: SystemSettings = {
   }
 };
 
-export const INITIAL_AUDIT_LOGS: AuditLog[] = [
-  {
-    id: 'log-platform-init',
-    userId: 'user-super-admin',
-    userName: 'Luis Jiménez',
-    userRole: 'SUPER_ADMIN',
-    action: 'PLATFORM_PRODUCTION_READY',
-    affectedRecord: 'Sistema Operativo PlazaDO.com',
-    newValue: 'Entorno operativo iniciado para la República Dominicana',
-    ipAddress: '190.166.44.12',
-    timestamp: '2026-09-19T10:00:00Z'
-  }
-];
+export const INITIAL_AUDIT_LOGS: AuditLog[] = [];
 
-export const INITIAL_PAYMENT_GATEWAYS: PaymentGatewayConfig[] = [
-  {
-    id: 'azul',
-    providerKey: 'AZUL',
-    providerName: 'AZUL (Servicios Digitales Popular)',
-    accountCommercialName: 'Plazado Dominicana SRL',
-    merchantId: '39038540019',
-    affiliationNumber: '84729103',
-    currency: 'DOP',
-    associatedBankAccount: {
-      bank: 'Banco Popular Dominicano',
-      accountType: 'Corriente',
-      accountNumber: '8192847192',
-      accountHolder: 'Plazado Dominicana SRL',
-      rncOrCedula: '1-32-48921-1'
-    },
-    isActive: true,
-    environment: 'PRODUCTION',
-    webhookUrl: 'https://plazado.com/api/payments/webhook',
-    credentials: {
-      authKey: '••••••••8492',
-      merchantSecret: '••••••••2910',
-      hasCredentials: true
-    },
-    lastModified: '2026-09-19T12:00:00Z',
-    notes: 'Cuenta receptora principal oficial de Plazado.com para pagos con tarjeta en RD.'
-  },
-  {
-    id: 'cardnet',
-    providerKey: 'CARDNET',
-    providerName: 'CardNET (Consorcio de Tarjetas Dominicanas)',
-    accountCommercialName: 'Plazado Dominicana SRL',
-    merchantId: '928341029',
-    affiliationNumber: '5581920',
-    currency: 'DOP',
-    associatedBankAccount: {
-      bank: 'Banco de Reservas (Banreservas)',
-      accountType: 'Corriente',
-      accountNumber: '2409182391',
-      accountHolder: 'Plazado Dominicana SRL',
-      rncOrCedula: '1-32-48921-1'
-    },
-    isActive: false,
-    environment: 'SANDBOX',
-    webhookUrl: 'https://plazado.com/api/payments/cardnet/webhook',
-    credentials: {
-      apiKey: '••••••••1049',
-      hasCredentials: true
-    },
-    lastModified: '2026-09-19T12:00:00Z',
-    notes: 'Gateway secundario dominicano para contingencias y balanceo.'
-  },
-  {
-    id: 'stripe',
-    providerKey: 'STRIPE',
-    providerName: 'Stripe Payments International',
-    accountCommercialName: 'Plazado Dominicana SRL',
-    merchantId: 'acct_1PlazadoDoIntl',
-    affiliationNumber: 'STRIPE-INTL',
-    currency: 'USD',
-    associatedBankAccount: {
-      bank: 'Banco Popular Dominicano',
-      accountType: 'Corriente',
-      accountNumber: '7182930192',
-      accountHolder: 'Plazado Dominicana SRL',
-      rncOrCedula: '1-32-48921-1'
-    },
-    isActive: false,
-    environment: 'SANDBOX',
-    webhookUrl: 'https://plazado.com/api/payments/stripe/webhook',
-    credentials: {
-      secretKey: '••••••••9941',
-      hasCredentials: true
-    },
-    lastModified: '2026-09-19T12:00:00Z',
-    notes: 'Procesador internacional para tarjetas de crédito extranjeras y transacciones en USD.'
-  },
-  {
-    id: 'paypal',
-    providerKey: 'PAYPAL',
-    providerName: 'PayPal Commerce Platform',
-    accountCommercialName: 'Plazado Pay',
-    merchantId: 'PAYPAL-PLAZADO-RD',
-    affiliationNumber: 'PP-88219',
-    currency: 'USD',
-    associatedBankAccount: {
-      bank: 'Banco BHD',
-      accountType: 'Corriente',
-      accountNumber: '1928340192',
-      accountHolder: 'Plazado Dominicana SRL',
-      rncOrCedula: '1-32-48921-1'
-    },
-    isActive: false,
-    environment: 'SANDBOX',
-    webhookUrl: 'https://plazado.com/api/payments/paypal/webhook',
-    credentials: {
-      token: '••••••••7732',
-      hasCredentials: true
-    },
-    lastModified: '2026-09-19T12:00:00Z',
-    notes: 'Recepción de pagos mediante monedero digital PayPal.'
-  }
-];
+export const INITIAL_PAYMENT_GATEWAYS: PaymentGatewayConfig[] = [];
 
 export const INITIAL_AD_PLACEMENTS: AdPlacement[] = [
   {
@@ -439,48 +304,4 @@ export const INITIAL_AD_PLACEMENTS: AdPlacement[] = [
   }
 ];
 
-export const INITIAL_ADVERTISEMENTS: Advertisement[] = [
-  {
-    id: 'ad-plazado-vender',
-    title: 'Abre tu tienda en Plazado.com',
-    description: 'Vende a toda la República Dominicana. Registro gratuito, vitrina digital y pagos garantizados cada viernes.',
-    type: 'INTERNAL',
-    advertiserName: 'Plazado.com Oficial',
-    placement: 'HOME_TOP',
-    startDate: '2026-01-01',
-    endDate: '2027-12-31',
-    imageUrl: 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=1600&auto=format&fit=crop&q=80',
-    ctaText: 'Registrar Mi Tienda',
-    targetUrl: '/registro-tienda',
-    targetWindow: '_self',
-    priority: 10,
-    targetDevice: 'ALL',
-    isActive: true,
-    impressions: 1420,
-    clicks: 168,
-    order: 1,
-    createdAt: '2026-09-19T10:00:00Z'
-  },
-  {
-    id: 'ad-plazado-envios',
-    title: 'Envíos Rápidos en Todo el País',
-    description: 'Cobertura garantizada en el Gran Santo Domingo, Santiago y todas las provincias con entrega segura.',
-    type: 'INTERNAL',
-    advertiserName: 'Plazado.com Oficial',
-    placement: 'HOME_MIDDLE',
-    startDate: '2026-01-01',
-    endDate: '2027-12-31',
-    imageUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1600&auto=format&fit=crop&q=80',
-    ctaText: 'Conocer Políticas de Envío',
-    targetUrl: '/politicas',
-    targetWindow: '_self',
-    priority: 8,
-    targetDevice: 'ALL',
-    isActive: true,
-    impressions: 980,
-    clicks: 84,
-    order: 2,
-    createdAt: '2026-09-19T10:00:00Z'
-  }
-];
-
+export const INITIAL_ADVERTISEMENTS: Advertisement[] = [];

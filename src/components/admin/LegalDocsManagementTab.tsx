@@ -204,8 +204,8 @@ export const LegalDocsManagementTab: React.FC = () => {
         categoryLabel: doc.categoryLabel,
         description: doc.description,
         summaryPoints: doc.summaryPoints,
-        legalBusinessName: systemSettings.legalBusinessName,
-        rnc: systemSettings.rnc,
+        legalBusinessName: systemSettings.legalEntityRegistered ? systemSettings.legalBusinessName : 'Plazado.com',
+        rnc: systemSettings.legalEntityRegistered ? systemSettings.rnc : '',
         contactEmail: systemSettings.contactEmail,
         whatsappCommercial: systemSettings.whatsappCommercial
       });

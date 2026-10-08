@@ -631,6 +631,8 @@ export interface SystemMailConfig {
 
 export interface SystemSettings {
   platformName: string;
+  legalEntityRegistered?: boolean;
+  legalAddress?: string;
   legalBusinessName: string;
   rnc: string;
   contactEmail: string;

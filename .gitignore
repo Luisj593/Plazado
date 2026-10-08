@@ -13,3 +13,5 @@ data/backups/*.json
 server/data_snapshot.json
 server.js
 server.js.map
+
+server/stores_snapshot.json

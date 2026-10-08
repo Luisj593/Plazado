@@ -20,7 +20,7 @@ export const PolicyModal: React.FC = () => {
     title = 'Términos y Condiciones para Clientes Compradores';
     content = `
 ### 1. Objeto y Alcance
-PlazaDO.com es una plataforma tecnológica multi-vendedor operada por ${systemSettings.legalBusinessName} (RNC: ${systemSettings.rnc}) en la República Dominicana. PlazaDO actúa como intermediario tecnológico que facilita el encuentro comercial entre compradores y vendedores independientes o comercios formalmente registrados.
+PlazaDO.com es una plataforma tecnológica multi-vendedor ${systemSettings.legalEntityRegistered && systemSettings.legalBusinessName ? `operada por ${systemSettings.legalBusinessName}${systemSettings.rnc ? ` (RNC: ${systemSettings.rnc})` : ''}` : 'bajo el nombre comercial Plazado.com'} en la República Dominicana. PlazaDO actúa como intermediario tecnológico que facilita el encuentro comercial entre compradores y vendedores independientes o comercios formalmente registrados.
 
 ### 2. Responsabilidad sobre Productos y Envíos
 Conforme a la Ley No. 358-05 de Protección de los Derechos del Consumidor o Usuario en la República Dominicana:
@@ -114,8 +114,8 @@ PlazaDO.com opera con una comisión comercial fija del **5%** sobre las ventas g
         categoryLabel: matchedDoc?.categoryLabel || 'Documento Oficial',
         description: matchedDoc?.description || title,
         summaryPoints: matchedDoc?.summaryPoints,
-        legalBusinessName: systemSettings.legalBusinessName,
-        rnc: systemSettings.rnc,
+        legalBusinessName: systemSettings.legalEntityRegistered ? systemSettings.legalBusinessName : 'Plazado.com',
+        rnc: systemSettings.legalEntityRegistered ? systemSettings.rnc : '',
         contactEmail: systemSettings.contactEmail,
         whatsappCommercial: systemSettings.whatsappCommercial,
         fullContent: content

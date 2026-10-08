@@ -62,3 +62,12 @@ Piloto con pago contra entrega antes de las 17:00 America/Santo_Domingo. Tarjeta
 - Cambiar la contraseña invalida sesiones anteriores; las cuentas existentes conservan sus datos.
 - `/api/health/ready` expone únicamente estados de Firebase Admin, carga durable y SMTP configurado/autenticado; no reemplaza la validación de un flujo real por el operador ni la comprobación de copias externas.
 - El incidente de respaldos en Git, identificación legal y credenciales/roles del entorno siguen requiriendo comprobación operativa. No se ha certificado producción abierta.
+
+## Cuarta entrega: publicación y seguridad del repositorio
+- Conservar una copia privada verificable de los once JSON versionados antes de retirarlos del árbol actual. El archivo ZIP incluye los SHA de Git y fue comprobado byte a byte. No es una copia reciente de Firestore ni sustituye un respaldo externo del entorno operativo.
+- Retirar los JSON sensibles del código y excluir snapshots/cachés de Git. Conservar la base real en Firestore; no ejecutar borrados ni restauraciones sobre producción.
+- Retirar cuentas, contraseñas, pasarelas y publicidad de ejemplo de los valores iniciales. Arranque sin registros de ejemplo; un fallo de lectura durable no equivale a colección vacía.
+- El operador confirmó que aún no hay empresa registrada ni RNC: publicación de razón social/RNC es opcional y configurable más adelante. No mostrar los valores previos de ejemplo.
+- La web describe el piloto contra entrega y muestra la comisión configurada. El panel no confirma un desembolso cuando el servidor lo rechaza.
+- Verificación operativa tras tercera entrega: Firebase Admin=true, Firestore cargado=true, SMTP configurado=true, autenticación SMTP=false. El piloto sigue bloqueado por correo hasta resolver la causa.
+- Pendiente obligatorio: hacer privado el repositorio o sanear su historial y revisar credenciales expuestas. Retirar archivos del árbol actual NO elimina sus versiones anteriores; la conexión GitHub actual no ofrece administración de visibilidad.
