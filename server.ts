@@ -109,7 +109,7 @@ async function startServer() {
   let smtpFailureReason:string | undefined;
   const verifyPilotMail = async () => {
     const config=db.getSystemSettings().mailConfig;
-    if(!isMailConfigured(config)) {smtpVerified=false;smtpFailureReason=mailProvider()==='RESEND'?'MISSING_RESEND_API_KEY':'MISSING_SMTP_PASS';return;}
+    if(!isMailConfigured(config)) {smtpVerified=false;smtpFailureReason=mailProvider()==='MANUAL'?'MANUAL_DELIVERY_REQUIRED':mailProvider()==='RESEND'?'MISSING_RESEND_API_KEY':'MISSING_SMTP_PASS';return;}
     const result=await verifySmtpConnection(config);
     smtpVerified=result.ok;smtpFailureReason=result.reason;
   };
@@ -193,8 +193,9 @@ async function startServer() {
   app.get('/api/health/ready', (_req:Request,res:Response) => {
     const settings=db.getSystemSettings(), mail=settings.mailConfig;
     const checks={firebaseAdmin:firestoreRepo.isAdminReady(),firestoreLoaded:db.isFirestoreConnected(),smtpConfigured:isMailConfigured(mail),smtpVerified};
-    const ready=Object.values(checks).every(Boolean);
-    res.status(ready?200:503).json({status:ready?'ready':'blocked',mode:'CASH_ON_DELIVERY_PILOT',mailProvider:mailProvider(),checks,...(!smtpVerified && smtpFailureReason ? {smtpFailureReason}:{}),timestamp:new Date().toISOString()});
+    const manual=mailProvider()==='MANUAL';
+    const ready=checks.firebaseAdmin && checks.firestoreLoaded && (manual || (checks.smtpConfigured && checks.smtpVerified));
+    res.status(ready?200:503).json({status:ready?'ready':'blocked',mode:'CASH_ON_DELIVERY_PILOT',registrationDelivery:manual?'SUPER_ADMIN_MANUAL':'AUTOMATIC_EMAIL',automaticEmailReady:checks.smtpVerified,mailProvider:mailProvider(),checks,...(!smtpVerified && smtpFailureReason ? {smtpFailureReason}:{}),timestamp:new Date().toISOString()});
   });
 
   // Global Bootstrap (Single-call fast hydration for all clients/devices)
@@ -1239,7 +1240,7 @@ async function startServer() {
       res.json({
         success: true,
         delivered: mailResult.delivered,
-        message: `Código de confirmación enviado exitosamente desde ${mailConfig.senderEmail || 'contacto@plazado.com'} a tu correo ${cleanEmail}. Revisa tu bandeja de entrada o spam.`,
+        message: mailResult.delivered ? `Código aceptado para envío a ${cleanEmail}.` : 'Código guardado. Solicítalo al Super Admin mediante contacto@plazado.com.',
         senderEmail: mailConfig.senderEmail || 'contacto@plazado.com',
         expiresInSeconds: 900
       });
@@ -1324,7 +1325,7 @@ async function startServer() {
       res.json({
         success: true,
         delivered: mailResult.delivered,
-        message: mailResult.delivered ? `Código enviado a ${cleanEmail}. Revisa tu correo o spam.` : 'El código se guardó, pero no se pudo enviar el correo. Contacta a soporte.',
+        message: mailResult.delivered ? `Código enviado a ${cleanEmail}. Revisa tu correo o spam.` : 'Código guardado. Solicítalo al Super Admin mediante contacto@plazado.com.',
         cooldownSeconds: COOLDOWN_SECONDS,
         expiresInSeconds: 900
       });
@@ -1414,16 +1415,17 @@ async function startServer() {
         return res.status(404).json({ success: false, message: 'Usuario no encontrado.' });
       }
 
-      const code = user.verification?.code;
+      const storedCode = user.verification?.code;
       const codeExpiresAt = user.verification?.codeExpiresAt || 0;
-      const isExpired = Date.now() > codeExpiresAt;
+      const isExpired = Date.now() >= codeExpiresAt;
+      const code=!isExpired && !user.isEmailVerified && (user.verification?.attempts || 0)<5 ? storedCode : undefined;
 
       // Register strictly in AuditLog
       db.addAuditLog(
         'ADMIN_CONSULT_VERIFICATION_CODE',
         user.id,
         user.email,
-        `Super Admin (${admin.email}) consultó el código de verificación de ${user.name} (${user.email}). Código activo: ${code || 'N/A'}.`,
+        `Super Admin (${admin.email}) consultó el código de verificación de ${user.name} (${user.email}). Código consultado para asistencia; no se registra su valor.`,
         { id: admin.id, name: admin.email, role: 'SUPER_ADMIN' }
       );
 
@@ -1476,7 +1478,7 @@ async function startServer() {
         newCode: regenRes.code,
         expiresAt: regenRes.expiresAt,
         delivered: mailResult.delivered,
-        message: `Nuevo código generado (${regenRes.code}) y enviado a ${cleanEmail} desde contacto@plazado.com.`
+        message: mailResult.delivered ? `Nuevo código aceptado para envío a ${cleanEmail}.` : 'Código guardado. Cópialo y envíalo manualmente desde contacto@plazado.com. Vence en 15 minutos.'
       });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error generando nuevo código' });
@@ -1794,7 +1796,7 @@ async function startServer() {
         name: customerUser.name,
         accountType: 'CUSTOMER',
         delivered: mailResult.delivered,
-        message: mailResult.delivered ? `Código enviado a ${cleanEmail}. Introduce el código recibido.` : 'Tu registro pendiente fue guardado, pero no se pudo enviar el correo. Reintenta el envío o solicita asistencia a contacto@plazado.com.',
+        message: mailResult.delivered ? `Código enviado a ${cleanEmail}. Introduce el código recibido.` : 'Tu registro pendiente fue guardado. Solicita tu código al Super Admin mediante contacto@plazado.com para completarlo.',
         expiresInSeconds: 900
       });
     } catch (err: any) {
@@ -1962,7 +1964,7 @@ async function startServer() {
         storeName: data.storeName.trim(),
         accountType: 'STORE',
         delivered: mailResult.delivered,
-        message: mailResult.delivered ? `Código enviado a ${cleanEmail}. Introduce el código recibido.` : 'El registro pendiente fue guardado, pero el correo no pudo enviarse. Reintenta o solicita asistencia a contacto@plazado.com.',
+        message: mailResult.delivered ? `Código enviado a ${cleanEmail}. Introduce el código recibido.` : 'Tu tienda quedó registrada y pendiente de validación. Solicita tu código al Super Admin mediante contacto@plazado.com para completar el registro.',
         expiresInSeconds: 900
       });
     } catch (err: any) {

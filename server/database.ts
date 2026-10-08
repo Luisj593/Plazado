@@ -2492,7 +2492,7 @@ class GlobalDatabase {
       if(code!==verification.code) {verification.attempts++;return {success:false,commitFailure:true,message:'Código incorrecto'};}
       verification.isVerified=true;verification.verifiedAt=new Date().toISOString();verification.code='';verification.codeExpiresAt=0;user.isEmailVerified=true;
       const store=this.memoryData.stores.find(s=>s.id===user.storeId);
-      if(store) store.isEmailVerified=true;
+      if(store) {store.isEmailVerified=true;if(store.status==='APPROVED') store.isPublished=true;}
       return {success:true,message:'Correo verificado. Inicia sesión con tu contraseña.',user};
     });
   }
@@ -2553,7 +2553,7 @@ class GlobalDatabase {
         registeredAt: u.createdAt,
         isEmailVerified: isVerified,
         verificationStatus: status,
-        code: v?.code,
+        code: !isVerified && (v?.codeExpiresAt || 0)>Date.now() && (v?.attempts || 0)<5 ? v?.code : undefined,
         codeExpiresAt: v?.codeExpiresAt,
         attempts: v?.attempts || 0,
         resendCount: v?.resendCount || 0,
@@ -2573,23 +2573,17 @@ class GlobalDatabase {
 
     user.adminApprovalStatus = 'APPROVED';
     user.isApprovedByAdmin = true;
-    user.isEmailVerified = true;
     user.isKycVerified = true;
     user.approvedAt = new Date().toISOString();
     user.approvedBy = adminEmail;
     user.rejectionReason = undefined;
 
-    if (user.verification) {
-      user.verification.isVerified = true;
-      user.verification.verifiedAt = new Date().toISOString();
-    }
-
     if (user.storeId) {
       const store = this.memoryData.stores.find(s => s.id === user.storeId);
       if (store && (store.status === 'PENDING' || store.status === 'IN_REVIEW')) {
         store.status = 'APPROVED';
-        store.isPublished = true;
-        store.isEmailVerified = true;
+        store.isPublished = user.isEmailVerified === true;
+        store.isEmailVerified = user.isEmailVerified === true;
         store.isKycVerified = true;
       }
     }
@@ -2741,6 +2735,8 @@ class GlobalDatabase {
     const clean = email.trim().toLowerCase();
     const user = this.memoryData.users.find(u => u.email.toLowerCase() === clean);
     if (!user) return { success: false, message: 'Usuario no encontrado' };
+
+    if(user.isEmailVerified || user.verification?.isVerified) return {success:false,message:'La cuenta ya fue verificada. No requiere otro código de registro.'};
 
     // Generate cryptographically secure 6-digit code
     const newCode = crypto.randomInt(100000, 1000000).toString();

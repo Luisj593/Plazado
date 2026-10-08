@@ -86,3 +86,12 @@ El operador confirmó Railway Free/Trial/Hobby y eligió correo por HTTPS. SMTP 
 Las reclamaciones ahora se guardan de forma atómica junto con el bloqueo del pedido. Abrir un caso rechaza una liquidación pendiente que incluya el pedido y libera la reserva; el administrador debe revisar los casos antes de volver a solicitarla. El cierre requiere una resolución documentada y no afirma haber realizado un reembolso. El historial de reclamaciones no se elimina.
 
 No se ejecutaron compras, registros, reembolsos ni correos de prueba sobre datos reales. La activación externa, la recepción real del código y una comprobación de restauración del respaldo de Firestore siguen pendientes; el archivo preservado del repositorio no sustituye ese respaldo.
+
+
+## Entrega manual temporal — decisión del operador
+
+El operador pospuso el correo automático hasta poder pagar Railway Pro. El modo predeterminado pasa a `MANUAL` (también seleccionable con `MAIL_PROVIDER=MANUAL`). No requiere Resend ni intenta conexiones SMTP. Los adaptadores automáticos quedan disponibles para más adelante mediante `MAIL_PROVIDER=SMTP` (Pro) o `MAIL_PROVIDER=RESEND` (HTTPS), con credenciales configuradas de forma segura.
+
+Procedimiento: Super Admin → Verificaciones → usuario o tienda pendiente → Preparar envío manual. El servidor consulta el código vigente o guarda uno nuevo si expiró; el panel copia un mensaje con destinatario y vencimiento. Abrir Webmail IONOS, usar contacto@plazado.com y enviar al correo registrado. La plataforma no afirma que copiar el mensaje equivalga a enviarlo. El destinatario introduce el código en el registro; caduca en 15 minutos y se consume una vez. Aprobar documentos no sustituye la verificación OTP. Las cuentas existentes verificadas no se desverifican al solicitar otro código.
+
+`/api/health/ready` muestra explícitamente `registrationDelivery=SUPER_ADMIN_MANUAL` y `automaticEmailReady=false`. La disponibilidad técnica con asistencia manual no certifica producción abierta, respaldo restaurable ni el flujo real completo. Sigue pendiente la revisión operativa de logística/almacén, recuperación de acceso, privacidad del historial Git y restauración externa de Firestore.
