@@ -2774,9 +2774,18 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[PlazaDO Global Server] Running on http://0.0.0.0:${PORT} (Version: ${db.getVersion()})`);
-  });
+  const listenOnPort = (port: number) => {
+    const listener = app.listen(port, '0.0.0.0', () => {
+      console.log(`[PlazaDO Global Server] Listening on 0.0.0.0:${port}`);
+    });
+    listener.on('error', (error) => {
+      console.error(`[PlazaDO] Listener error on port ${port}:`, error);
+      process.exit(1);
+    });
+  };
+  // Preserve the existing Railway domain target (3000) while supporting injected PORT.
+  listenOnPort(PORT);
+  if (PORT !== 3000) listenOnPort(3000);
 }
 
 startServer().catch(err => {
