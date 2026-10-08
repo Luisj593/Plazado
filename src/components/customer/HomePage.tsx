@@ -133,22 +133,22 @@ export const HomePage: React.FC = () => {
     }
   };
 
-  // Preset mapping for categories in the exact order and style of the reference image
-  const visualCategories = [
-    { name: 'Tecnología', icon: '💻', slug: 'tecnologia' },
-    { name: 'Moda', icon: '👕', slug: 'moda' },
-    { name: 'Hogar', icon: '🛋️', slug: 'hogar' },
-    { name: 'Belleza y Cuidado', icon: '💄', slug: 'belleza-cuidado' },
-    { name: 'Deportes', icon: '🏋️', slug: 'deportes' },
-    { name: 'Mascotas', icon: '🐶', slug: 'mascotas' },
-    { name: 'Electrónica', icon: '🎧', slug: 'electronica' },
-    { name: 'Robótica', icon: '🤖', slug: 'robotica' },
-    { name: 'Vehículos', icon: '🚗', slug: 'vehiculos' },
-    { name: 'Juguetes', icon: '🧸', slug: 'juguetes' },
-    { name: 'Salud', icon: '❤️', slug: 'salud' },
-    { name: 'Alimentos y Bebidas', icon: '🛒', slug: 'alimentos-bebidas' },
-    { name: 'Herramientas', icon: '🔧', slug: 'herramientas' },
-  ];
+  // Only real active categories from the platform. Never create visual-only categories.
+  const visualCategories = mainCategories.map(cat => ({
+    id: cat.id,
+    name: cat.name,
+    slug: cat.slug,
+    icon: getCategoryEmoji(cat.slug || cat.id)
+  }));
+
+  // Real published products grouped strictly by their persisted category relationship.
+  const categoryProductGroups = mainCategories
+    .map(category => ({
+      category,
+      products: publishedProducts.filter(product => product.categoryId === category.id)
+    }))
+    .filter(group => group.products.length > 0);
+
 
   return (
     <div className="max-w-[1920px] mx-auto px-0 sm:px-3 lg:px-4 space-y-4 pb-10 sm:pb-14 overflow-x-hidden">
@@ -395,16 +395,11 @@ export const HomePage: React.FC = () => {
 
         {/* Fila Horizontal de Tarjetas Visuales (Idéntica a la referencia) */}
         <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-none">
-          {visualCategories.map((item, idx) => {
-            // Find if this category exists in real database categories
-            const realCat = mainCategories.find(c => c.slug === item.slug || c.name.toLowerCase().includes(item.name.toLowerCase()));
-            const targetSlug = realCat ? realCat.slug : item.slug;
-
-            return (
+          {visualCategories.map((item) => (
               <button
-                key={idx}
+                key={item.id}
                 type="button"
-                onClick={() => handleCategorySelect(targetSlug)}
+                onClick={() => handleCategorySelect(item.slug)
                 className="bg-white dark:bg-stone-900 rounded-xl border border-slate-200/70 dark:border-stone-800 px-3 py-2.5 flex flex-col items-center justify-center text-center hover:border-[#f20544] dark:hover:border-rose-500 hover:shadow-md hover:-translate-y-0.5 transition-all group cursor-pointer min-w-[96px] sm:min-w-[108px] h-[82px]"
                 title={`Explorar ${item.name}`}
               >
@@ -415,8 +410,7 @@ export const HomePage: React.FC = () => {
                   {item.name}
                 </span>
               </button>
-            );
-          })}
+          ))}
 
           {/* Más categorías card */}
           <button
@@ -565,11 +559,15 @@ export const HomePage: React.FC = () => {
                       </h3>
 
                       {/* Calificación por estrellas */}
-                      <div className="flex items-center gap-1 mt-1 text-xs">
-                        <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                        <span className="font-bold text-slate-800 dark:text-stone-200 text-[11px]">{prod.rating ? prod.rating.toFixed(1) : '4.8'}</span>
-                        <span className="text-[10px] text-slate-400 dark:text-stone-500">({prod.reviewCount || 95})</span>
-                      </div>
+                      {typeof prod.rating === 'number' && prod.rating > 0 && (
+                        <div className="flex items-center gap-1 mt-1 text-xs">
+                          <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                          <span className="font-bold text-slate-800 dark:text-stone-200 text-[11px]">{prod.rating.toFixed(1)}</span>
+                          {typeof prod.reviewCount === 'number' && prod.reviewCount > 0 && (
+                            <span className="text-[10px] text-slate-400 dark:text-stone-500">({prod.reviewCount})</span>
+                          )}
+                        </div>
+                      )}
 
                       {/* Nombre de la tienda */}
                       {store && (
@@ -619,6 +617,52 @@ export const HomePage: React.FC = () => {
         )}
 
       </section>
+
+      {/* Productos reales segregados por categoría */}
+      {categoryProductGroups.map(({ category, products: categoryProducts }) => (
+        <section key={category.id} className="space-y-3.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">{getCategoryEmoji(category.slug || category.id)}</span>
+              <h2 className="text-lg sm:text-xl font-black text-slate-950 dark:text-white tracking-tight">{category.name}</h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleCategorySelect(category.slug)}
+              className="text-xs sm:text-sm font-bold text-[#f20544] hover:text-[#d9043d] flex items-center gap-1"
+            >
+              Ver todos <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-2 snap-x scrollbar-none">
+            {categoryProducts.map(prod => {
+              const store = stores.find(s => s.id === prod.storeId);
+              const isFav = favorites.productIds.includes(prod.id);
+              const isOutOfStock = prod.stock <= 0;
+              const hasDiscount = typeof prod.promoPrice === 'number' && prod.promoPrice < prod.price;
+              return (
+                <article key={prod.id} className="min-w-[165px] sm:min-w-[190px] lg:min-w-[210px] max-w-[210px] snap-start bg-white dark:bg-stone-900 rounded-2xl border border-slate-200 dark:border-stone-800 p-2.5 shadow-sm hover:shadow-md transition-all">
+                  <div className="relative aspect-square rounded-xl overflow-hidden bg-white dark:bg-stone-800 cursor-pointer" onClick={() => setSelectedProductId(prod.id)}>
+                    {prod.images?.[0] ? <img src={prod.images[0]} alt={prod.name} loading="lazy" className="w-full h-full object-contain" /> : <Package className="w-10 h-10 text-slate-300 absolute inset-0 m-auto" />}
+                    <button type="button" onClick={(e) => { e.stopPropagation(); toggleFavoriteProduct(prod.id); }} className="absolute top-2 right-2 p-1.5 rounded-full bg-white/90 text-slate-600 shadow-sm">
+                      <Heart className={`w-4 h-4 ${isFav ? 'fill-rose-500 text-rose-500' : ''}`} />
+                    </button>
+                  </div>
+                  <div className="pt-2 space-y-1.5">
+                    <h3 onClick={() => setSelectedProductId(prod.id)} className="font-bold text-xs text-slate-900 dark:text-white line-clamp-2 cursor-pointer">{prod.name}</h3>
+                    {store && <p className="text-[10px] text-slate-500 truncate">{store.name}</p>}
+                    {typeof prod.rating === 'number' && prod.rating > 0 && <div className="text-[10px] text-amber-500 flex items-center gap-1"><Star className="w-3 h-3 fill-current" />{prod.rating.toFixed(1)}{typeof prod.reviewCount === 'number' && prod.reviewCount > 0 ? ` (${prod.reviewCount})` : ''}</div>}
+                    <div className="flex items-end justify-between gap-2 pt-1">
+                      <div>{hasDiscount && <div className="text-[9px] line-through text-slate-400">RD$ {prod.price.toLocaleString()}</div>}<div className="font-black text-sm text-[#f20544]">RD$ {(hasDiscount ? prod.promoPrice! : prod.price).toLocaleString()}</div></div>
+                      <button type="button" disabled={isOutOfStock} onClick={() => addToCart(prod.id, prod.storeId, 1)} className="p-2 rounded-lg bg-[#f20544] text-white disabled:opacity-40"><ShoppingCart className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ))}
 
       {/* ============================================================== */}
       {/* 6. TIENDAS DESTACADAS — ROW DE 6 TIENDAS HORIZONTALES           */}
@@ -722,11 +766,15 @@ export const HomePage: React.FC = () => {
                       <p className="text-[10px] text-slate-400 dark:text-stone-500 truncate">
                         {categoryName}
                       </p>
-                      <div className="flex items-center gap-1 text-[10px] text-amber-500 font-bold mt-0.5">
-                        <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                        <span>{store.rating ? store.rating.toFixed(1) : '4.8'}</span>
-                        <span className="text-slate-400 dark:text-stone-500 font-normal">({store.reviewCount || 120})</span>
-                      </div>
+                      {typeof store.rating === 'number' && store.rating > 0 && (
+                        <div className="flex items-center gap-1 text-[10px] text-amber-500 font-bold mt-0.5">
+                          <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                          <span>{store.rating.toFixed(1)}</span>
+                          {typeof store.reviewCount === 'number' && store.reviewCount > 0 && (
+                            <span className="text-slate-400 dark:text-stone-500 font-normal">({store.reviewCount})</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
