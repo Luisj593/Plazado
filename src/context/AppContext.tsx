@@ -1328,7 +1328,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateStoreStatus = async (storeId: string, status: Store['status'], reason?: string) => {
     try {
       const res=await api.updateStoreStatus(storeId,status as StoreStatus,reason);
-      if(!res.success || !res.store) throw Error('No se guardó el cambio de tienda');
+      if(!res.success || !res.store) throw Error((res as { message?: string }).message || 'No se guardó el cambio de tienda');
       setStores(prev=>prev.map(s=>s.id===storeId?res.store:s));
       showNotification('Cambio de tienda guardado','success');
     } catch(error:any) {showNotification(error.message || 'No se guardó el cambio','error');}
@@ -1337,7 +1337,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateStoreDetails = async (storeId: string, data: Partial<Store>) => {
     try {
       const res=await api.updateStore(storeId,data);
-      if(!res.success || !res.store) throw Error('No se guardó el cambio de tienda');
+      if(!res.success || !res.store) throw Error((res as { message?: string }).message || 'No se guardó el cambio de tienda');
       setStores(prev=>prev.map(s=>s.id===storeId?res.store:s));
       showNotification('Cambio de tienda guardado','success');
     } catch(error:any) {showNotification(error.message || 'No se guardó el cambio','error');}
@@ -1346,7 +1346,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const toggleStorePublish = async (storeId: string) => {
     try {
       const res=await api.toggleStorePublish(storeId);
-      if(!res.success || !res.store) throw Error('No se guardó el cambio de tienda');
+      if(!res.success || !res.store) throw Error((res as { message?: string }).message || 'No se guardó el cambio de tienda');
       setStores(prev=>prev.map(s=>s.id===storeId?res.store:s));
       showNotification('Cambio de tienda guardado','success');
     } catch(error:any) {showNotification(error.message || 'No se guardó el cambio','error');}
