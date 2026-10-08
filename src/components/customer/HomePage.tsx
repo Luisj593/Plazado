@@ -431,9 +431,10 @@ export const HomePage: React.FC = () => {
               key={banner.id}
               type="button"
               onClick={() => handleBannerClick(banner)}
-              className={`relative overflow-hidden rounded-2xl min-h-[150px] sm:min-h-[180px] text-left group border border-slate-200 dark:border-stone-800 ${activePromoBanners.length === 1 ? 'md:col-span-3' : activePromoBanners.length === 2 && index === 0 ? 'md:col-span-2' : ''}`}
+              className={`relative overflow-hidden rounded-2xl text-left group border border-slate-200 dark:border-stone-800 bg-slate-50 dark:bg-stone-900 ${activePromoBanners.length === 1 ? 'md:col-span-3' : activePromoBanners.length === 2 && index === 0 ? 'md:col-span-2' : ''}`}
+              style={{ aspectRatio: activePromoBanners.length === 1 ? '16 / 5' : '16 / 9', minHeight: '150px' }}
             >
-              <img src={banner.imageUrl} alt={banner.title} loading="lazy" className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
+              <img src={banner.imageUrl} alt={banner.title} loading="lazy" className="absolute inset-0 w-full h-full object-contain group-hover:scale-[1.01] transition-transform duration-300" />
               <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/25 to-transparent" />
               <div className="relative z-10 p-5 sm:p-6 max-w-[70%] text-white">
                 {banner.badge && <span className="inline-block mb-2 px-2.5 py-1 rounded-full bg-[#f20544] text-[10px] font-black uppercase tracking-wide">{banner.badge}</span>}
