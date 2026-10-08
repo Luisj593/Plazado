@@ -40,6 +40,7 @@ export const RegistrationTermsModal: React.FC<Props> = ({ audience, onClose, onA
         className="flex w-full max-w-3xl max-h-[90dvh] flex-col overflow-hidden rounded-2xl bg-white text-stone-900 shadow-2xl outline-none">
         <header className="flex shrink-0 items-start justify-between gap-3 border-b p-4 sm:p-6">
           <div>
+            <img src="/legal/plazado-logo.png" alt="Plazado" className="mb-2 h-12 w-40 object-cover object-center" />
             <h2 id="registration-terms-title" className="text-lg font-bold">Términos para {audience === 'STORE' ? 'tiendas y vendedores' : 'clientes'}</h2>
             <p className="mt-1 text-xs text-stone-600">Plazado.com · Versión {LEGAL_VERSION}</p>
             <a href={LEGAL_PDF_URL} download className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-red-700"><Download size={16} /> Descargar políticas y términos en PDF</a>

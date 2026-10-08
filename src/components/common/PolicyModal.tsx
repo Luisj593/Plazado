@@ -129,6 +129,7 @@ PlazaDO.com opera con una comisión comercial fija del **5%** sobre las ventas g
         {/* Header */}
         <div className="px-6 py-4 border-b border-stone-200 flex items-center justify-between bg-stone-50">
           <div className="flex items-center gap-2">
+            <img src="/legal/plazado-logo.png" alt="Plazado" className="h-10 w-32 object-cover object-center shrink-0" />
             <ShieldCheck className="w-5 h-5 text-red-600" />
             <h3 className="font-bold text-stone-900 text-sm md:text-base">{title}</h3>
           </div>

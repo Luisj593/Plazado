@@ -99,6 +99,7 @@ export const LegalAndPoliciesPage: React.FC = () => {
       {/* Hero Header */}
       <div className="bg-white rounded-3xl p-6 sm:p-10 border border-stone-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div className="space-y-3 max-w-2xl">
+          <img src="/legal/plazado-logo.png" alt="Plazado" className="h-16 w-52 object-cover object-center" />
           <div className="flex items-center gap-2 flex-wrap">
             <span className="p-2 bg-red-100 text-red-600 rounded-xl">
               <ShieldCheck className="w-6 h-6" />
