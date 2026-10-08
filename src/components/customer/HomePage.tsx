@@ -256,7 +256,7 @@ export const HomePage: React.FC = () => {
                   <img 
                     src={heroMode === 'slider' && activeHeroProduct && !heroImageError ? activeHeroProduct.images[0] : heroImageSrc} 
                     alt={activeHeroProduct ? activeHeroProduct.name : "Compras en Plazado.com República Dominicana"} 
-                    className="w-full h-full object-cover object-center bg-slate-50 dark:bg-stone-900 transition-all duration-700"
+                    className={`w-full h-full object-center bg-slate-50 dark:bg-stone-900 transition-all duration-700 ${heroMode === 'slider' && activeHeroProduct && !heroImageError ? 'object-contain' : 'object-cover'}`}
                     loading="eager"
                     onError={() => setHeroImageError(true)}
                   />
