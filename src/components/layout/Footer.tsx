@@ -1,4 +1,5 @@
 import React from 'react';
+import { SocialLinks } from '../common/SocialLinks';
 import { LEGAL_PDF_URL } from '../../legal/registration';
 import { triggerFileDownload } from '../../utils/fileDownloader';
 import { useApp } from '../../context/AppContext';
@@ -225,6 +226,7 @@ export const Footer: React.FC = () => {
                 <span>Descargar App Android (APK)</span>
               </button>
             </li>
+            <li><SocialLinks links={systemSettings.socialLinks} /></li>
           </ul>
         </div>
       </div>

@@ -630,7 +630,10 @@ export interface SystemMailConfig {
   isConfigured?: boolean;
 }
 
+export type SocialLinks = Partial<Record<'instagram' | 'tiktok' | 'facebook', string>>;
+
 export interface SystemSettings {
+  socialLinks?: SocialLinks;
   platformName: string;
   legalEntityRegistered?: boolean;
   legalAddress?: string;
