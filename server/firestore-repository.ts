@@ -345,6 +345,29 @@ export class FirestoreRepository {
 
   // --- MUTATIONS: ATOMIC WRITES TO FIRESTORE WITH TRAZABILIDAD ---
 
+  public async saveStoreRegistrationAtomic(user: User, store: Store): Promise<void> {
+    if (!this.db || !user.id || !store.id) throw new Error('Firestore no está configurado para registrar tienda');
+    const safeUser = firestoreSafe({ ...user, updatedAt: new Date().toISOString() });
+    const safeStore = firestoreSafe({ ...store, ownerId: user.id, owner_id: user.id, updatedAt: new Date().toISOString() });
+
+    if (this.adminDb) {
+      await this.adminDb.runTransaction(async (tx: any) => {
+        tx.set(this.adminDb.doc(`users/${user.id}`), safeUser, { merge: true });
+        tx.set(this.adminDb.doc(`stores/${store.id}`), safeStore, { merge: true });
+      });
+    } else {
+      // Local/client fallback. Production Railway always uses Admin SDK.
+      await setDoc(doc(this.db, 'users', user.id), safeUser, { merge: true });
+      try {
+        await setDoc(doc(this.db, 'stores', store.id), safeStore, { merge: true });
+      } catch (e) {
+        // Compensate only the user created by this registration attempt.
+        await deleteDoc(doc(this.db, 'users', user.id)).catch(() => undefined);
+        throw e;
+      }
+    }
+  }
+
   public async saveStore(store: Store): Promise<void> {
     if (!this.db || !store.id) throw new Error('Firestore no está configurado para guardar tienda');
     try {
