@@ -97,6 +97,7 @@ export interface GlobalDatabaseData {
 }
 
 class GlobalDatabase {
+  private settingsUpdateQueue: Promise<void> = Promise.resolve();
   private dataDir: string;
   private backupDir: string;
   private dataFilePath: string;
@@ -1503,14 +1504,26 @@ class GlobalDatabase {
     return this.memoryData.systemSettings;
   }
 
-  public updateSystemSettings(settings: Partial<SystemSettings>): SystemSettings {
-    this.memoryData.systemSettings = {
-      ...this.memoryData.systemSettings,
-      ...settings
-    };
-    this.addAuditLog('SETTINGS_UPDATED', 'platform_settings', undefined, 'Configuración global de PlazaDO actualizada por Super Admin');
-    this.commit();
-    return this.memoryData.systemSettings;
+  public updateSystemSettings(settings: Partial<SystemSettings>): Promise<SystemSettings> {
+    const patch = { ...settings };
+    const operation = this.settingsUpdateQueue.then(async () => {
+      for (const key of ['plazaCommissionRate', 'defaultCommissionRate'] as const) {
+        const value = patch[key];
+        if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1)) {
+          throw new Error('El porcentaje de comisión debe ser un número entre 0 y 100.');
+        }
+      }
+      const next = { ...this.memoryData.systemSettings, ...patch };
+      // Firestore is authoritative across Railway restarts and redeployments.
+      // Do not change memory or acknowledge success until the write succeeds.
+      await firestoreRepo.saveSystemSettings(next);
+      this.memoryData.systemSettings = next;
+      this.addAuditLog('SETTINGS_UPDATED', 'platform_settings', undefined, 'Configuración global persistida en Firestore por Super Admin');
+      this.commit();
+      return next;
+    });
+    this.settingsUpdateQueue = operation.then(() => undefined, () => undefined);
+    return operation;
   }
 
   // --- BANNERS ---

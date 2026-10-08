@@ -222,7 +222,7 @@ interface AppContextType {
   addBanner: (banner: Omit<Banner, 'id'>) => void;
   deleteBanner: (id: string) => void;
   systemSettings: SystemSettings;
-  updateSystemSettings: (settings: Partial<SystemSettings>) => void;
+  updateSystemSettings: (settings: Partial<SystemSettings>) => Promise<boolean>;
   auditLogs: AuditLog[];
   addAuditLog: (action: string, record: string, prev?: string, next?: string) => void;
 
@@ -2355,20 +2355,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // --- SYSTEM SETTINGS (Super Admin platform_settings Global) ---
-  const updateSystemSettings = async (settings: Partial<SystemSettings>) => {
+  const updateSystemSettings = async (settings: Partial<SystemSettings>): Promise<boolean> => {
     if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
       showNotification('Acceso restringido al Super Administrador', 'error');
-      return;
+      return false;
     }
     try {
       const res = await api.updateSettings(settings);
-      if (res.success && res.settings) {
-        setSystemSettings(res.settings);
-        showNotification('Configuración global de PlazaDO actualizada con éxito en la base de datos central');
-      }
+      if (!res.success || !res.settings) throw new Error('El servidor no confirmó el guardado');
+      setSystemSettings(res.settings);
+      showNotification('Configuración guardada permanentemente en la base de datos central');
+      return true;
     } catch (e) {
-      setSystemSettings(prev => ({ ...prev, ...settings }));
-      showNotification('Configuración global de PlazaDO actualizada con éxito');
+      showNotification('No se pudo guardar. El porcentaje anterior se conserva; intenta nuevamente.', 'error');
+      return false;
     }
   };
 

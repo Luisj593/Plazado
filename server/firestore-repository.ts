@@ -471,15 +471,16 @@ export class FirestoreRepository {
   }
 
   public async saveSystemSettings(settings: SystemSettings): Promise<void> {
-    if (!this.db) return;
+    if (!this.db) throw new Error('Firestore no está configurado para guardar parámetros');
     try {
       const ref = doc(this.db, 'systemSettings', 'default');
-      await setDoc(ref, {
+      await setDoc(ref, firestoreSafe({
         ...settings,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      }), { merge: true });
     } catch (e) {
       console.error('[FirestoreRepository] Error saving systemSettings:', e);
+      throw e;
     }
   }
 

@@ -197,11 +197,17 @@ export const AdminDashboard: React.FC = () => {
   const [disputeResolutionNote, setDisputeResolutionNote] = useState('');
   const [disputeResolutionStatus, setDisputeResolutionStatus] = useState<'RESOLVED' | 'CLOSED'>('RESOLVED');
 
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+
   // Settings form state
   const [defaultCommRate, setDefaultCommRate] = useState(systemSettings.defaultCommissionRate * 100);
   const [plazaCommRate, setPlazaCommRate] = useState(
     Number(((systemSettings.plazaCommissionRate !== undefined ? systemSettings.plazaCommissionRate : 0.0005) * 100).toFixed(4))
   );
+  useEffect(() => {
+    setPlazaCommRate(Number(((systemSettings.plazaCommissionRate ?? 0.0005) * 100).toFixed(4)));
+    setDefaultCommRate(systemSettings.defaultCommissionRate * 100);
+  }, [systemSettings.plazaCommissionRate, systemSettings.defaultCommissionRate]);
   const [whatsappComm, setWhatsappComm] = useState(systemSettings.whatsappCommercial);
   const [rncVal, setRncVal] = useState(systemSettings.rnc);
   const [businessName, setBusinessName] = useState(systemSettings.legalBusinessName);
@@ -343,9 +349,12 @@ export const AdminDashboard: React.FC = () => {
     setDisputeResolutionNote('');
   };
 
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateSystemSettings({
+    if (isSavingSettings) return;
+    setIsSavingSettings(true);
+    try {
+    await updateSystemSettings({
       plazaCommissionRate: Number(plazaCommRate) / 100,
       defaultCommissionRate: Number(defaultCommRate) / 100,
       whatsappCommercial: whatsappComm,
@@ -362,7 +371,9 @@ export const AdminDashboard: React.FC = () => {
         isConfigured: true
       }
     });
-    showNotification('Configuración global y servicio de correo de PlazaDO.com guardados exitosamente.');
+    } finally {
+      setIsSavingSettings(false);
+    }
   };
 
   return (
@@ -3043,9 +3054,10 @@ ${message}`);
             <div className="pt-4 border-t border-stone-200 flex justify-end">
               <button
                 type="submit"
+                disabled={isSavingSettings}
                 className="px-6 py-2.5 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-bold text-xs shadow-xs"
               >
-                Guardar Parámetros de Plataforma
+                {isSavingSettings ? 'Guardando...' : 'Guardar Parámetros de Plataforma'}
               </button>
             </div>
           </form>
