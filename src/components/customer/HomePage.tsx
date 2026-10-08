@@ -438,8 +438,8 @@ export const HomePage: React.FC = () => {
               <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/25 to-transparent" />
               <div className="relative z-10 p-5 sm:p-6 max-w-[70%] text-white">
                 {banner.badge && <span className="inline-block mb-2 px-2.5 py-1 rounded-full bg-[#f20544] text-[10px] font-black uppercase tracking-wide">{banner.badge}</span>}
-                <h3 className="text-xl sm:text-2xl font-black leading-tight">{banner.title}</h3>
-                {banner.subtitle && <p className="text-xs sm:text-sm text-white/90 mt-1.5 line-clamp-2">{banner.subtitle}</p>}
+                <h3 className="text-2xl sm:text-3xl lg:text-4xl font-black leading-[1.08] tracking-tight drop-shadow-sm">{banner.title}</h3>
+                {banner.subtitle && <p className="text-sm sm:text-base lg:text-lg font-medium text-white/95 mt-2 leading-snug line-clamp-3 drop-shadow-sm">{banner.subtitle}</p>}
                 <span className="inline-flex items-center gap-1 mt-3 text-xs font-bold">Explorar <ArrowRight className="w-3.5 h-3.5" /></span>
               </div>
             </button>
