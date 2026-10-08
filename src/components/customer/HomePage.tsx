@@ -85,7 +85,7 @@ export const HomePage: React.FC = () => {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
-    return shuffled.slice(0, 10);
+    return shuffled;
   }, [publishedProducts]);
 
   useEffect(() => {
@@ -103,6 +103,11 @@ export const HomePage: React.FC = () => {
 
   const heroMode = systemSettings?.homeHeroMode || 'slider';
   const activeHeroProduct = heroMode === 'slider' ? heroProducts[heroSlideIndex] : undefined;
+  const heroOfferDiscount = activeHeroProduct && Number.isFinite(activeHeroProduct.price) &&
+    typeof activeHeroProduct.promoPrice === 'number' && Number.isFinite(activeHeroProduct.promoPrice) &&
+    activeHeroProduct.promoPrice > 0 && activeHeroProduct.promoPrice < activeHeroProduct.price
+    ? Math.round((1 - activeHeroProduct.promoPrice / activeHeroProduct.price) * 10000) / 100
+    : null;
 
   const activeCategories = categories || [];
   const mainCategories = activeCategories.filter(c => !c.parentId);
@@ -207,7 +212,7 @@ export const HomePage: React.FC = () => {
                 <div className="space-y-3 sm:space-y-4">
                   {heroMode === 'slider' && activeHeroProduct && (
                     <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-50 dark:bg-rose-950/40 text-[#f20544] dark:text-rose-400 text-[10px] sm:text-xs font-black uppercase tracking-wide">
-                      <Star className="w-3.5 h-3.5" /> Producto destacado
+                      {heroOfferDiscount !== null ? <><Percent className="w-3.5 h-3.5" /> OFERTA · {heroOfferDiscount.toLocaleString('es-DO')}% de descuento</> : <><Star className="w-3.5 h-3.5" /> Producto destacado</>}
                     </div>
                   )}
                   <h1 className="text-3xl sm:text-4xl lg:text-[46px] font-black text-slate-950 dark:text-white tracking-tight leading-[1.02]">
@@ -230,8 +235,8 @@ export const HomePage: React.FC = () => {
                       )}
                       {activeHeroProduct.description && <p className="text-xs sm:text-sm text-slate-600 dark:text-stone-300 leading-relaxed line-clamp-2">{activeHeroProduct.description}</p>}
                       <div className="flex flex-wrap items-end gap-2.5">
-                        {typeof activeHeroProduct.promoPrice === 'number' && activeHeroProduct.promoPrice > 0 && activeHeroProduct.promoPrice < activeHeroProduct.price ? (
-                          <><span className="text-2xl sm:text-3xl font-black text-[#f20544]">RD$ {activeHeroProduct.promoPrice.toLocaleString()}</span><span className="text-sm text-slate-400 line-through pb-1">RD$ {activeHeroProduct.price.toLocaleString()}</span><span className="mb-1 px-2 py-1 rounded-full bg-[#f20544] text-white text-[10px] font-black">-{Math.round((1 - activeHeroProduct.promoPrice / activeHeroProduct.price) * 100)}%</span></>
+                        {heroOfferDiscount !== null ? (
+                          <><span className="text-2xl sm:text-3xl font-black text-[#f20544]">RD$ {activeHeroProduct.promoPrice!.toLocaleString()}</span><span className="text-sm text-slate-400 line-through pb-1">RD$ {activeHeroProduct.price.toLocaleString()}</span><span className="mb-1 px-2 py-1 rounded-full bg-[#f20544] text-white text-[10px] font-black">-{heroOfferDiscount.toLocaleString('es-DO')}%</span></>
                         ) : <span className="text-2xl sm:text-3xl font-black text-[#f20544]">RD$ {activeHeroProduct.price.toLocaleString()}</span>}
                       </div>
                     </div>
@@ -261,6 +266,13 @@ export const HomePage: React.FC = () => {
                     onError={() => setHeroImageError(true)}
                   />
                   
+                  {heroOfferDiscount !== null && (
+                    <div className="absolute top-4 left-4 z-20 pointer-events-none rounded-xl bg-[#f20544] px-3 py-2 text-white shadow-lg" aria-label={`Oferta: ${heroOfferDiscount.toLocaleString('es-DO')}% de descuento`}>
+                      <span className="block text-xs sm:text-sm font-black tracking-wide">OFERTA</span>
+                      <span className="block text-lg sm:text-xl font-black">-{heroOfferDiscount.toLocaleString('es-DO')}%</span>
+                    </div>
+                  )}
+
                   {heroMode === 'slider' && heroProducts.length > 1 && (
                     <>
                       <button
