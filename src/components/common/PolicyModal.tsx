@@ -1,4 +1,5 @@
 import React from 'react';
+import { PolicyContent } from './PolicyContent';
 import bundle from '../../legal/documents.json';
 import { legalDocumentPdfUrl } from '../../legal/registration';
 import { useApp } from '../../context/AppContext';
@@ -34,7 +35,7 @@ Para proteger la seguridad de tu compra:
 - La validación del código confirma ante la plataforma que la entrega fue completada.
 
 ### 4. Pagos y Reclamaciones
-Los pagos con tarjeta de crédito/débito son procesados a través de pasarelas bancarias autorizadas (AZUL de Servicios Digitales Popular). Ante cualquier discrepancia, puedes abrir una disputa dentro de los primeros 3 días hábiles posteriores a la fecha estimada de entrega.
+Los métodos de pago disponibles se muestran antes de confirmar el pedido. Las tarjetas y transferencias están en preparación y no deben interpretarse como habilitadas por este documento. Ante cualquier discrepancia, puedes abrir una disputa dentro de los primeros 3 días hábiles posteriores a la fecha estimada de entrega.
     `;
   } else if (openPolicySlug === 'store_terms') {
     title = 'Términos y Condiciones para Tiendas y Vendedores Asociados';
@@ -46,7 +47,7 @@ Toda tienda o vendedor independiente debe someter su solicitud con información 
 Cada tienda opera con un identificador único (\`store_id\`). Ningún vendedor podrá visualizar, manipular ni acceder a información de pedidos, clientes o estados financieros pertenecientes a otras tiendas de la plataforma.
 
 ### 3. Comisión por Venta
-- El modelo comercial vigente contempla una comisión del **${(systemSettings.defaultCommissionRate * 100).toFixed(0)}%** sobre el valor bruto de los productos vendidos.
+- El modelo comercial vigente contempla una comisión del **${(systemSettings.defaultCommissionRate * 100).toLocaleString('es-DO', { maximumFractionDigits: 2 })}%** sobre el valor bruto de los productos vendidos.
 - Las tarifas de envío cobradas por la tienda no están sujetas a comisión.
 - No se cobra mensualidad obligatoria de suscripción durante la fase inicial.
 
@@ -58,7 +59,7 @@ Los fondos correspondientes a cada pedido completado pasan a **Balance Disponibl
     content = `
 Conforme a la Ley No. 172-13 sobre Protección Integral de los Datos Personales de la República Dominicana:
 - **Datos Recopilados**: Recabamos nombre, correo, teléfono, direcciones de envío y registros transaccionales para procesar órdenes de compra.
-- **Seguridad en Pagos**: PlazaDO.com NO almacena números completos de tarjetas de crédito ni códigos de seguridad CVV. Todas las transacciones electrónicas se canalizan cifradas mediante la pasarela bancaria AZUL.
+- **Seguridad en Pagos**: PlazaDO.com NO almacena números completos de tarjetas de crédito ni códigos de seguridad CVV. La disponibilidad de una pasarela bancaria se indica en el proceso de compra; no se solicitan datos de tarjeta cuando el método no está habilitado.
 - **No Comercialización**: Tus datos nunca serán vendidos a terceros. Solo se comparten con la tienda vendedora los datos indispensables para ejecutar el despacho (nombre, dirección y teléfono de entrega).
     `;
   } else if (openPolicySlug === 'returns_refunds') {
@@ -74,14 +75,16 @@ Conforme a la Ley No. 172-13 sobre Protección Integral de los Datos Personales 
 El cliente puede ingresar a **Mis Pedidos → Abrir Reclamación**, adjuntando fotografías de evidencia. El comercio dispondrá de 48 horas para subsanar el envío o emitir una reposición. En caso de falta de acuerdo, el Super Administrador de PlazaDO intervendrá para dictaminar el reembolso correspondiente mediante la pasarela original o transferencia bancaria.
     `;
   } else if (openPolicySlug === 'payments') {
-    title = 'Políticas de Pagos y Pasarela AZUL';
+    title = 'Políticas de Pagos';
     content = `
-### Métodos Admitidos:
-- **Tarjetas de Crédito y Débito Visa y Mastercard** procesadas mediante Servicios Digitales Popular (AZUL) bajo cifrado TLS 1.3 y estándares PCI-DSS.
-- **Transferencia Bancaria directa** a las cuentas corporativas de PlazaDO.com en Banco Popular Dominicano o Banreservas.
+### Métodos y disponibilidad:
+- **Tarjetas**: solo están disponibles cuando la pasarela está habilitada en el proceso de compra. La confirmación del pedido no sustituye la confirmación del cobro.
+- **Transferencia bancaria**: utiliza únicamente las instrucciones y cuentas mostradas al finalizar la compra, si este método está habilitado. El pago queda pendiente hasta su verificación.
 - **Pago Contra Entrega (Efectivo)** en comercios y zonas que tengan habilitada dicha cobertura.
 
-Todas las transacciones se realizan en pesos dominicanos (DOP / RD$). Se aplican comprobantes fiscales cuando sean solicitados.
+En efectivo pagas al recibir: Plazado no custodia ese efectivo. Las condiciones de los pagos anticipados, reembolsos y liquidaciones dependen del método habilitado y del estado confirmado del pago.
+
+Todas las transacciones se realizan en pesos dominicanos (DOP / RD$). Consulta con la tienda la emisión del comprobante correspondiente.
     `;
   } else if (matchedDoc) {
     title = matchedDoc.title;
@@ -89,7 +92,7 @@ Todas las transacciones se realizan en pesos dominicanos (DOP / RD$). Se aplican
   } else {
     title = 'Comisión Comercial PlazaDO';
     content = `
-PlazaDO.com opera con una comisión comercial fija del **5%** sobre las ventas generadas por cada tienda. Dicho monto cubre el mantenimiento tecnológico de la plataforma, el soporte a compradores, la seguridad transaccional y la exposición en el catálogo unificado de comercios dominicanos.
+PlazaDO.com opera con una comisión comercial del **${(systemSettings.defaultCommissionRate * 100).toLocaleString('es-DO', { maximumFractionDigits: 2 })}%** sobre las ventas generadas por cada tienda. Dicho monto cubre el mantenimiento tecnológico de la plataforma, el soporte a compradores, la seguridad transaccional y la exposición en el catálogo unificado de comercios dominicanos.
     `;
   }
 
@@ -136,6 +139,7 @@ PlazaDO.com opera con una comisión comercial fija del **5%** sobre las ventas g
             <h3 className="font-bold text-stone-900 text-sm md:text-base">{title}</h3>
           </div>
           <button 
+            aria-label="Cerrar políticas"
             onClick={() => setOpenPolicySlug(null)}
             className="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-200 transition-colors"
           >
@@ -162,7 +166,7 @@ PlazaDO.com opera con una comisión comercial fija del **5%** sobre las ventas g
           </div>
 
           <div className="prose prose-sm max-w-none prose-headings:font-bold prose-headings:text-stone-900 prose-p:text-stone-600 whitespace-pre-line">
-            {content}
+            <PolicyContent content={content} />
           </div>
         </div>
 
@@ -178,6 +182,7 @@ PlazaDO.com opera con una comisión comercial fija del **5%** sobre las ventas g
           </button>
 
           <button
+            aria-label="Cerrar políticas"
             onClick={() => setOpenPolicySlug(null)}
             className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
           >

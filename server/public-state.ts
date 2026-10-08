@@ -1,7 +1,7 @@
 import { isProductPubliclyVisible, isStorePubliclyVisible } from '../src/types';
 
 const pick = (data: any, keys: readonly string[]) => Object.fromEntries(keys.filter(key => Object.hasOwn(data || {}, key)).map(key => [key, data[key]]));
-const publicStoreFields = ['id','name','slug','description','categoryId','logo','banner','province','municipality','address','phone','whatsapp','email','status','isPublished','shippingConfig','rating','reviewCount','isVerified','createdAt','deleted'];
+const publicStoreFields = ['id','name','slug','description','categoryId','logo','banner','province','municipality','address','phone','whatsapp','email','status','isPublished','shippingConfig','rating','reviewCount','isVerified','isKycVerified','createdAt','deleted'];
 export const STORE_EDIT_FIELDS = ['name','slug','ownerName','email','phone','whatsapp','description','categoryId','logo','banner','province','municipality','address','shippingConfig','bankInfo'];
 export const PRODUCT_EDIT_FIELDS = ['name','slug','description','shortDescription','sku','price','promoPrice','stock','minStockAlert','categoryId','subcategoryId','images','status','variants','attributes','specifications'];
 export function editableFields(data: any, fields: readonly string[]) { return pick(data, fields); }
@@ -23,13 +23,18 @@ export function sanitizeMarketplaceState(raw: any, caller: any) {
   const stores = (raw.stores || []).filter((s: any) => admin || s.id === ownStore || isStorePubliclyVisible(s));
   const visibleIds = new Set(stores.map((s: any) => s.id));
   const ownOrder = (o: any) => !!caller && (o.customerId === caller.id || (!!ownStore && o.storeId === ownStore));
+  const reviews = (raw.reviews || []).filter((review: any) => review.isVerifiedPurchase === true && review.isModerated === true && Number.isFinite(review.rating) && review.rating >= 1 && review.rating <= 5);
+  const ratingFor = (field: string, id: string) => {
+    const matching = reviews.filter((review: any) => review[field] === id);
+    return { reviewCount: matching.length, rating: matching.length ? Number((matching.reduce((sum: number, review: any) => sum + review.rating, 0) / matching.length).toFixed(1)) : 0 };
+  };
   const catalog = {
     version: raw.version, lastUpdated: raw.lastUpdated,
-    stores: stores.map((s: any) => admin || s.id === ownStore ? s : pick(s, publicStoreFields)),
-    products: (raw.products || []).filter((p: any) => admin || p.storeId === ownStore || (isProductPubliclyVisible(p) && visibleIds.has(p.storeId))),
+    stores: stores.map((s: any) => admin || s.id === ownStore ? s : {...pick(s, publicStoreFields), ...ratingFor('storeId', s.id)}),
+    products: (raw.products || []).filter((p: any) => admin || p.storeId === ownStore || (isProductPubliclyVisible(p) && visibleIds.has(p.storeId))).map((p: any) => admin || p.storeId === ownStore ? p : {...p, ...ratingFor('productId', p.id)}),
     categories: raw.categories || [], specifications: raw.specifications || [],
     banners: (raw.banners || []).filter((b: any) => admin || b.isActive),
-    coupons: raw.coupons || [], reviews: raw.reviews || [],
+    coupons: raw.coupons || [], reviews: admin ? raw.reviews || [] : reviews,
     systemSettings: publicSettings(raw.systemSettings || {}, admin),
     advertisements: (raw.advertisements || []).filter((a: any) => admin || a.status === 'ACTIVE'),
     adPlacements: raw.adPlacements || [], paymentGateways: [],

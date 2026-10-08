@@ -79,7 +79,7 @@ export const products = pgTable('products', {
   stock: integer('stock').default(0).notNull(),
   status: text('status').notNull().default('active'), // 'active', 'paused', 'draft', 'archived'
   isFeatured: boolean('is_featured').default(false).notNull(),
-  rating: doublePrecision('rating').default(5.0),
+  rating: doublePrecision('rating').default(0),
   reviewCount: integer('review_count').default(0),
   soldCount: integer('sold_count').default(0),
   tags: jsonb('tags').$type<string[]>().default([]),

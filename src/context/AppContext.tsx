@@ -1302,7 +1302,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       owner_id: ownerId,
       status: 'APPROVED',
       isPublished: true,
-      rating: 5.0,
+      rating: 0,
       reviewCount: 0,
       salesCount: 0,
       createdAt: new Date().toISOString()
@@ -1897,11 +1897,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const res = await api.createReview(reviewData);
       if (res.success && res.review) {
         setReviews(prev => [res.review, ...prev]);
+        const boot = await api.getBootstrap().catch(() => null);
+        if (boot?.data) applyServerState(boot.data, boot.version || 1);
         showNotification('Gracias por tu valoración verificada');
-      }
+      } else showNotification(res.message || 'No se pudo guardar la valoración', 'error');
     } catch (e) {
-      const rev: Review = { ...reviewData, id: `rev-${Date.now()}`, isVerifiedPurchase: true, isModerated: true, createdAt: new Date().toISOString() };
-      setReviews(prev => [rev, ...prev]);
+      showNotification('No se pudo guardar la valoración. Intenta nuevamente.', 'error');
     }
   };
 
@@ -1911,7 +1912,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     try {
-      await api.deleteReview(reviewId);
+      const result = await api.deleteReview(reviewId);
+      if (!result.success) { showNotification('No se pudo guardar la moderación', 'error'); return; }
       setReviews(prev => prev.filter(r => r.id !== reviewId));
       showNotification('Reseña eliminada');
     } catch (e) {

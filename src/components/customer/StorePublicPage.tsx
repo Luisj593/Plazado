@@ -245,9 +245,9 @@ export const StorePublicPage: React.FC = () => {
                     <h1 className="text-xl sm:text-2xl font-extrabold text-stone-900 tracking-tight">
                       {store.name}
                     </h1>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    <span title={store.isKycVerified ? "Identidad del comercio validada por la administración; no garantiza cada producto." : "Comercio aprobado para publicar; identidad pendiente de verificación."} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                       <CheckCircle2 className="w-3 h-3" />
-                      Tienda Verificada
+                      {store.isKycVerified ? 'Identidad verificada' : 'Tienda publicada'}
                     </span>
                   </div>
                   <p className="text-xs text-stone-500 flex items-center gap-1.5">
@@ -261,7 +261,7 @@ export const StorePublicPage: React.FC = () => {
               <div className="flex items-center gap-4 text-xs">
                 <div className="flex items-center gap-1 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg text-amber-900 font-bold">
                   <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
-                  <span className="text-sm">{store.rating.toFixed(1)}</span>
+                  <span className="text-sm">{store.reviewCount > 0 && store.rating > 0 ? store.rating.toFixed(1) : 'Sin reseñas'}</span>
                   <span className="text-stone-400 font-normal">({store.reviewCount})</span>
                 </div>
                 <div className="bg-stone-50 border border-stone-200 px-3 py-1.5 rounded-lg text-stone-700 font-semibold">
@@ -383,7 +383,7 @@ export const StorePublicPage: React.FC = () => {
                     <div>
                       <div className="flex items-center gap-1 text-amber-500 text-[11px] font-bold mb-1">
                         <Star className="w-3.5 h-3.5 fill-current" />
-                        <span>{product.rating.toFixed(1)}</span>
+                        <span>{product.reviewCount > 0 && product.rating > 0 ? product.rating.toFixed(1) : 'Sin reseñas'}</span>
                       </div>
                       <h3 
                         onClick={() => setSelectedProductId(product.id)}

@@ -2624,6 +2624,7 @@ export const StoreDashboard: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveProduct} className="space-y-3">
+              <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Antes de publicar, confirma que el título, marca, modelo y fotografías corresponden al mismo producto. Incluye condición, especificaciones y garantía real. Revisa también las descripciones generadas automáticamente.</p>
               <div>
                 <label className="block font-semibold text-stone-700 mb-1">Nombre del Producto *</label>
                 <input

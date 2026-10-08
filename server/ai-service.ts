@@ -37,71 +37,10 @@ function generateDomainDescription(params: GenerateDescriptionParams): Generated
   const cleanName = productName.trim();
   const kwList = keywords ? keywords.split(/[,;\n]+/).map(k => k.trim()).filter(Boolean) : [];
   
-  let hook = '';
-  let body = '';
-  let cta = '';
-  let bulletPoints: string[] = [];
-
-  switch (tone) {
-    case 'technical':
-      hook = `Especificaciones y características principales de ${cleanName}:`;
-      body = `Diseñado para ofrecer el más alto estándar de durabilidad y rendimiento en la categoría de ${categoryName}. ` +
-        `Este artículo cuenta con acabados de primera calidad, garantizando compatibilidad, confiabilidad y satisfacción inmediata. ` +
-        (kwList.length > 0 ? `Aspectos destacados: ${kwList.join(', ')}. ` : '') +
-        `Ideal para uso continuo y exigente en República Dominicana con soporte directo de ${storeName}.`;
-      bulletPoints = [
-        `Garantía de calidad oficial respaldada por ${storeName}`,
-        `Materiales y componentes testeados para máxima vida útil`,
-        kwList[0] ? `Característica clave: ${kwList[0]}` : `Diseño optimizado para alto rendimiento`,
-        `Disponibilidad inmediata con despacho garantizado en todo el país`
-      ];
-      cta = `Adquiérelo ahora con compra protegida y código secreto de entrega en PlazaDO.`;
-      break;
-
-    case 'premium':
-      hook = `Descubre la elegancia y distinción de ${cleanName}.`;
-      body = `Una pieza excepcional seleccionada especialmente por ${storeName} para quienes buscan exclusividad, estilo y confort superior. ` +
-        `Cada detalle ha sido confeccionado con estándares exigentes para superar tus expectativas en ${categoryName}. ` +
-        (kwList.length > 0 ? `Detalles exclusivos: ${kwList.join(', ')}. ` : '') +
-        `Eleva tu experiencia diaria con un producto premium concebido para destacar.`;
-      bulletPoints = [
-        `Edición selecta disponible a través de ${storeName}`,
-        `Acabados refinados y presentación impecable`,
-        kwList[0] ? `Detalle exclusivo: ${kwList[0]}` : `Estilo atemporal y confort garantizado`,
-        `Compra segura con entrega confiable a domicilio en RD`
-      ];
-      cta = `Haz tu pedido hoy y disfruta de una experiencia de compra exclusiva en PlazaDO.com.`;
-      break;
-
-    case 'concise':
-      hook = `${cleanName} — Calidad garantizada.`;
-      body = `${cleanName} disponible en ${storeName}. Excelente opción en ${categoryName} con insuperable relación calidad-precio. ` +
-        (kwList.length > 0 ? `Incluye: ${kwList.join(', ')}. ` : '') +
-        `Listo para entrega rápida a nivel nacional.`;
-      bulletPoints = [
-        `Excelente relación calidad-precio`,
-        `Producto 100% original verificado por ${storeName}`,
-        `Despacho ágil en República Dominicana`
-      ];
-      cta = `Compra de forma rápida y segura en PlazaDO.`;
-      break;
-
-    case 'persuasive':
-    default:
-      hook = `¡Lleva lo mejor con ${cleanName}!`;
-      body = `En ${storeName} te presentamos ${cleanName}, la solución perfecta para quienes buscan calidad, practicidad y estilo en ${categoryName}. ` +
-        `Diseñado pensando en tus necesidades, este producto destaca por su versatilidad, durabilidad y excelente desempeño. ` +
-        (kwList.length > 0 ? `Cuenta con: ${kwList.join(', ')}. ` : '') +
-        `Ya sea para ti o para regalar, es la elección ideal que garantiza satisfacción total desde el primer día.`;
-      bulletPoints = [
-        `Garantía y respaldo directo de ${storeName}`,
-        `Calidad comprobada y excelentes acabados`,
-        kwList[0] ? `Beneficio destacado: ${kwList[0]}` : `Fácil de usar y altamente resistente`,
-        `Entrega rápida y protegida con código de seguridad en PlazaDO`
-      ];
-      cta = `¡No te quedes sin el tuyo! Añádelo a tu carrito y recíbelo cómodamente en tu puerta.`;
-      break;
-  }
+  const hook = tone === 'technical' ? `Conoce ${cleanName}.` : tone === 'concise' ? cleanName : `Descubre ${cleanName} en ${storeName}.`;
+  const body = `${cleanName}, publicado por ${storeName} en ${categoryName}. Revisa las imágenes y los detalles proporcionados por la tienda para elegir tu producto.`;
+  const bulletPoints = kwList.map(keyword => `Detalle indicado por la tienda: ${keyword}`);
+  const cta = 'Consulta la disponibilidad, las especificaciones, la garantía y las condiciones de envío antes de finalizar tu compra.';
 
   const priceNote = (promoPrice && price && promoPrice < price) 
     ? `\n\n🔥 ¡OFERTA ESPECIAL!: Llévatelo por solo RD$ ${promoPrice.toLocaleString()} (Precio regular: RD$ ${price.toLocaleString()}).`

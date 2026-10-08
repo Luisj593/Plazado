@@ -30,7 +30,7 @@ export const SocialLinks: React.FC<{ links?: Links }> = ({ links }) => (
         return href ? (
           <a key={key} href={href} target="_blank" rel="noopener noreferrer" aria-label={`${label} de Plazado`} title={label} className={`${style} text-stone-700 dark:text-stone-200 hover:text-red-600 dark:hover:text-red-400 focus-visible:outline-2 focus-visible:outline-red-500`}>{icon}</a>
         ) : (
-          <span key={key} aria-label={`${label}: enlace pendiente`} title={`${label}: enlace pendiente`} className={`${style} text-stone-400 opacity-50`}>{icon}</span>
+          null
         );
       })}
     </div>

@@ -342,12 +342,12 @@ export const StoresDirectoryPage: React.FC = () => {
 
                         <div className="flex items-center gap-1 text-amber-500 text-xs font-bold shrink-0 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
                           <Star className="w-3.5 h-3.5 fill-current" />
-                          <span>{store.rating ? store.rating.toFixed(1) : '5.0'}</span>
+                          <span>{store.reviewCount > 0 && store.rating > 0 ? store.rating.toFixed(1) : 'Sin reseñas'}</span>
                         </div>
                       </div>
 
                       <p className="text-xs text-stone-600 mt-2 line-clamp-2 leading-relaxed">
-                        {store.description || 'Tienda oficial y verificada en la plataforma PlazaDO.'}
+                        {store.description || 'Tienda publicada en Plazado. Consulta su perfil y condiciones de venta.'}
                       </p>
 
                       {/* Location and Articles */}

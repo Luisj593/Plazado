@@ -978,7 +978,7 @@ const CategoryRowCatalog: React.FC<CategoryRowCatalogProps> = ({
 
                   <div className="flex items-center gap-1 text-amber-500 text-[10px] font-bold mt-1">
                     <Star className="w-3 h-3 fill-current" />
-                    <span>{product.rating ? product.rating.toFixed(1) : '5.0'}</span>
+                    <span>{product.reviewCount > 0 && product.rating > 0 ? product.rating.toFixed(1) : 'Sin reseñas'}</span>
                     <span className="text-stone-400 font-normal">({product.reviewCount || 0})</span>
                   </div>
                 </div>

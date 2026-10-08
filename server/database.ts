@@ -404,7 +404,7 @@ class GlobalDatabase {
         owner_id: ownerId,
         status: store.status || 'APPROVED',
         isPublished: store.isPublished !== undefined ? store.isPublished : true,
-        rating: typeof store.rating === 'number' ? store.rating : 5.0,
+        rating: typeof store.rating === 'number' ? store.rating : 0,
         reviewCount: typeof store.reviewCount === 'number' ? store.reviewCount : 0,
         salesCount: typeof store.salesCount === 'number' ? store.salesCount : 0
       } as Store);
@@ -704,7 +704,7 @@ class GlobalDatabase {
             address: s.address || '',
             status: (s.status as StoreStatus) || 'APPROVED',
             isPublished: s.isPublished !== undefined ? s.isPublished : true,
-            rating: existingIdx !== -1 && typeof this.memoryData.stores[existingIdx].rating === 'number' ? this.memoryData.stores[existingIdx].rating : 5.0,
+            rating: existingIdx !== -1 && typeof this.memoryData.stores[existingIdx].rating === 'number' ? this.memoryData.stores[existingIdx].rating : 0,
             reviewCount: existingIdx !== -1 ? (this.memoryData.stores[existingIdx].reviewCount || 0) : 0,
             salesCount: existingIdx !== -1 ? (this.memoryData.stores[existingIdx].salesCount || 0) : 0,
             shippingConfig: (s.shippingConfig as any) || (existingIdx !== -1 ? this.memoryData.stores[existingIdx].shippingConfig : { type: 'fixed', fixedRate: 200, estimatedDays: '24 a 48 horas', coverageProvinces: [s.province || 'Distrito Nacional'] }),
@@ -1189,7 +1189,7 @@ class GlobalDatabase {
       status: productData.status || 'published',
       reservedStock: 0,
       soldCount: 0,
-      rating: 5.0,
+      rating: 0,
       reviewCount: 0,
       createdAt: new Date().toISOString()
     };
@@ -2332,34 +2332,28 @@ class GlobalDatabase {
     return this.memoryData.reviews;
   }
 
-  public addReview(reviewData: Omit<Review, 'id' | 'createdAt' | 'isVerifiedPurchase' | 'isModerated'>): Review {
-    const newId = `rev-${Date.now()}`;
-    const newReview: Review = {
-      ...reviewData,
-      id: newId,
-      isVerifiedPurchase: true,
-      isModerated: true,
-      createdAt: new Date().toISOString()
-    };
-    this.memoryData.reviews.unshift(newReview);
-    // Recalculate store rating
-    const store = this.memoryData.stores.find(s => s.id === reviewData.storeId);
-    if (store) {
-      const storeRevs = this.memoryData.reviews.filter(r => r.storeId === store.id);
-      const avg = storeRevs.reduce((acc, r) => acc + r.rating, 0) / storeRevs.length;
-      store.rating = Number(avg.toFixed(1));
-      store.reviewCount = storeRevs.length;
-    }
-    this.commit();
-    return newReview;
+  public async addReview(reviewData: Omit<Review, 'id' | 'createdAt' | 'isVerifiedPurchase' | 'isModerated'>): Promise<Review> {
+    return this.runCommerceMutation(() => {
+      const customer = this.memoryData.users.find(u => u.id === reviewData.customerId && u.role === 'CUSTOMER');
+      const product = this.memoryData.products.find(p => p.id === reviewData.productId && p.storeId === reviewData.storeId);
+      const purchased = this.memoryData.orders.some(o => o.customerId === reviewData.customerId && o.storeId === reviewData.storeId && o.status === 'DELIVERED' && o.items.some(item => item.productId === reviewData.productId));
+      if (!customer || !product || !purchased) throw new Error('Solo puedes valorar productos de tus compras entregadas.');
+      if (!Number.isInteger(reviewData.rating) || reviewData.rating < 1 || reviewData.rating > 5) throw new Error('La valoración debe ser un número entero entre 1 y 5.');
+      if (typeof reviewData.comment !== 'string' || reviewData.comment.length > 2000) throw new Error('Comentario inválido: máximo 2000 caracteres.');
+      if (this.memoryData.reviews.some(review => review.customerId === customer.id && review.productId === product.id)) throw new Error('Ya has valorado este producto.');
+      const review: Review = { id: `rev-${encodeURIComponent(customer.id)}-${encodeURIComponent(product.id)}`, customerId: customer.id, customerName: customer.name, productId: product.id, storeId: product.storeId, rating: reviewData.rating, comment: reviewData.comment.trim(), isVerifiedPurchase: true, isModerated: true, createdAt: new Date().toISOString() };
+      this.memoryData.reviews.unshift(review);
+      return review;
+    });
   }
 
-  public deleteReview(reviewId: string): boolean {
-    const idx = this.memoryData.reviews.findIndex(r => r.id === reviewId);
-    if (idx === -1) return false;
-    this.memoryData.reviews.splice(idx, 1);
-    this.commit();
-    return true;
+  public async deleteReview(reviewId: string): Promise<boolean> {
+    return this.runCommerceMutation(() => {
+      const review = this.memoryData.reviews.find(r => r.id === reviewId);
+      if (!review) return false;
+      review.isModerated = false;
+      return true;
+    });
   }
 
   // --- USERS & AUTH ---

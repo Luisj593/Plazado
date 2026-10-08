@@ -90,6 +90,7 @@ export const ProductDetailModal: React.FC = () => {
             )}
           </div>
           <button 
+            aria-label="Cerrar producto"
             onClick={() => setSelectedProductId(null)}
             className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-200 transition-colors"
           >
@@ -130,6 +131,7 @@ export const ProductDetailModal: React.FC = () => {
                 {product.images.map((img, idx) => (
                   <button
                     key={idx}
+                    aria-label={`Ver imagen ${idx + 1} de ${product.name}`}
                     onClick={() => setSelectedImageIndex(idx)}
                     className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all shrink-0 ${
                       selectedImageIndex === idx ? 'border-red-600 ring-2 ring-red-100' : 'border-stone-200 opacity-70 hover:opacity-100'
@@ -145,10 +147,10 @@ export const ProductDetailModal: React.FC = () => {
             <div className="bg-stone-50 rounded-xl p-3.5 border border-stone-200 text-xs space-y-2 text-stone-600">
               <div className="flex items-center gap-2 font-medium text-stone-800">
                 <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Garantía de Entrega PlazaDO con Código Secreto</span>
+                <span>Confirmación de entrega con código</span>
               </div>
               <p className="text-[11px] leading-relaxed text-stone-500">
-                El dinero queda en custodia en PlazaDO hasta que recibas el paquete y valides tu código de 6 dígitos.
+                Comparte tu código únicamente después de recibir y revisar el pedido. En efectivo pagas al recibir; para pagos anticipados, consulta las condiciones del método habilitado al finalizar la compra.
               </p>
             </div>
           </div>
@@ -160,7 +162,7 @@ export const ProductDetailModal: React.FC = () => {
                 <span className="text-xs font-mono font-medium text-stone-400">SKU: {product.sku}</span>
                 <div className="flex items-center gap-1 text-amber-500 text-xs font-bold">
                   <Star className="w-4 h-4 fill-current" />
-                  <span>{product.rating.toFixed(1)}</span>
+                  <span>{product.reviewCount > 0 && product.rating > 0 ? product.rating.toFixed(1) : 'Sin reseñas'}</span>
                   <span className="text-stone-400 font-normal">({product.reviewCount} reseñas)</span>
                 </div>
               </div>

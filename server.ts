@@ -1079,25 +1079,31 @@ async function startServer() {
 
   // --- REVIEWS ---
   app.get('/api/reviews', (req: Request, res: Response) => {
-    res.json({ success: true, reviews: db.getReviews() });
+    res.json({ success: true, reviews: db.getReviews().filter(review => review.isModerated) });
   });
 
-  app.post('/api/reviews', (req: Request, res: Response) => {
+  app.post('/api/reviews', async (req: Request, res: Response) => {
     const caller = getAuthenticatedUser(req);
     if (!caller) return res.status(401).json({ success: false, message: 'No autenticado' });
     if (caller.role !== 'CUSTOMER') return res.status(403).json({ success: false, message: 'Solo clientes pueden publicar reseñas' });
     const safeReview = { ...req.body, userId: caller.id, customerId: caller.id };
-    const rev = db.addReview(safeReview);
-    res.json({ success: true, review: rev, version: db.getVersion() });
+    try {
+      const rev = await db.addReview(safeReview);
+      res.json({ success: true, review: rev, version: db.getVersion() });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error instanceof Error ? error.message : 'No se pudo guardar la reseña' });
+    }
   });
 
-  app.delete('/api/reviews/:id', (req: Request, res: Response) => {
+  app.delete('/api/reviews/:id', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) {
       return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     }
-    const ok = db.deleteReview(req.params.id);
-    res.json({ success: ok, version: db.getVersion() });
+    try {
+      const ok = await db.deleteReview(req.params.id);
+      res.json({ success: ok, version: db.getVersion() });
+    } catch { res.status(503).json({ success: false, message: 'No se pudo guardar la moderación' }); }
   });
 
   // --- USERS & AUTHENTICATION ---
@@ -1886,7 +1892,7 @@ async function startServer() {
         address: (data.address || '').trim(),
         status: 'PENDING', // Pending Super Admin approval
         isPublished: false,
-        rating: 5.0,
+        rating: 0,
         reviewCount: 0,
         salesCount: 0,
         kycData: kycInfo,

@@ -272,7 +272,7 @@ export const api = {
   },
 
   // Reviews
-  async createReview(data: Omit<Review, 'id' | 'createdAt' | 'isVerifiedPurchase' | 'isModerated'>): Promise<{ success: boolean; review: Review; version: number }> {
+  async createReview(data: Omit<Review, 'id' | 'createdAt' | 'isVerifiedPurchase' | 'isModerated'>): Promise<{ success: boolean; review: Review; version: number; message?: string }> {
     return request('/api/reviews', { method: 'POST', body: JSON.stringify(data) });
   },
 

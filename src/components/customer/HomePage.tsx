@@ -135,8 +135,8 @@ export const HomePage: React.FC = () => {
     .filter(group => group.products.length > 0);
 
   const activePromoBanners = useMemo(
-    () => [...(banners || [])].filter(b => b.isActive).sort((a, b) => a.order - b.order),
-    [banners]
+    () => [...(banners || [])].filter(b => b.isActive).map(b => publishedProducts.length < 1000 ? { ...b, title: b.title.replace(/miles de productos/gi, 'productos de tiendas dominicanas'), subtitle: b.subtitle?.replace(/miles de productos/gi, 'productos de tiendas dominicanas') } : b).sort((a, b) => a.order - b.order),
+    [banners, publishedProducts.length]
   );
 
   const offerProducts = useMemo(
@@ -199,7 +199,7 @@ export const HomePage: React.FC = () => {
                   </h1>
 
                   <div className="grid grid-cols-3 gap-2 py-1">
-                    {[[Truck,'Envío rápido'],[ShieldCheck,'Pago seguro'],[Store,'Tiendas verificadas']].map(([Icon,label]: any) => (
+                    {[[Truck,'Envío rápido'],[ShieldCheck,'Pago seguro'],[Store,'Tiendas independientes']].map(([Icon,label]: any) => (
                       <div key={label} className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold text-slate-700 dark:text-stone-200">
                         <span className="w-7 h-7 rounded-full bg-rose-50 dark:bg-rose-950/40 text-[#f20544] flex items-center justify-center shrink-0"><Icon className="w-3.5 h-3.5" /></span><span>{label}</span>
                       </div>
@@ -209,7 +209,7 @@ export const HomePage: React.FC = () => {
                   {heroMode === 'slider' && activeHeroProduct ? (
                     <div className="space-y-2">
                       <button type="button" onClick={() => setSelectedProductId(activeHeroProduct.id)} className="text-left text-lg sm:text-xl font-black text-slate-900 dark:text-white hover:text-[#f20544] transition-colors line-clamp-2">{activeHeroProduct.name}</button>
-                      {typeof activeHeroProduct.rating === 'number' && activeHeroProduct.rating > 0 && (
+                      {typeof activeHeroProduct.rating === 'number' && activeHeroProduct.rating > 0 && activeHeroProduct.reviewCount > 0 && (
                         <div className="flex items-center gap-1.5 text-xs"><Star className="w-4 h-4 fill-amber-400 text-amber-400" /><span className="font-bold text-slate-700 dark:text-stone-200">{activeHeroProduct.rating.toFixed(1)}</span>{typeof activeHeroProduct.reviewCount === 'number' && activeHeroProduct.reviewCount > 0 && <span className="text-slate-400">({activeHeroProduct.reviewCount})</span>}</div>
                       )}
                       {activeHeroProduct.description && <p className="text-xs sm:text-sm text-slate-600 dark:text-stone-300 leading-relaxed line-clamp-2">{activeHeroProduct.description}</p>}
@@ -301,7 +301,7 @@ export const HomePage: React.FC = () => {
                   {heroMode === 'slider' && activeHeroProduct && activeHeroProduct.images?.length > 1 && (
                     <div className="absolute right-3 top-3 z-30 hidden sm:flex flex-col gap-2">
                       {rotation.images.map((image, index) => (
-                        <button key={image + index} type="button" onClick={() => { rotation.selectPhoto(image); }} className="w-14 h-14 lg:w-16 lg:h-16 rounded-xl overflow-hidden bg-white/95 border-2 border-white shadow-md">
+                        <button key={image + index} type="button" aria-label={`Ver imagen ${index + 1}`} onClick={() => { rotation.selectPhoto(image); }} className="w-14 h-14 lg:w-16 lg:h-16 rounded-xl overflow-hidden bg-white/95 border-2 border-white shadow-md">
                           <img src={image} alt={`${activeHeroProduct.name} ${index + 1}`} loading="lazy" className="w-full h-full object-contain" />
                         </button>
                       ))}
@@ -344,7 +344,7 @@ export const HomePage: React.FC = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-6">
             {[
               [Truck, 'Envío rápido', 'Gestionado por cada tienda'],
-              [ShieldCheck, 'Tiendas verificadas', 'Comercios confiables'],
+              [ShieldCheck, 'Tiendas independientes', 'Explora cada comercio'],
               [Lock, 'Pagos seguros', 'Compra protegida'],
               [Headphones, 'Soporte', 'Siempre contigo']
             ].map(([Icon, title, subtitle]: any) => (
@@ -448,7 +448,7 @@ export const HomePage: React.FC = () => {
                     {store && <p className="text-[10px] text-slate-500 truncate mt-1">{store.name}</p>}
                     <div className="flex items-end justify-between gap-2 mt-2">
                       <div><div className="text-[9px] line-through text-slate-400">RD$ {prod.price.toLocaleString()}</div><div className="font-black text-sm text-[#f20544]">RD$ {prod.promoPrice!.toLocaleString()}</div></div>
-                      <button type="button" disabled={prod.stock <= 0} onClick={() => addToCart(prod.id, prod.storeId, 1)} className="p-2 rounded-lg bg-[#f20544] text-white disabled:opacity-40"><ShoppingCart className="w-4 h-4" /></button>
+                      <button type="button" aria-label={`Agregar ${prod.name} al carrito`} disabled={prod.stock <= 0} onClick={() => addToCart(prod.id, prod.storeId, 1)} className="p-2 rounded-lg bg-[#f20544] text-white disabled:opacity-40"><ShoppingCart className="w-4 h-4" /></button>
                     </div>
                   </div>
                 </article>
@@ -584,7 +584,7 @@ export const HomePage: React.FC = () => {
                       </h3>
 
                       {/* Calificación por estrellas */}
-                      {typeof prod.rating === 'number' && prod.rating > 0 && (
+                      {typeof prod.rating === 'number' && prod.rating > 0 && prod.reviewCount > 0 && (
                         <div className="flex items-center gap-1 mt-1 text-xs">
                           <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
                           <span className="font-bold text-slate-800 dark:text-stone-200 text-[11px]">{prod.rating.toFixed(1)}</span>
@@ -687,17 +687,17 @@ export const HomePage: React.FC = () => {
                 <article key={prod.id} className="min-w-[165px] sm:min-w-[190px] lg:min-w-[210px] max-w-[210px] snap-start bg-white dark:bg-stone-900 rounded-2xl border border-slate-200 dark:border-stone-800 p-2.5 shadow-sm hover:shadow-md transition-all">
                   <div className="relative aspect-square rounded-xl overflow-hidden bg-white dark:bg-stone-800 cursor-pointer" onClick={() => setSelectedProductId(prod.id)}>
                     {prod.images?.[0] ? <img src={prod.images[0]} alt={prod.name} loading="lazy" className="w-full h-full object-contain" /> : <Package className="w-10 h-10 text-slate-300 absolute inset-0 m-auto" />}
-                    <button type="button" onClick={(e) => { e.stopPropagation(); toggleFavoriteProduct(prod.id); }} className="absolute top-2 right-2 p-1.5 rounded-full bg-white/90 text-slate-600 shadow-sm">
+                    <button type="button" aria-label={`Guardar ${prod.name} en favoritos`} onClick={(e) => { e.stopPropagation(); toggleFavoriteProduct(prod.id); }} className="absolute top-2 right-2 p-1.5 rounded-full bg-white/90 text-slate-600 shadow-sm">
                       <Heart className={`w-4 h-4 ${isFav ? 'fill-rose-500 text-rose-500' : ''}`} />
                     </button>
                   </div>
                   <div className="pt-2 space-y-1.5">
                     <h3 onClick={() => setSelectedProductId(prod.id)} className="font-bold text-xs text-slate-900 dark:text-white line-clamp-2 cursor-pointer">{prod.name}</h3>
                     {store && <p className="text-[10px] text-slate-500 truncate">{store.name}</p>}
-                    {typeof prod.rating === 'number' && prod.rating > 0 && <div className="text-[10px] text-amber-500 flex items-center gap-1"><Star className="w-3 h-3 fill-current" />{prod.rating.toFixed(1)}{typeof prod.reviewCount === 'number' && prod.reviewCount > 0 ? ` (${prod.reviewCount})` : ''}</div>}
+                    {typeof prod.rating === 'number' && prod.rating > 0 && prod.reviewCount > 0 && <div className="text-[10px] text-amber-500 flex items-center gap-1"><Star className="w-3 h-3 fill-current" />{prod.rating.toFixed(1)}{typeof prod.reviewCount === 'number' && prod.reviewCount > 0 ? ` (${prod.reviewCount})` : ''}</div>}
                     <div className="flex items-end justify-between gap-2 pt-1">
                       <div>{hasDiscount && <div className="text-[9px] line-through text-slate-400">RD$ {prod.price.toLocaleString()}</div>}<div className="font-black text-sm text-[#f20544]">RD$ {(hasDiscount ? prod.promoPrice! : prod.price).toLocaleString()}</div></div>
-                      <button type="button" disabled={isOutOfStock} onClick={() => addToCart(prod.id, prod.storeId, 1)} className="p-2 rounded-lg bg-[#f20544] text-white disabled:opacity-40"><ShoppingCart className="w-4 h-4" /></button>
+                      <button type="button" aria-label={`Agregar ${prod.name} al carrito`} disabled={isOutOfStock} onClick={() => addToCart(prod.id, prod.storeId, 1)} className="p-2 rounded-lg bg-[#f20544] text-white disabled:opacity-40"><ShoppingCart className="w-4 h-4" /></button>
                     </div>
                   </div>
                 </article>
@@ -807,10 +807,10 @@ export const HomePage: React.FC = () => {
                         {store.name}
                       </h4>
                       {categoryName && <p className="text-[10px] text-slate-400 dark:text-stone-500 truncate">{categoryName}</p>}
-                      {typeof store.rating === 'number' && store.rating > 0 && (
+                      {typeof store.rating === 'number' && store.rating > 0 && store.reviewCount > 0 && (
                         <div className="flex items-center gap-1 text-[10px] text-amber-500 font-bold mt-0.5">
                           <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                          <span>{store.rating.toFixed(1)}</span>
+                          <span>{store.reviewCount > 0 && store.rating > 0 ? store.rating.toFixed(1) : 'Sin reseñas'}</span>
                           {typeof store.reviewCount === 'number' && store.reviewCount > 0 && (
                             <span className="text-slate-400 dark:text-stone-500 font-normal">({store.reviewCount})</span>
                           )}

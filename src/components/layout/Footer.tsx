@@ -42,9 +42,9 @@ export const Footer: React.FC = () => {
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h4 className="text-sm font-bold text-stone-950 dark:text-white">Entrega Garantizada</h4>
+              <h4 className="text-sm font-bold text-stone-950 dark:text-white">Confirmación de entrega</h4>
               <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-                Código secreto de confirmación para validar que recibes exactamente lo que pediste.
+                Revisa el pedido antes de compartir tu código de confirmación de entrega.
               </p>
             </div>
           </div>
@@ -56,7 +56,7 @@ export const Footer: React.FC = () => {
             <div>
               <h4 className="text-sm font-bold text-stone-950 dark:text-white">Pagos Seguros en RD$</h4>
               <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-                Pago en efectivo al recibir tu pedido. Confirma la entrega con tu código.
+                Paga en efectivo al recibir. Otros métodos solo están disponibles cuando se habilitan en el proceso de compra.
               </p>
             </div>
           </div>
