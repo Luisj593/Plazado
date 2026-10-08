@@ -91,7 +91,7 @@ export const HomePage: React.FC = () => {
     const timer = window.setInterval(() => {
       setHeroSlideIndex(current => (current + 1) % heroProducts.length);
       setHeroImageError(false);
-    }, 4500);
+    }, 8000);
     return () => window.clearInterval(timer);
   }, [heroProducts.length, heroPaused, systemSettings?.homeHeroMode]);
 
@@ -198,75 +198,46 @@ export const HomePage: React.FC = () => {
           <div className="relative z-10 w-full h-full flex flex-col justify-center px-5 sm:px-8 lg:px-12 py-7 sm:py-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 items-center gap-3 lg:gap-8 h-full">
               
-              {/* ZONA IZQUIERDA: Textos y Botones principales */}
-              <div className="lg:col-span-5 space-y-3 sm:space-y-5 text-left max-w-xl">
-                
-                {/* Título Principal Grande con Verde Corporativo de Alta Visibilidad */}
-                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[52px] font-black text-slate-950 dark:text-white tracking-tight leading-[1.02]">
-                  Todo lo que buscas,<br />
-                  <span className="text-[#f20544] dark:text-rose-400">en un solo lugar</span>
-                </h1>
+              {/* ZONA IZQUIERDA: ficha premium sincronizada con el producto activo */}
+              <div className="lg:col-span-5 text-left max-w-xl">
+                <div className="space-y-3 sm:space-y-4">
+                  {heroMode === 'slider' && activeHeroProduct && (
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-50 dark:bg-rose-950/40 text-[#f20544] dark:text-rose-400 text-[10px] sm:text-xs font-black uppercase tracking-wide">
+                      <Star className="w-3.5 h-3.5" /> Producto destacado
+                    </div>
+                  )}
+                  <h1 className="text-3xl sm:text-4xl lg:text-[46px] font-black text-slate-950 dark:text-white tracking-tight leading-[1.02]">
+                    Todo lo que buscas,<br /><span className="text-[#f20544] dark:text-rose-400">en un solo lugar</span>
+                  </h1>
 
-                {/* Información sincronizada con el producto visible en el slider */}
-                {heroMode === 'slider' && activeHeroProduct ? (
-                  <div className="space-y-2">
-                    <div>
-                      <p className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.14em] text-[#f20544] dark:text-rose-400">Producto destacado</p>
-                      <button type="button" onClick={() => setSelectedProductId(activeHeroProduct.id)} className="text-left text-lg sm:text-xl lg:text-2xl font-black text-slate-900 dark:text-white hover:text-[#f20544] transition-colors line-clamp-2">
-                        {activeHeroProduct.name}
-                      </button>
-                    </div>
-                    {activeHeroProduct.description && (
-                      <p className="text-sm sm:text-base text-slate-600 dark:text-stone-300 leading-relaxed line-clamp-2">{activeHeroProduct.description}</p>
-                    )}
-                    <div className="flex items-end gap-2.5">
-                      {typeof activeHeroProduct.promoPrice === 'number' && activeHeroProduct.promoPrice > 0 && activeHeroProduct.promoPrice < activeHeroProduct.price ? (
-                        <>
-                          <span className="text-2xl sm:text-3xl font-black text-[#f20544]">RD$ {activeHeroProduct.promoPrice.toLocaleString()}</span>
-                          <span className="text-sm text-slate-400 line-through pb-1">RD$ {activeHeroProduct.price.toLocaleString()}</span>
-                        </>
-                      ) : (
-                        <span className="text-2xl sm:text-3xl font-black text-[#f20544]">RD$ {activeHeroProduct.price.toLocaleString()}</span>
-                      )}
-                    </div>
+                  <div className="grid grid-cols-3 gap-2 py-1">
+                    {[[Truck,'Envío rápido'],[ShieldCheck,'Pago seguro'],[Store,'Tiendas verificadas']].map(([Icon,label]: any) => (
+                      <div key={label} className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold text-slate-700 dark:text-stone-200">
+                        <span className="w-7 h-7 rounded-full bg-rose-50 dark:bg-rose-950/40 text-[#f20544] flex items-center justify-center shrink-0"><Icon className="w-3.5 h-3.5" /></span><span>{label}</span>
+                      </div>
+                    ))}
                   </div>
-                ) : (
-                  <p className="text-sm sm:text-base lg:text-lg text-slate-600 dark:text-stone-300 font-normal leading-relaxed">
-                    Descubre productos de tiendas verificadas, compra fácil y disfruta una experiencia segura en Plazado.
-                  </p>
-                )}
 
-                {/* Botones de Acción */}
-                <div className="flex flex-wrap items-center gap-3 pt-1">
-                  <button
-                    type="button"
-                    id="hero-explore-btn"
-                    onClick={() => {
-                      if (heroMode === 'slider' && activeHeroProduct) {
-                        setSelectedProductId(activeHeroProduct.id);
-                      } else {
-                        setSelectedCategorySlug(null);
-                        setCurrentView('catalog');
-                      }
-                    }}
-                    className="px-6 py-3.5 bg-[#f20544] hover:bg-[#d9043d] active:bg-[#b90334] text-white rounded-full text-sm sm:text-base font-bold shadow-md hover:shadow-rose-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <ShoppingCart className="w-4 h-4 stroke-[2.5]" />
-                    <span>{heroMode === 'slider' && activeHeroProduct ? 'Ver producto' : 'Comprar ahora'}</span>
-                    <ArrowRight className="w-4 h-4 ml-0.5" />
-                  </button>
+                  {heroMode === 'slider' && activeHeroProduct ? (
+                    <div className="space-y-2">
+                      <button type="button" onClick={() => setSelectedProductId(activeHeroProduct.id)} className="text-left text-lg sm:text-xl font-black text-slate-900 dark:text-white hover:text-[#f20544] transition-colors line-clamp-2">{activeHeroProduct.name}</button>
+                      {typeof activeHeroProduct.rating === 'number' && activeHeroProduct.rating > 0 && (
+                        <div className="flex items-center gap-1.5 text-xs"><Star className="w-4 h-4 fill-amber-400 text-amber-400" /><span className="font-bold text-slate-700 dark:text-stone-200">{activeHeroProduct.rating.toFixed(1)}</span>{typeof activeHeroProduct.reviewCount === 'number' && activeHeroProduct.reviewCount > 0 && <span className="text-slate-400">({activeHeroProduct.reviewCount})</span>}</div>
+                      )}
+                      {activeHeroProduct.description && <p className="text-xs sm:text-sm text-slate-600 dark:text-stone-300 leading-relaxed line-clamp-2">{activeHeroProduct.description}</p>}
+                      <div className="flex flex-wrap items-end gap-2.5">
+                        {typeof activeHeroProduct.promoPrice === 'number' && activeHeroProduct.promoPrice > 0 && activeHeroProduct.promoPrice < activeHeroProduct.price ? (
+                          <><span className="text-2xl sm:text-3xl font-black text-[#f20544]">RD$ {activeHeroProduct.promoPrice.toLocaleString()}</span><span className="text-sm text-slate-400 line-through pb-1">RD$ {activeHeroProduct.price.toLocaleString()}</span><span className="mb-1 px-2 py-1 rounded-full bg-[#f20544] text-white text-[10px] font-black">-{Math.round((1 - activeHeroProduct.promoPrice / activeHeroProduct.price) * 100)}%</span></>
+                        ) : <span className="text-2xl sm:text-3xl font-black text-[#f20544]">RD$ {activeHeroProduct.price.toLocaleString()}</span>}
+                      </div>
+                    </div>
+                  ) : <p className="text-sm sm:text-base text-slate-600 dark:text-stone-300">Descubre productos de tiendas verificadas, compra fácil y disfruta una experiencia segura en Plazado.</p>}
 
-                  <button
-                    type="button"
-                    id="hero-create-store-btn"
-                    onClick={() => setCurrentView('sell_with_us')}
-                    className="px-6 py-3.5 bg-white dark:bg-stone-800 hover:bg-slate-50 dark:hover:bg-stone-700 active:bg-slate-100 text-slate-800 dark:text-stone-100 rounded-full text-sm sm:text-base font-bold shadow-xs hover:shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer border border-slate-300 dark:border-stone-700"
-                  >
-                    <Store className="w-4 h-4 text-[#f20544] dark:text-rose-400" />
-                    <span>Crear mi tienda</span>
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                    <button type="button" onClick={() => activeHeroProduct ? setSelectedProductId(activeHeroProduct.id) : setCurrentView('catalog')} className="px-5 py-3 bg-[#f20544] hover:bg-[#d9043d] text-white rounded-full text-sm font-bold shadow-md transition-all flex items-center gap-2"><ShoppingCart className="w-4 h-4" /><span>{activeHeroProduct ? 'Ver producto' : 'Comprar ahora'}</span><ArrowRight className="w-4 h-4" /></button>
+                    <button type="button" onClick={() => setCurrentView('sell_with_us')} className="px-5 py-3 bg-white dark:bg-stone-800 text-slate-800 dark:text-white rounded-full text-sm font-bold border border-slate-300 dark:border-stone-700 flex items-center gap-2"><Store className="w-4 h-4 text-[#f20544]" />Crear mi tienda</button>
+                  </div>
                 </div>
-
               </div>
 
               {/* ZONA DERECHA: Slider moderno de productos publicados */}
@@ -325,6 +296,16 @@ export const HomePage: React.FC = () => {
                         ))}
                       </div>
                     </>
+                  )}
+
+                  {heroMode === 'slider' && activeHeroProduct && activeHeroProduct.images?.length > 1 && (
+                    <div className="absolute right-3 top-3 z-30 hidden sm:flex flex-col gap-2">
+                      {activeHeroProduct.images.slice(0, 3).map((image, index) => (
+                        <button key={image + index} type="button" onClick={() => { const next = [...activeHeroProduct.images]; [next[0], next[index]] = [next[index], next[0]]; }} className="w-14 h-14 lg:w-16 lg:h-16 rounded-xl overflow-hidden bg-white/95 border-2 border-white shadow-md">
+                          <img src={image} alt={`${activeHeroProduct.name} ${index + 1}`} loading="lazy" className="w-full h-full object-contain" />
+                        </button>
+                      ))}
+                    </div>
                   )}
 
                   {/* Imagen limpia: sin mensajes ni tarjetas flotantes sobre el producto */}
