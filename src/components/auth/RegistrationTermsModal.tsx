@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Download } from 'lucide-react';
-import { LEGAL_VERSION, LEGAL_PDF_URL, LegalAudience, registrationDocuments } from '../../legal/registration';
+import { LEGAL_VERSION, LEGAL_PDF_URL, termsPdfUrl, LegalAudience, registrationDocuments } from '../../legal/registration';
 
 interface Props { audience: LegalAudience; onClose: () => void; onAccept: () => void; }
 
@@ -43,7 +43,8 @@ export const RegistrationTermsModal: React.FC<Props> = ({ audience, onClose, onA
             <img src="/legal/plazado-logo.png" alt="Plazado" className="mb-2 h-12 w-40 object-cover object-center" />
             <h2 id="registration-terms-title" className="text-lg font-bold">Términos para {audience === 'STORE' ? 'tiendas y vendedores' : 'clientes'}</h2>
             <p className="mt-1 text-xs text-stone-600">Plazado.com · Versión {LEGAL_VERSION}</p>
-            <a href={LEGAL_PDF_URL} download className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-red-700"><Download size={16} /> Descargar políticas y términos en PDF</a>
+            <a href={termsPdfUrl(audience)} download className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-red-700"><Download size={16} /> Descargar términos de mi tipo de cuenta</a>
+            <a href={LEGAL_PDF_URL} download className="mt-2 block text-sm font-semibold text-red-700 underline">Descargar políticas de la plataforma</a>
           </div>
           <button type="button" onClick={onClose} aria-label="Cerrar términos" className="rounded-lg p-2 hover:bg-stone-100"><X size={20} /></button>
         </header>

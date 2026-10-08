@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import bundle from '../../legal/documents.json';
+import { legalDocumentPdfUrl } from '../../legal/registration';
 import { useApp } from '../../context/AppContext';
 import { 
   FileText, 
@@ -28,7 +29,7 @@ export const LegalAndPoliciesPage: React.FC = () => {
   const canonicalDocs: LegalDocument[] = bundle.documents.map(doc => ({
     ...doc, category: doc.category as LegalDocument['category'], categoryLabel: doc.title,
     version: bundle.version, lastUpdated: bundle.effectiveDate, isPublished: true,
-    pdfUrl: bundle.pdfUrl, pdfFileName: 'Plazado-Politicas-y-Terminos.pdf',
+    pdfUrl: legalDocumentPdfUrl(doc.id), pdfFileName: legalDocumentPdfUrl(doc.id).split('/').pop(),
     summaryPoints: doc.sections.slice(0, 3).map(section => section.title)
   }));
   const legalDocs: LegalDocument[] = [...canonicalDocs, ...(systemSettings.legalDocuments || [])

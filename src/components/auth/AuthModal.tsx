@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { downloadPlatformPolicies } from '../../utils/legalDownloads';
 import { RegistrationTermsModal } from './RegistrationTermsModal';
 import { LEGAL_VERSION, LegalAudience } from '../../legal/registration';
 import { useApp } from '../../context/AppContext';
@@ -41,7 +42,8 @@ export const AuthModal: React.FC = () => {
     resendVerificationCode,
     categories,
     stores,
-    authPurchaseNotice
+    authPurchaseNotice,
+    showNotification
   } = useApp();
 
   const [legalAudience, setLegalAudience] = useState<LegalAudience | null>(null);
@@ -67,6 +69,7 @@ export const AuthModal: React.FC = () => {
   const [verifySuccessNotice, setVerifySuccessNotice] = useState('');
   const [resendCooldown, setResendCooldown] = useState(60);
   const [isResending, setIsResending] = useState(false);
+  const policyDownloadEmailRef = useRef<string | null>(null);
   const otpInputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
   // Customer registration state
@@ -217,6 +220,12 @@ export const AuthModal: React.FC = () => {
       const res = await verifyCode(targetEmail, fullCode);
       if (!res.success) {
         setVerifyError(res.message || 'Código de verificación incorrecto.');
+      } else if (policyDownloadEmailRef.current !== targetEmail) {
+        policyDownloadEmailRef.current = targetEmail;
+        const downloaded = await downloadPlatformPolicies();
+        showNotification(downloaded
+          ? 'Registro completado. Se inició la descarga de las políticas de Plazado.'
+          : 'Registro completado. Puedes descargar las políticas desde el enlace al pie de la página.');
       }
     } catch (err: any) {
       setVerifyError(err.message || 'Error validando código.');
