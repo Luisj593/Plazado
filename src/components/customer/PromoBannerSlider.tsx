@@ -68,6 +68,13 @@ export const PromoBannerSlider: React.FC<{ banners: Banner[]; onSelect: (banner:
           </button>}
         </div>
       )}
+      <div className="flex justify-end border-t border-slate-200 dark:border-stone-800 px-4 py-3 sm:px-6">
+        <p className="max-w-lg text-right text-xs sm:text-sm leading-relaxed text-slate-600 dark:text-stone-300">
+          <strong className="block text-slate-900 dark:text-white">Tu negocio puede estar aquí.</strong>
+          Para publicidad en este espacio, contáctanos en{' '}
+          <a href="mailto:Contacto@plazado.com" className="font-bold text-red-600 dark:text-red-400 underline underline-offset-2 hover:text-red-700">Contacto@plazado.com</a>.
+        </p>
+      </div>
     </section>
   );
 };
