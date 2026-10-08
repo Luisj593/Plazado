@@ -481,7 +481,8 @@ export class FirestoreRepository {
       }
       for (let i = 0; i < changes.length; i++) {
         const change = changes[i], document = documents[i];
-        const current = document.exists ? document.data() : null;
+        // Reads add the document-path ID to domain objects, even for legacy records.
+        const current = document.exists ? { id: document.id, ...document.data() } : null;
         if (!change.before && current) throw new Error('Compra ya registrada. Actualiza el carrito antes de reintentar.');
         if (change.before && (change.collection === 'orders' || change.collection === 'settlements')) {
           if (!current || current.status !== change.before.status || current.paymentStatus !== change.before.paymentStatus || current.settlementStatus !== change.before.settlementStatus || (current.activeDisputeId ?? null)!==(change.before.activeDisputeId ?? null)) throw new Error('La operación ya cambió en otra sesión. Actualiza antes de reintentar.');
