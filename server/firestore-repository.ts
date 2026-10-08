@@ -344,7 +344,7 @@ export class FirestoreRepository {
   // --- MUTATIONS: ATOMIC WRITES TO FIRESTORE WITH TRAZABILIDAD ---
 
   public async saveStore(store: Store): Promise<void> {
-    if (!this.db || !store.id) return;
+    if (!this.db || !store.id) throw new Error('Firestore no está configurado para guardar tienda');
     try {
       const ref = doc(this.db, 'stores', store.id);
       const protectedStore = {
@@ -355,6 +355,7 @@ export class FirestoreRepository {
       await this.rotateBackupVersion('store', store.id, protectedStore);
     } catch (e) {
       console.error(`[FirestoreRepository] Error saving store ${store.id}:`, e);
+      throw e;
     }
   }
 
@@ -405,7 +406,7 @@ export class FirestoreRepository {
   }
 
   public async saveUser(user: User): Promise<void> {
-    if (!this.db || !user.id) return;
+    if (!this.db || !user.id) throw new Error('Firestore no está configurado para guardar usuario');
     try {
       const ref = doc(this.db, 'users', user.id);
       const protectedUser = {
@@ -416,6 +417,7 @@ export class FirestoreRepository {
       await this.rotateBackupVersion('user', user.id, protectedUser);
     } catch (e) {
       console.error(`[FirestoreRepository] Error saving user ${user.id}:`, e);
+      throw e;
     }
   }
 
