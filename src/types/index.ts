@@ -67,6 +67,14 @@ export interface UserVerificationInfo {
   storeName?: string;
 }
 
+export interface LegalAcceptance {
+  version: string;
+  audience: 'CUSTOMER' | 'STORE';
+  acceptedAt: string;
+  readToEnd: true;
+  documentIds: string[];
+}
+
 export interface User {
   id: string;
   email: string;
@@ -82,6 +90,7 @@ export interface User {
   isKycVerified?: boolean;
   isEmailVerified?: boolean;
   verification?: UserVerificationInfo;
+  legalAcceptance?: LegalAcceptance;
   isApprovedByAdmin?: boolean;
   adminApprovalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
   approvedAt?: string;
@@ -108,6 +117,9 @@ export interface CustomerRegistrationInput {
   password: string;
   confirmPassword: string;
   acceptedTerms: boolean;
+  legalVersion?: string;
+  legalAudience?: 'CUSTOMER' | 'STORE';
+  legalReadToEnd?: boolean;
   cedulaNumber?: string;
   cedulaFrontUrl?: string;
   selfieUrl?: string;
@@ -131,6 +143,9 @@ export interface StoreRegistrationInput {
   shippingMethods: string[];
   shippingRate: number;
   acceptedTerms: boolean;
+  legalVersion?: string;
+  legalAudience?: 'CUSTOMER' | 'STORE';
+  legalReadToEnd?: boolean;
   cedulaNumber?: string;
   cedulaFrontUrl?: string;
   selfieUrl?: string;

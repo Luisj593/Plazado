@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { LEGAL_VERSION, hasCurrentLegalConsent, registrationDocuments } from './src/legal/registration';
 import express, { Request, Response } from 'express';
 import path from 'path';
 import crypto from 'crypto';
@@ -1267,6 +1268,16 @@ async function startServer() {
         return res.status(400).json({ success: false, message: 'Correo electrónico inválido.' });
       }
 
+      const consentUser = db.getUserByEmail(cleanEmail);
+      const audience = consentUser?.role === 'STORE_OWNER' || type === 'STORE' ? 'STORE' : 'CUSTOMER';
+      if (consentUser?.isEmailVerified) {
+        return res.status(400).json({ success: false, message: 'Esta cuenta ya está verificada. Inicia sesión con tu contraseña.' });
+      }
+      const recordedConsent = consentUser?.legalAcceptance;
+      if (!(recordedConsent?.version === LEGAL_VERSION && recordedConsent.audience === audience && recordedConsent.readToEnd === true)) {
+        return res.status(400).json({ success: false, message: 'Completa el formulario de registro y acepta los términos vigentes antes de solicitar el código.' });
+      }
+
       // Generate cryptographically secure 6-digit numeric OTP code
       const code = crypto.randomInt(100000, 1000000).toString();
       const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes validity
@@ -1330,6 +1341,14 @@ async function startServer() {
 
       const existingUser = db.getUserByEmail(cleanEmail);
       const preRecord = activeVerificationCodes.get(cleanEmail);
+
+      const audience = existingUser?.role === 'STORE_OWNER' ? 'STORE' : 'CUSTOMER';
+      if (existingUser?.isEmailVerified) {
+        return res.status(400).json({ success: false, message: 'Esta cuenta ya está verificada. Inicia sesión.' });
+      }
+      if (existingUser?.legalAcceptance?.version !== LEGAL_VERSION || existingUser.legalAcceptance.audience !== audience || existingUser.legalAcceptance.readToEnd !== true) {
+        return res.status(400).json({ success: false, message: 'Vuelve al registro y acepta los términos vigentes antes de recibir un nuevo código.' });
+      }
 
       const lastSentAt = existingUser?.verification?.lastSentAt || preRecord?.lastSentAt || 0;
       const elapsedSeconds = Math.floor((Date.now() - lastSentAt) / 1000);
@@ -1824,6 +1843,16 @@ async function startServer() {
   app.post('/api/auth/register-customer', async (req: Request, res: Response) => {
     try {
       const data: CustomerRegistrationInput = req.body;
+      if (!hasCurrentLegalConsent(data, 'CUSTOMER')) {
+        return res.status(400).json({ success: false, message: 'Debes leer hasta el final y aceptar los términos y políticas vigentes de tu tipo de cuenta antes de recibir el código.' });
+      }
+      const legalAcceptance = {
+        version: LEGAL_VERSION,
+        audience: 'CUSTOMER' as const,
+        acceptedAt: new Date().toISOString(),
+        readToEnd: true as const,
+        documentIds: registrationDocuments('CUSTOMER').map(doc => doc.id)
+      };
       const cleanEmail = (data.email || '').trim().toLowerCase();
       const users = db.getUsers();
 
@@ -1854,6 +1883,7 @@ async function startServer() {
 
       if (existingUser && !existingUser.isEmailVerified) {
         // Update pending unverified account
+        existingUser.legalAcceptance = legalAcceptance;
         existingUser.name = `${(data.name || '').trim()} ${(data.lastName || '').trim()}`.trim();
         existingUser.phone = (data.phone || existingUser.phone || '').trim();
         existingUser.passwordHash = passHash;
@@ -1888,6 +1918,7 @@ async function startServer() {
         const hasKycInfo = !!(data.cedulaFrontUrl || data.selfieUrl || data.cedulaNumber);
         customerUser = {
           id: newId,
+          legalAcceptance,
           name: `${(data.name || '').trim()} ${(data.lastName || '').trim()}`.trim(),
           email: cleanEmail,
           role: 'CUSTOMER',
@@ -1921,6 +1952,9 @@ async function startServer() {
         };
         db.addUser(customerUser);
       }
+
+      await firestoreRepo.saveUser(customerUser);
+      db.addAuditLog('LEGAL_TERMS_ACCEPTED', customerUser.id, undefined, `Aceptación ${legalAcceptance.version} CUSTOMER ${legalAcceptance.acceptedAt}`);
 
       // Automatically dispatch email from contacto@plazado.com
       const sysSettings = db.getSystemSettings();
@@ -1957,6 +1991,16 @@ async function startServer() {
   app.post('/api/auth/register-store', async (req: Request, res: Response) => {
     try {
       const data: StoreRegistrationInput = req.body;
+      if (!hasCurrentLegalConsent(data, 'STORE')) {
+        return res.status(400).json({ success: false, message: 'Debes leer hasta el final y aceptar los términos y políticas vigentes de tu tipo de cuenta antes de recibir el código.' });
+      }
+      const legalAcceptance = {
+        version: LEGAL_VERSION,
+        audience: 'STORE' as const,
+        acceptedAt: new Date().toISOString(),
+        readToEnd: true as const,
+        documentIds: registrationDocuments('STORE').map(doc => doc.id)
+      };
       const cleanEmail = (data.email || '').trim().toLowerCase();
       const users = db.getUsers();
       const stores = db.getStores();
@@ -2048,6 +2092,7 @@ async function startServer() {
 
       const newStoreUser: User = {
         id: userId,
+        legalAcceptance,
         name: data.ownerName.trim(),
         email: cleanEmail,
         role: 'STORE_OWNER',
@@ -2087,6 +2132,8 @@ async function startServer() {
       if (!existingStore) {
         db.addStore(newStore);
       }
+
+      db.addAuditLog('LEGAL_TERMS_ACCEPTED', userId, storeId, `Aceptación ${legalAcceptance.version} STORE ${legalAcceptance.acceptedAt}`);
 
       // Automatically dispatch email from contacto@plazado.com
       const sysSettings = db.getSystemSettings();

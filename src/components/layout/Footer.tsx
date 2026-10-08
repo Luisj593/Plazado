@@ -1,4 +1,6 @@
 import React from 'react';
+import { LEGAL_PDF_URL } from '../../legal/registration';
+import { triggerFileDownload } from '../../utils/fileDownloader';
 import { useApp } from '../../context/AppContext';
 import { DominicanFlag } from '../common/DominicanFlag';
 import { PlazaDoLogo } from '../common/PlazaDoLogo';
@@ -206,7 +208,7 @@ export const Footer: React.FC = () => {
             <li className="pt-2 border-t border-stone-200 dark:border-stone-800">
               <button 
                 id="footer-download-pdf-btn"
-                onClick={() => openDownloadModal('pdf')}
+                onClick={() => triggerFileDownload(LEGAL_PDF_URL, 'Plazado-Politicas-y-Terminos.pdf')}
                 className="text-stone-700 dark:text-stone-300 hover:text-stone-950 dark:text-white font-medium transition-colors flex items-center gap-1.5"
               >
                 <FileText className="w-3.5 h-3.5 text-red-500" />
