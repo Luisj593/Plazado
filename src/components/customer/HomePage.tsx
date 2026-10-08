@@ -177,6 +177,8 @@ export const HomePage: React.FC = () => {
     if (banner.targetType === 'PRODUCT' && banner.targetValue) return setSelectedProductId(banner.targetValue);
     if (banner.targetType === 'STORE' && banner.targetValue) return handleStoreSelect(banner.targetValue);
     if (banner.targetType === 'CATEGORY' && banner.targetValue) return handleCategorySelect(banner.targetValue);
+    if (banner.targetType === 'REGISTER_USER') return setCurrentView('register');
+    if (banner.targetType === 'REGISTER_STORE') return setCurrentView('sell_with_us');
     if (banner.targetType === 'URL' && /^https?:\/\//i.test(banner.targetValue || '')) window.open(banner.targetValue, '_blank', 'noopener,noreferrer');
   };
 
