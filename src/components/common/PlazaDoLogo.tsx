@@ -104,9 +104,9 @@ export const PlazaDoLogo: React.FC<PlazaDoLogoProps> = ({
 
   return (
     <img
-      src="/plazado-logo-oficial.png"
+      src="/plazado-logo-integrado.png"
       alt="Plazado.com — Todo en un solo lugar"
-      className={`object-contain bg-white rounded-md border border-stone-200 dark:border-stone-700 ${className || (variant === 'full' ? 'w-full max-w-[280px] h-auto' : 'w-[180px] h-auto')}`}
+      className={`object-contain dark:brightness-150 ${className || (variant === 'full' ? 'w-full max-w-[280px] h-auto' : 'w-[180px] h-auto')}`}
     />
   );
 };
