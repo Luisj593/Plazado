@@ -457,7 +457,7 @@ export class FirestoreRepository {
     }
   }
 
-  public async persistCheckout(previous: any, next: any): Promise<void> {
+  public async persistCheckout(previous: any, next: any, isNewCheckout = true): Promise<void> {
     if (!this.adminDb) throw new Error('Firebase Admin debe estar configurado para confirmar compras');
     const changes = commerceChanges(previous, next);
     if (changes.length > 450) throw new Error('Compra demasiado grande para confirmar de forma atómica');
@@ -466,17 +466,21 @@ export class FirestoreRepository {
       const storeIds = [...new Set(changes.filter(change => change.collection === 'orders').map(change => change.after.storeId))];
       const storeDocs = await Promise.all(storeIds.map(id => transaction.get(this.adminDb.doc(`stores/${id}`))));
       const settingsDoc = await transaction.get(this.adminDb.doc('systemSettings/default'));
-      if (settingsDoc.exists && (settingsDoc.data().plazaCommissionRate ?? 0.0005) !== (previous.systemSettings.plazaCommissionRate ?? 0.0005)) throw new Error('La comisión cambió. Actualiza el carrito.');
-      for (const document of storeDocs) if (!document.exists || !isStorePubliclyVisible(document.data())) throw new Error('Tienda no disponible');
+      if (isNewCheckout && settingsDoc.exists && (settingsDoc.data().plazaCommissionRate ?? 0.0005) !== (previous.systemSettings.plazaCommissionRate ?? 0.0005)) throw new Error('La comisión cambió. Actualiza el carrito.');
+      for (const document of storeDocs) if (isNewCheckout && (!document.exists || !isStorePubliclyVisible(document.data()))) throw new Error('Tienda no disponible');
       for (let i = 0; i < changes.length; i++) {
         const change = changes[i], document = documents[i];
         const current = document.exists ? document.data() : null;
         if (!change.before && current) throw new Error('Compra ya registrada. Actualiza el carrito antes de reintentar.');
-        if (change.collection === 'products') {
-          if (!current || !isProductPubliclyVisible(current) || current.stock !== change.before.stock || current.price !== change.before.price || (current.promoPrice ?? null) !== (change.before.promoPrice ?? null)) throw new Error('El inventario o precio cambió. Actualiza el carrito.');
+        if (change.before && (change.collection === 'orders' || change.collection === 'settlements')) {
+          if (!current || current.status !== change.before.status || current.paymentStatus !== change.before.paymentStatus || current.settlementStatus !== change.before.settlementStatus) throw new Error('La operación ya cambió en otra sesión. Actualiza antes de reintentar.');
         }
+        if (change.collection === 'products') {
+          if (!current || current.stock !== change.before.stock || (isNewCheckout && (!isProductPubliclyVisible(current) || current.price !== change.before.price || (current.promoPrice ?? null) !== (change.before.promoPrice ?? null)))) throw new Error('El inventario o precio cambió. Actualiza el carrito.');
+        }
+        if (change.collection === 'storeBalances' && change.before && !current) throw new Error('El saldo no existe en la base durable. Requiere conciliación');
         if (change.collection === 'storeBalances' && current) {
-          for (const key of ['totalSales','cashSales','cardSales','pendingCashCommissions','pendingBalance','availableBalance']) {
+          for (const key of ['totalSales','cashSales','cardSales','pendingCashCommissions','pendingBalance','availableBalance','retainedBalance','settledBalance','carriedOverDebt','adjustments','plazaCommissionsPaid']) {
             if ((current[key] || 0) !== (change.before?.[key] || 0)) throw new Error('El balance cambió. Actualiza e intenta nuevamente.');
           }
         }

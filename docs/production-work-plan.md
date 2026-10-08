@@ -40,3 +40,13 @@ Los respaldos versionados contienen datos sensibles. No publicar nuevos respaldo
 7. Validar identificación legal y políticas antes del piloto.
 
 La plataforma sigue sin aprobación para producción abierta. Los resultados de pruebas aisladas no certifican el entorno desplegado ni las cuentas externas.
+
+## Segunda entrega: ciclo financiero durable
+- Entrega y cancelación se guardan en una transacción junto con balances, inventario y auditoría; no cambian la memoria ni la pantalla si el guardado falla.
+- Ventas nuevas contra entrega reconocen venta/comisión al validar el código, no al crear el pedido. Cancelar antes del envío repone la reserva una sola vez.
+- Las solicitudes/ciclos de liquidación reservan fondos; no fabrican referencias ni marcan transferencias como realizadas. La confirmación administrativa requiere referencia bancaria real. Rechazar libera la reserva.
+- Pedidos con reclamaciones abiertas quedan fuera de liquidación; liquidaciones anteriores requieren conciliación antes de procesarse, para evitar duplicar saldos.
+- Eliminación de pedidos/liquidaciones bloqueada para preservar historial; no se cambiaron registros existentes.
+- Checkout de tarjeta/transferencia y webhook genérico permanecen indisponibles hasta integrar/verificar el proveedor real. La preparación de ciclos es administrativa, no un pago automático los viernes.
+- Reparación de conexión: conservar listener del puerto Railway y compatibilidad con el destino histórico 3000. No retirar esa compatibilidad sin verificar la configuración del dominio.
+- Pruebas aisladas: fallos de transacción, reintentos concurrentes, comisión diferida, cancelación, reserva/rechazo/confirmación, referencias y errores de interfaz.

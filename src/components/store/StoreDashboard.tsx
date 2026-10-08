@@ -260,7 +260,7 @@ export const StoreDashboard: React.FC = () => {
   const [cancelReasonError, setCancelReasonError] = useState<string | null>(null);
   const [isSubmittingCancellation, setIsSubmittingCancellation] = useState<boolean>(false);
 
-  const handleConfirmCancelOrder = () => {
+  const handleConfirmCancelOrder = async () => {
     if (!cancellingOrder) return;
     const reasonTrimmed = cancelReason.trim();
     if (!reasonTrimmed) {
@@ -273,7 +273,7 @@ export const StoreDashboard: React.FC = () => {
     }
 
     setIsSubmittingCancellation(true);
-    const res = updateOrderStatus(cancellingOrder.id, 'CANCELLED', reasonTrimmed);
+    const res = await updateOrderStatus(cancellingOrder.id, 'CANCELLED', reasonTrimmed);
     if (res.success) {
       showNotification(`Pedido #${cancellingOrder.id} cancelado: ${reasonTrimmed}`, 'info');
       if (viewingOrderDetails && viewingOrderDetails.id === cancellingOrder.id) {
@@ -434,8 +434,8 @@ export const StoreDashboard: React.FC = () => {
   };
 
   // Handle Order Status Transition
-  const handleUpdateStatus = (orderId: string, newStatus: OrderStatus, note?: string) => {
-    const res = updateOrderStatus(orderId, newStatus, note);
+  const handleUpdateStatus = async (orderId: string, newStatus: OrderStatus, note?: string) => {
+    const res = await updateOrderStatus(orderId, newStatus, note);
     if (res.success) {
       showNotification(`Pedido ${orderId} actualizado a: ${newStatus}`);
       if (viewingOrderDetails && viewingOrderDetails.id === orderId) {
@@ -459,24 +459,19 @@ export const StoreDashboard: React.FC = () => {
   };
 
   // Handle Delivery Secret Code Confirmation (Requerimiento #15)
-  const handleConfirmDeliveryCode = (order: Order) => {
+  const handleConfirmDeliveryCode = async (order: Order) => {
     if (!order) return;
     const provided = secretCodeInput.trim().toUpperCase();
-    const expected = (order.deliveryConfirmationCode || '').trim().toUpperCase();
 
     if (!provided) {
       setSecretCodeError('Por favor ingresa el código de 6 dígitos que te dio el cliente.');
       return;
     }
 
-    if (provided !== expected && currentUser?.role !== 'SUPER_ADMIN') {
-      setSecretCodeError('Código incorrecto. Solicita al cliente su código secreto de 6 dígitos que figura en su orden de PlazaDO.');
-      return;
-    }
 
-    const res = updateOrderStatus(order.id, 'DELIVERED', 'Entrega completada y validada con código secreto del cliente', provided);
+    const res = await updateOrderStatus(order.id, 'DELIVERED', 'Entrega completada y validada con código secreto del cliente', provided);
     if (res.success) {
-      showNotification('¡Entrega validada exitosamente! Fondos netos transferidos a tu Balance Disponible.', 'success');
+      showNotification('Entrega confirmada y guardada correctamente.', 'success');
       setValidatingDeliveryOrder(null);
       setSecretCodeInput('');
       setSecretCodeError(null);
@@ -602,11 +597,11 @@ export const StoreDashboard: React.FC = () => {
   };
 
   // Submit Settlement
-  const handleRequestSettlement = (e: React.FormEvent) => {
+  const handleRequestSettlement = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = requestSettlement(store.id);
+    const res = await requestSettlement(store.id);
     if (res.success) {
-      showNotification('Solicitud de liquidación enviada para desembolso bancario');
+      showNotification('Solicitud guardada y pendiente de revisión bancaria');
       setSettlementModalOpen(false);
     } else {
       alert(res.message);

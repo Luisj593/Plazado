@@ -46,7 +46,7 @@ export function validateOrders(requests: any[], state: any, customer: any): any[
     return {
       id,orderGroupCode:request.orderGroupCode,customerId:customer.id,customerName:customer.name,customerEmail:customer.email,customerPhone:customer.phone,
       storeId:store.id,storeName:store.name,items,subtotal,shippingCost:money(shippingCost),discount:0,total,
-      status:'PENDING',paymentMethod:'CASH_ON_DELIVERY',paymentStatus:'PENDING',
+      accountingVersion:2,status:'PENDING',paymentMethod:'CASH_ON_DELIVERY',paymentStatus:'PENDING',
       deliveryConfirmationCode:crypto.randomInt(100000,1000000).toString(),deliveryAddress:{...address,userId:customer.id},customerNotes:String(request.customerNotes || '').slice(0,2000),
       statusHistory:[{status:'PENDING',timestamp:now,updatedBy:customer.name,note:'Pedido contra entrega pendiente de confirmación'}],settlementStatus:'PENDING',createdAt:now,
       plazaCommissionRate:state.systemSettings.plazaCommissionRate ?? 0.0005,plazaCommissionAmount:0,storeNetEarnings:0,
