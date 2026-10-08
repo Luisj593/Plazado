@@ -6,3 +6,10 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Production records and generated servers are never source code.
+data/*.json
+data/backups/*.json
+server/data_snapshot.json
+server.js
+server.js.map

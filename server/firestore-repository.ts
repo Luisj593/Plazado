@@ -1,3 +1,5 @@
+import { isStorePubliclyVisible, isProductPubliclyVisible } from '../src/types';
+import { commerceChanges } from './commerce-changes';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { cert, getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
@@ -161,6 +163,7 @@ export class FirestoreRepository {
     advertisements: Advertisement[];
     adPlacements: AdPlacement[];
     orderMessages: OrderChatMessage[];
+    commerceState: Record<string, any[]>;
   } | null> {
     if (!this.db) return null;
 
@@ -202,31 +205,37 @@ export class FirestoreRepository {
         getDocs(collection(this.db, 'orderMessages')).catch(e => { console.warn('messages read err:', e); return { docs: [] }; })
       ]);
 
-      const stores: Store[] = storesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Store));
-      const products: Product[] = productsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Product));
-      const users: User[] = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as User));
-      const categories: Category[] = categoriesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Category));
-      const orders: Order[] = ordersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Order));
-      const banners: Banner[] = bannersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Banner));
-      const coupons: Coupon[] = couponsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Coupon));
+      const stores: Store[] = storesSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Store));
+      const products: Product[] = productsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
+      const users: User[] = usersSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as User));
+      const categories: Category[] = categoriesSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Category));
+      const orders: Order[] = ordersSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Order));
+      const banners: Banner[] = bannersSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Banner));
+      const coupons: Coupon[] = couponsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Coupon));
       const storeBalances: Record<string, StoreBalance> = {};
-      balancesSnap.docs.forEach(d => {
+      balancesSnap.docs.forEach((d: any) => {
         storeBalances[d.id] = { storeId: d.id, ...d.data() } as StoreBalance;
       });
-      const settlements: Settlement[] = settlementsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Settlement));
-      const disputes: Dispute[] = disputesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Dispute));
-      const reviews: Review[] = reviewsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Review));
-      const paymentGateways: PaymentGatewayConfig[] = gatewaysSnap.docs.map(d => ({ id: d.id, ...d.data() } as PaymentGatewayConfig));
-      const advertisements: Advertisement[] = adsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Advertisement));
-      const adPlacements: AdPlacement[] = placementsSnap.docs.map(d => ({ id: d.id, ...d.data() } as unknown as AdPlacement));
-      const orderMessages: OrderChatMessage[] = messagesSnap.docs.map(d => ({ id: d.id, ...d.data() } as OrderChatMessage));
+      const settlements: Settlement[] = settlementsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Settlement));
+      const disputes: Dispute[] = disputesSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Dispute));
+      const reviews: Review[] = reviewsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Review));
+      const paymentGateways: PaymentGatewayConfig[] = gatewaysSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as PaymentGatewayConfig));
+      const advertisements: Advertisement[] = adsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Advertisement));
+      const adPlacements: AdPlacement[] = placementsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as unknown as AdPlacement));
+      const orderMessages: OrderChatMessage[] = messagesSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as OrderChatMessage));
 
       const settingsExists = typeof settingsDoc.exists === 'function' ? settingsDoc.exists() : Boolean(settingsDoc.exists);
       const systemSettings = settingsExists ? (settingsDoc.data() as SystemSettings) : undefined;
 
       console.log(`[FirestoreRepository] Successfully loaded from Firestore: ${stores.length} stores, ${products.length} products, ${users.length} users, ${categories.length} categories.`);
 
+      const commerceState: Record<string, any[]> = {};
+      for (const key of ['paymentTransactions','financialAuditLogs','fulfillmentInventory','inventoryMovements','fulfillmentOrders']) {
+        const snapshot = await getDocs(collection(this.db, key));
+        commerceState[key] = snapshot.docs.map((d: any) => ({id:d.id,...d.data()}));
+      }
       return {
+        commerceState,
         stores,
         products,
         users,
@@ -288,8 +297,8 @@ export class FirestoreRepository {
 
       const historySnap = await getDocs(collection(this.db, historyCollection));
       const versions = historySnap.docs
-        .filter(d => (d.data() as any).originalRecordId === recordId)
-        .sort((a, b) => String((b.data() as any).backupCreatedAt || '').localeCompare(String((a.data() as any).backupCreatedAt || '')));
+        .filter((d: any) => (d.data() as any).originalRecordId === recordId)
+        .sort((a: any, b: any) => String((b.data() as any).backupCreatedAt || '').localeCompare(String((a.data() as any).backupCreatedAt || '')));
 
       // Current backup + four history versions = five total copies.
       for (const oldVersion of versions.slice(4)) {
@@ -318,8 +327,8 @@ export class FirestoreRepository {
         getDocs(collection(this.db, 'users_backup'))
       ]);
 
-      const liveStoreIds = new Set(storesSnap.docs.map(d => d.id));
-      const liveUserIds = new Set(usersSnap.docs.map(d => d.id));
+      const liveStoreIds = new Set(storesSnap.docs.map((d: any) => d.id));
+      const liveUserIds = new Set(usersSnap.docs.map((d: any) => d.id));
       const now = new Date().toISOString();
 
       // Never restore missing production records automatically. A missing live
@@ -446,6 +455,39 @@ export class FirestoreRepository {
       console.error(`[FirestoreRepository] Error saving user ${user.id}:`, e);
       throw e;
     }
+  }
+
+  public async persistCheckout(previous: any, next: any): Promise<void> {
+    if (!this.adminDb) throw new Error('Firebase Admin debe estar configurado para confirmar compras');
+    const changes = commerceChanges(previous, next);
+    if (changes.length > 450) throw new Error('Compra demasiado grande para confirmar de forma atómica');
+    await this.adminDb.runTransaction(async (transaction: any) => {
+      const documents = await Promise.all(changes.map(change => transaction.get(this.adminDb.doc(`${change.collection}/${change.id}`))));
+      const storeIds = [...new Set(changes.filter(change => change.collection === 'orders').map(change => change.after.storeId))];
+      const storeDocs = await Promise.all(storeIds.map(id => transaction.get(this.adminDb.doc(`stores/${id}`))));
+      const settingsDoc = await transaction.get(this.adminDb.doc('systemSettings/default'));
+      if (settingsDoc.exists && (settingsDoc.data().plazaCommissionRate ?? 0.0005) !== (previous.systemSettings.plazaCommissionRate ?? 0.0005)) throw new Error('La comisión cambió. Actualiza el carrito.');
+      for (const document of storeDocs) if (!document.exists || !isStorePubliclyVisible(document.data())) throw new Error('Tienda no disponible');
+      for (let i = 0; i < changes.length; i++) {
+        const change = changes[i], document = documents[i];
+        const current = document.exists ? document.data() : null;
+        if (!change.before && current) throw new Error('Compra ya registrada. Actualiza el carrito antes de reintentar.');
+        if (change.collection === 'products') {
+          if (!current || !isProductPubliclyVisible(current) || current.stock !== change.before.stock || current.price !== change.before.price || (current.promoPrice ?? null) !== (change.before.promoPrice ?? null)) throw new Error('El inventario o precio cambió. Actualiza el carrito.');
+        }
+        if (change.collection === 'storeBalances' && current) {
+          for (const key of ['totalSales','cashSales','cardSales','pendingCashCommissions','pendingBalance','availableBalance']) {
+            if ((current[key] || 0) !== (change.before?.[key] || 0)) throw new Error('El balance cambió. Actualiza e intenta nuevamente.');
+          }
+        }
+        if (change.collection === 'fulfillmentInventory' && (!current || current.available !== change.before.available || current.reserved !== change.before.reserved)) throw new Error('El inventario del almacén cambió');
+      }
+      for (const change of changes) {
+        const ref = this.adminDb.doc(`${change.collection}/${change.id}`);
+        if (change.collection === 'products') transaction.update(ref, {stock:change.after.stock,soldCount:change.after.soldCount});
+        else transaction.set(ref, firestoreSafe(change.after), {merge:true});
+      }
+    });
   }
 
   public async saveOrder(order: Order): Promise<void> {
@@ -638,11 +680,12 @@ export class FirestoreRepository {
     const ordersWithoutStore = orders.filter((o: any) => o.storeId && !storeIds.has(o.storeId)).map((o: any) => o.id);
     const ordersWithoutCustomer = orders.filter((o: any) => o.customerId && !userIds.has(o.customerId)).map((o: any) => o.id);
 
-    const duplicateEmails = Array.from(users.reduce((m: Map<string, number>, u: any) => {
+    const emailCounts: Map<string, number> = users.reduce((m: Map<string, number>, u: any) => {
       const key = String(u.email || '').trim().toLowerCase();
       if (key) m.set(key, (m.get(key) || 0) + 1);
       return m;
-    }, new Map<string, number>()).entries()).filter(([, count]) => count > 1).map(([email]) => email);
+    }, new Map<string, number>());
+    const duplicateEmails = Array.from(emailCounts.entries()).filter(([, count]) => count > 1).map(([email]) => email);
 
     const memoryCounts = memoryState ? {
       users: memoryState.users?.length || 0,

@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+const result=await build({entryPoints:['server/public-state.ts'],bundle:true,platform:'node',format:'cjs',write:false});
+const module={exports:{}};new Function('module','exports',result.outputFiles[0].text)(module,module.exports);
+const {sanitizeMarketplaceState,editableFields,STORE_EDIT_FIELDS,safeUser}=module.exports;
+const raw={version:1,userCredentials:[{passwordHash:'fixture'}],unknownSecret:'fixture',users:[{id:'customer',passwordHash:'fixture',verification:{code:'fixture'}}],stores:[{id:'store-a',status:'APPROVED',bankInfo:{accountNumber:'fixture'}},{id:'store-b',status:'APPROVED'}],products:[],systemSettings:{platformName:'Plazado',mailConfig:{smtpPass:'fixture'},azulConfig:{authKey:'fixture'}},orders:[{id:'a',storeId:'store-a',customerId:'customer',deliveryConfirmationCode:'fixture'},{id:'b',storeId:'store-b',customerId:'other'}],orderMessages:[{orderId:'a'},{orderId:'b'}],fulfillmentInventory:[{storeId:'store-a'},{storeId:'store-b'}]};
+const guest=sanitizeMarketplaceState(raw,null);
+assert.equal(guest.userCredentials,undefined);assert.equal(guest.unknownSecret,undefined);assert.equal(guest.stores[0].bankInfo,undefined);assert.equal(guest.systemSettings.mailConfig,undefined);assert.equal(guest.systemSettings.azulConfig,undefined);assert.equal(guest.orders.length,0);assert.equal(guest.orderMessages.length,0);assert.equal(guest.fulfillmentInventory.length,0);
+const customer=sanitizeMarketplaceState(raw,{id:'customer',role:'CUSTOMER'});assert.equal(customer.orders.length,1);assert.equal(customer.orders[0].deliveryConfirmationCode,'fixture');assert.equal(customer.orderMessages.length,1);assert.equal(customer.users[0].passwordHash,undefined);assert.equal(customer.users[0].verification,undefined);
+const store=sanitizeMarketplaceState(raw,{id:'owner',role:'STORE_OWNER',storeId:'store-a'});assert.equal(store.fulfillmentInventory.length,1);assert.equal(store.orders[0].deliveryConfirmationCode,undefined);assert.equal(store.stores[0].bankInfo.accountNumber,'fixture');
+assert.equal(sanitizeMarketplaceState(raw,{id:'admin',role:'SUPER_ADMIN'}).userCredentials,undefined);
+assert.deepEqual(editableFields({name:'Changed',ownerId:'intruder',status:'APPROVED',id:'intruder'},STORE_EDIT_FIELDS),{name:'Changed'});
+assert.equal(safeUser({id:'u',passwordHash:'x',password:'x',verification:{code:'x'}}).password,undefined);
+console.log('Public-state security: guest/customer/store/admin isolation, no credentials/OTP, no foreign delivery code/bank data, protected fields ignored.');

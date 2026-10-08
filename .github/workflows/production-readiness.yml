@@ -29,5 +29,8 @@ jobs:
       - name: TypeScript validation
         run: npm run lint
 
+      - name: Isolated production regression tests
+        run: npm test
+
       - name: Production build
         run: npm run build

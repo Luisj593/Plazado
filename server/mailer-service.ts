@@ -232,7 +232,7 @@ Correo oficial de seguridad enviado desde: contacto@plazado.com
 De: ${senderAddress}
 Para: ${recipientEmail}
 Asunto: ${subject}
-Código generado: ${otpCode}
+Código generado: [oculto en registros del servidor]
 Aviso: Falta Contraseña de Aplicación de IONOS en Super Admin > Configuración.
 ===================================================================
     `);
@@ -272,7 +272,7 @@ Aviso: Falta Contraseña de Aplicación de IONOS en Super Admin > Configuración
 De: ${senderAddress}
 Para: ${recipientEmail}
 Asunto: ${subject}
-Código generado: ${otpCode}
+Código generado: [oculto en registros del servidor]
 Error devuelto por SMTP: ${errMessage}
 ===================================================================
     `);
