@@ -859,6 +859,7 @@ export const HomePage: React.FC = () => {
       {/* ============================================================== */}
       {/* 7. CTA FINAL PARA COMERCIOS — IDENTIDAD PLAZADO                  */}
       {/* ============================================================== */}
+      {!currentUser && (
       <section>
         <div className="rounded-none sm:rounded-2xl bg-gradient-to-r from-[#c90035] via-[#ed1748] to-[#f20544] text-white p-5 sm:p-7 shadow-md flex flex-col lg:flex-row items-center justify-between gap-6">
           
@@ -917,6 +918,7 @@ export const HomePage: React.FC = () => {
 
         </div>
       </section>
+      )}
 
     </div>
   );
