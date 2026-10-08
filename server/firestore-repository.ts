@@ -166,6 +166,7 @@ export class FirestoreRepository {
     adPlacements: AdPlacement[];
     orderMessages: OrderChatMessage[];
     commerceState: Record<string, any[]>;
+    fulfillmentConfig?:any;
   } | null> {
     if (!this.db) return null;
 
@@ -232,11 +233,14 @@ export class FirestoreRepository {
       console.log(`[FirestoreRepository] Successfully loaded from Firestore: ${stores.length} stores, ${products.length} products, ${users.length} users, ${categories.length} categories.`);
 
       const commerceState: Record<string, any[]> = {};
-      for (const key of ['paymentTransactions','financialAuditLogs','fulfillmentInventory','inventoryMovements','fulfillmentOrders']) {
+      for (const key of ['paymentTransactions','financialAuditLogs','fulfillmentInventory','inventoryMovements','fulfillmentOrders','storageRequests','fulfillmentIncidences','fulfillmentReturns','fulfillmentWithdrawals']) {
         const snapshot = await getDocs(collection(this.db, key));
         commerceState[key] = snapshot.docs.map((d: any) => ({id:d.id,...d.data()}));
       }
+      const fulfillmentConfigDoc=await getDoc(doc(this.db,'fulfillmentConfig','default'));
+      const fulfillmentConfig=(typeof fulfillmentConfigDoc.exists==='function'?fulfillmentConfigDoc.exists():fulfillmentConfigDoc.exists)?{...fulfillmentConfigDoc.data(),id:'default'}:undefined;
       return {
+        fulfillmentConfig,
         commerceState,
         stores,
         products,
@@ -482,12 +486,13 @@ export class FirestoreRepository {
         if (change.before && (change.collection === 'orders' || change.collection === 'settlements')) {
           if (!current || current.status !== change.before.status || current.paymentStatus !== change.before.paymentStatus || current.settlementStatus !== change.before.settlementStatus || (current.activeDisputeId ?? null)!==(change.before.activeDisputeId ?? null)) throw new Error('La operación ya cambió en otra sesión. Actualiza antes de reintentar.');
         }
-        if (['users','stores','banners','disputes','orderMessages'].includes(change.collection) && change.before) {
+        if (['users','stores','banners','disputes','orderMessages','storageRequests','fulfillmentIncidences','fulfillmentReturns','fulfillmentWithdrawals','fulfillmentOrders','fulfillmentInventory','fulfillmentConfig'].includes(change.collection) && change.before) {
           if(!current) throw new Error('El registro ya no existe. Actualiza antes de reintentar');
           for(const key of Object.keys(change.before)) if(JSON.stringify(current[key])!==JSON.stringify(change.before[key])) throw new Error('El registro cambió en otra sesión. Actualiza antes de reintentar');
         }
+        if(change.collection==='products' && !isNewCheckout && change.before && current) for(const key of Object.keys(change.before)) if(JSON.stringify(current[key])!==JSON.stringify(change.before[key])) throw new Error('El producto cambió en otra sesión. Actualiza antes de reintentar');
         if (change.collection === 'products') {
-          if (!current || current.stock !== change.before.stock || (isNewCheckout && (!isProductPubliclyVisible(current) || current.price !== change.before.price || (current.promoPrice ?? null) !== (change.before.promoPrice ?? null)))) throw new Error('El inventario o precio cambió. Actualiza el carrito.');
+          if (!current || !change.before || current.stock !== change.before.stock || (isNewCheckout && (!isProductPubliclyVisible(current) || current.price !== change.before.price || (current.promoPrice ?? null) !== (change.before.promoPrice ?? null)))) throw new Error('El inventario o precio cambió. Actualiza el carrito.');
         }
         if (change.collection === 'storeBalances' && change.before && !current) throw new Error('El saldo no existe en la base durable. Requiere conciliación');
         if (change.collection === 'storeBalances' && current) {
@@ -495,11 +500,11 @@ export class FirestoreRepository {
             if ((current[key] || 0) !== (change.before?.[key] || 0)) throw new Error('El balance cambió. Actualiza e intenta nuevamente.');
           }
         }
-        if (change.collection === 'fulfillmentInventory' && (!current || current.available !== change.before.available || current.reserved !== change.before.reserved)) throw new Error('El inventario del almacén cambió');
+        if (change.collection === 'fulfillmentInventory' && change.before && (!current || current.available !== change.before.available || current.reserved !== change.before.reserved)) throw new Error('El inventario del almacén cambió');
       }
       for (const change of changes) {
         const ref = this.adminDb.doc(`${change.collection}/${change.id}`);
-        if (change.collection === 'products') transaction.update(ref, {stock:change.after.stock,soldCount:change.after.soldCount});
+        if (change.collection === 'products' && isNewCheckout) transaction.update(ref, {stock:change.after.stock,soldCount:change.after.soldCount});
         else transaction.set(ref, firestoreSafe(change.after), {merge:true});
       }
     });

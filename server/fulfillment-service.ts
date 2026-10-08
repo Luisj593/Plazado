@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import {transitionOrder} from './financial-lifecycle';
 import { 
   StorageRequest, 
   StorageRequestStatus,
@@ -21,44 +22,11 @@ import { db } from './database';
 export const DEFAULT_FULFILLMENT_CONFIG: FulfillmentConfig = {
   orderConfirmationTimeoutMinutes: 60, // 60 minutos configurables
   timeoutAction: 'AUTO_CANCEL_RELEASE', // Al expirar, cancela pedido y libera reserva preventiva
-  warehouses: [
-    {
-      id: 'wh-sdo-01',
-      name: 'Centro Logístico Central Santo Domingo Oeste',
-      code: 'WH-SDO-01',
-      address: 'Av. Luperón esq. Autopista Duarte, Nave 4B, Zona Industrial Herrera',
-      province: 'Santo Domingo',
-      municipality: 'Santo Domingo Oeste',
-      contactPhone: '809-449-3325',
-      managerName: 'Ing. Carlos Mendoza (Operaciones Plazado)',
-      zones: [
-        'Zona A - Almacén General',
-        'Zona B - Electrónica & Alto Valor',
-        'Zona C - Moda & Calzado',
-        'Zona D - Hogar & Frágil'
-      ],
-      isActive: true
-    },
-    {
-      id: 'wh-sti-02',
-      name: 'Centro Logístico Norte Santiago',
-      code: 'WH-STI-02',
-      address: 'Av. Circunvalación Norte, Parque Industrial Cibao, Módulo 12',
-      province: 'Santiago',
-      municipality: 'Santiago de los Caballeros',
-      contactPhone: '809-580-1200',
-      managerName: 'Lic. Ramón Batista',
-      zones: [
-        'Zona A - General Norte',
-        'Zona B - Envíos Rápidos'
-      ],
-      isActive: true
-    }
-  ],
+  warehouses: [],
   storageFeePerM3PerDay: 15,
   handlingFeePerOrder: 75,
   packagingFee: 45,
-  isFulfillmentEnabledGlobally: true
+  isFulfillmentEnabledGlobally: false
 };
 
 export class FulfillmentService {
@@ -71,6 +39,18 @@ export class FulfillmentService {
       db.addAuditLog(auditAction, recordId, undefined, detail);
     }
     (db as any).commit();
+  }
+
+  private assertStoreAccess(storeId:string,user:any) {
+    if(!user || (user.role!=='SUPER_ADMIN' && user.storeId!==storeId)) throw new Error('No autorizado para operar sobre este comercio');
+    if(!(this.getDbData().stores || []).some((s:any)=>s.id===storeId)) throw new Error('Tienda no encontrada');
+  }
+
+  private validateInventoryStage(order:FulfillmentOrder,field:string) {
+    for(const item of order.items) {
+      const inventory=(this.getDbData().fulfillmentInventory || []).find((i:any)=>i.storeId===order.storeId && (item.productId?i.productId===item.productId:i.sku===item.sku));
+      if(!inventory || !Number.isSafeInteger(item.quantity) || item.quantity<=0 || !Number.isFinite(inventory[field]) || inventory[field]<item.quantity) throw new Error('Inventario insuficiente o inconsistente para esta operación');
+    }
   }
 
   // --- QUERY FULFILLMENT DATA ---
@@ -140,14 +120,19 @@ export class FulfillmentService {
     transferType?: 'BRANCH_TO_FULFILLMENT' | 'SUPPLIER_TO_FULFILLMENT' | 'STANDARD_INBOUND';
   }, user?: any): StorageRequest {
     const data = this.getDbData();
+    this.assertStoreAccess(payload.storeId,user);
     data.storageRequests = data.storageRequests || [];
 
     const config: FulfillmentConfig = data.fulfillmentConfig || DEFAULT_FULFILLMENT_CONFIG;
-    const warehouse = config.warehouses.find(w => w.id === payload.warehouseId) || config.warehouses[0];
+    if(!config.isFulfillmentEnabledGlobally) throw new Error('El servicio de almacén está pendiente de activación');
+    const warehouse = config.warehouses.find(w => w.id === payload.warehouseId && w.isActive);
+    if(!warehouse) throw new Error('Selecciona un almacén activo configurado por el Super Admin');
+    const product=(data.products || []).find((p:any)=>p.id===payload.productId && p.storeId===payload.storeId);
+    if(!product || !Number.isSafeInteger(payload.declaredQuantity) || payload.declaredQuantity<=0) throw new Error('Producto o cantidad declarada inválidos');
 
     const randomSuffix = Math.floor(10000 + Math.random() * 90000);
     const isBranchTransfer = payload.transferType === 'BRANCH_TO_FULFILLMENT' || Boolean(payload.originBranch);
-    const reqId = isBranchTransfer ? `TRF-${randomSuffix}` : `PF-${randomSuffix}`;
+    const reqId = `${isBranchTransfer?'TRF':'PF'}-${crypto.randomUUID()}`;
     const timestamp = new Date().toISOString();
 
     // Generate cryptographic-style tamper-proof verification hash for non-repudiation
@@ -219,6 +204,12 @@ export class FulfillmentService {
     const req = (data.storageRequests || []).find((r: StorageRequest) => r.id === id);
     if (!req) throw new Error(`Transferencia o solicitud ${id} no encontrada.`);
 
+    if(!['CREATED','PENDING_APPROVAL','APPROVED','WAITING_GOODS','IN_TRANSIT','RECEIVED','VALIDATING','STORED','REJECTED'].includes(status)) throw new Error('Estado de recepción inválido');
+    if(req.status===status) return req;
+    if(['STORED','REJECTED'].includes(req.status)) throw new Error('La solicitud ya fue cerrada');
+    if(status==='STORED') throw new Error('Completa el conteo físico para almacenar mercancía');
+    if(user?.role!=='SUPER_ADMIN' && !['CREATED','PENDING_APPROVAL','IN_TRANSIT'].includes(status)) throw new Error('La aprobación y recepción requieren personal de almacén autorizado');
+
     // Strict Authorization & Immutability Enforcement:
     // Unauthorized alterations of transfer logs are blocked
     const isSuperAdmin = user?.role === 'SUPER_ADMIN';
@@ -259,6 +250,9 @@ export class FulfillmentService {
     const req: StorageRequest | undefined = (data.storageRequests || []).find((r: StorageRequest) => r.id === payload.requestId);
     if (!req) throw new Error(`Solicitud ${payload.requestId} no encontrada.`);
 
+    if(req.status==='STORED' || req.receptionDetails) throw new Error('Esta recepción ya fue procesada');
+    for(const quantity of [payload.declaredQuantity,payload.receivedQuantity,payload.acceptedQuantity,payload.damagedQuantity]) if(!Number.isSafeInteger(quantity) || quantity<0) throw new Error('El conteo debe usar cantidades enteras no negativas');
+    if(payload.declaredQuantity!==req.declaredQuantity || payload.acceptedQuantity+payload.damagedQuantity!==payload.receivedQuantity) throw new Error('El conteo recibido no coincide con las cantidades declaradas/aceptadas/dañadas');
     const difference = payload.receivedQuantity - payload.declaredQuantity;
 
     req.receptionDetails = {
@@ -444,6 +438,7 @@ export class FulfillmentService {
     reason: string;
     notes?: string;
   }, user?: any): FulfillmentInventoryItem {
+    if(!Number.isSafeInteger(payload.newAvailable) || payload.newAvailable<0 || !payload.reason?.trim()) throw new Error('Ajuste de inventario inválido');
     const data = this.getDbData();
     const inv: FulfillmentInventoryItem | undefined = (data.fulfillmentInventory || []).find((i: FulfillmentInventoryItem) => i.id === payload.inventoryItemId);
     if (!inv) throw new Error('Ítem de inventario no encontrado.');
@@ -533,6 +528,7 @@ export class FulfillmentService {
     action: 'BLOCK' | 'UNBLOCK';
     reason: string;
   }, user?: any): FulfillmentInventoryItem {
+    if(!Number.isSafeInteger(payload.quantity) || payload.quantity<=0 || !['BLOCK','UNBLOCK'].includes(payload.action)) throw new Error('Cantidad o acción inválida');
     const data = this.getDbData();
     const inv: FulfillmentInventoryItem | undefined = (data.fulfillmentInventory || []).find((i: FulfillmentInventoryItem) => i.id === payload.inventoryItemId);
     if (!inv) throw new Error('Ítem de inventario no encontrado.');
@@ -589,6 +585,7 @@ export class FulfillmentService {
     reason: string;
     evidencePhotos?: string[];
   }, user?: any): FulfillmentInventoryItem {
+    if(!Number.isSafeInteger(payload.quantity) || payload.quantity<=0) throw new Error('Cantidad dañada inválida');
     const data = this.getDbData();
     const inv: FulfillmentInventoryItem | undefined = (data.fulfillmentInventory || []).find((i: FulfillmentInventoryItem) => i.id === payload.inventoryItemId);
     if (!inv) throw new Error('Ítem de inventario no encontrado.');
@@ -642,6 +639,7 @@ export class FulfillmentService {
       throw new Error(`Esta orden ya fue procesada (estado actual: ${fo.status}).`);
     }
 
+    this.validateInventoryStage(fo,'reserved');
     fo.status = 'CONFIRMED_BY_STORE';
     fo.storeConfirmedAt = new Date().toISOString();
     fo.updatedAt = new Date().toISOString();
@@ -649,7 +647,7 @@ export class FulfillmentService {
     // Move inventory from 'reserved' to 'inPicking'
     fo.items.forEach(it => {
       const inv: FulfillmentInventoryItem | undefined = (data.fulfillmentInventory || []).find(
-        (i: FulfillmentInventoryItem) => i.storeId === fo.storeId && (i.productId === it.productId || i.sku === it.sku)
+        (i: FulfillmentInventoryItem) => i.storeId === fo.storeId && (it.productId ? i.productId === it.productId : i.sku === it.sku)
       );
       if (inv) {
         inv.reserved = Math.max(0, inv.reserved - it.quantity);
@@ -722,6 +720,11 @@ export class FulfillmentService {
       throw new Error('Debe proporcionar un motivo para el rechazo del pedido.');
     }
 
+    this.validateInventoryStage(fo,'reserved');
+    const order=(data.orders || []).find((o:Order)=>o.id===fo.orderId);
+    if(!order || order.fulfillmentOrderId!==fo.id) throw new Error('Pedido de almacén inconsistente');
+    const cancellation=transitionOrder(data,order.id,'CANCELLED',reason,undefined,true);
+    if(!cancellation.success) throw new Error(cancellation.message);
     fo.status = 'REJECTED_BY_STORE';
     fo.storeRejectionReason = reason;
     fo.rejectionUserDetails = {
@@ -735,7 +738,7 @@ export class FulfillmentService {
     // Release reserved quantity back to available for each item!
     fo.items.forEach(it => {
       const inv: FulfillmentInventoryItem | undefined = (data.fulfillmentInventory || []).find(
-        (i: FulfillmentInventoryItem) => i.storeId === fo.storeId && (i.productId === it.productId || i.sku === it.sku)
+        (i: FulfillmentInventoryItem) => i.storeId === fo.storeId && (it.productId ? i.productId === it.productId : i.sku === it.sku)
       );
       if (inv) {
         inv.reserved = Math.max(0, inv.reserved - it.quantity);
@@ -814,6 +817,10 @@ export class FulfillmentService {
     const item = fo.items.find(i => i.productId === payload.productId);
     if (!item) return { success: false, error: 'Producto no encontrado en esta orden.' };
 
+    if(item.isPicked) return {success:true,order:fo};
+    if(!['CONFIRMED_BY_STORE','PICKING_IN_PROGRESS'].includes(fo.status)) return {success:false,error:'El pedido no está en preparación'};
+    this.validateInventoryStage(fo,'inPicking');
+
     // STRICT VALIDATION
     const expectedSku = item.sku.trim().toUpperCase();
     const providedSku = payload.scannedSku.trim().toUpperCase();
@@ -855,7 +862,7 @@ export class FulfillmentService {
       // Shift inventory from inPicking to inPacking
       fo.items.forEach(it => {
         const inv: FulfillmentInventoryItem | undefined = (data.fulfillmentInventory || []).find(
-          (i: FulfillmentInventoryItem) => i.storeId === fo.storeId && (i.productId === it.productId || i.sku === it.sku)
+          (i: FulfillmentInventoryItem) => i.storeId === fo.storeId && (it.productId ? i.productId === it.productId : i.sku === it.sku)
         );
         if (inv) {
           inv.inPicking = Math.max(0, inv.inPicking - it.quantity);
@@ -892,6 +899,8 @@ export class FulfillmentService {
     const fo: FulfillmentOrder | undefined = (data.fulfillmentOrders || []).find((f: FulfillmentOrder) => f.id === payload.fulfillmentOrderId);
     if (!fo) throw new Error('Orden de Fulfillment no encontrada.');
 
+    if(fo.status!=='PICKING_COMPLETED') throw new Error('Completa la preparación de artículos antes de empacar');
+    this.validateInventoryStage(fo,'inPacking');
     fo.packingDetails = {
       packageCount: payload.packageCount || 1,
       totalWeightKg: payload.totalWeightKg || 1,
@@ -909,7 +918,7 @@ export class FulfillmentService {
     // Shift inventory from inPacking to prepared
     fo.items.forEach(it => {
       const inv: FulfillmentInventoryItem | undefined = (data.fulfillmentInventory || []).find(
-        (i: FulfillmentInventoryItem) => i.storeId === fo.storeId && (i.productId === it.productId || i.sku === it.sku)
+        (i: FulfillmentInventoryItem) => i.storeId === fo.storeId && (it.productId ? i.productId === it.productId : i.sku === it.sku)
       );
       if (inv) {
         inv.inPacking = Math.max(0, inv.inPacking - it.quantity);
@@ -964,6 +973,9 @@ export class FulfillmentService {
     const fo: FulfillmentOrder | undefined = (data.fulfillmentOrders || []).find((f: FulfillmentOrder) => f.id === payload.fulfillmentOrderId);
     if (!fo) throw new Error('Orden de Fulfillment no encontrada.');
 
+    if(fo.status!=='READY_FOR_DISPATCH') throw new Error('El pedido debe estar empacado para despachar');
+    if(!payload.carrier?.trim() || !payload.trackingNumber?.trim()) throw new Error('Indica transportista y guía reales');
+    this.validateInventoryStage(fo,'prepared');
     fo.dispatchDetails = {
       carrier: payload.carrier || 'Plazado Express Courier',
       trackingNumber: payload.trackingNumber || `TRK-${Date.now().toString().slice(-6)}`,
@@ -978,7 +990,7 @@ export class FulfillmentService {
     // Shift inventory from prepared to inTransit
     fo.items.forEach(it => {
       const inv: FulfillmentInventoryItem | undefined = (data.fulfillmentInventory || []).find(
-        (i: FulfillmentInventoryItem) => i.storeId === fo.storeId && (i.productId === it.productId || i.sku === it.sku)
+        (i: FulfillmentInventoryItem) => i.storeId === fo.storeId && (it.productId ? i.productId === it.productId : i.sku === it.sku)
       );
       if (inv) {
         inv.prepared = Math.max(0, inv.prepared - it.quantity);
@@ -1025,12 +1037,21 @@ export class FulfillmentService {
   public deliverOrder(payload: {
     fulfillmentOrderId: string;
     deliveryEvidencePhoto?: string;
+    confirmationCode?:string;
     receivedByName?: string;
   }, user?: any): FulfillmentOrder {
     const data = this.getDbData();
     const fo: FulfillmentOrder | undefined = (data.fulfillmentOrders || []).find((f: FulfillmentOrder) => f.id === payload.fulfillmentOrderId);
     if (!fo) throw new Error('Orden de Fulfillment no encontrada.');
 
+    if(fo.status==='DELIVERED') return fo;
+    if(fo.status!=='IN_TRANSIT') throw new Error('Solo se puede entregar un pedido despachado');
+    this.validateInventoryStage(fo,'inTransit');
+    this.validateInventoryStage(fo,'totalPhysical');
+    const order=(data.orders || []).find((o:Order)=>o.id===fo.orderId);
+    if(!order || order.fulfillmentOrderId!==fo.id) throw new Error('Pedido de almacén inconsistente');
+    const confirmation=transitionOrder(data,order.id,'DELIVERED','Entrega desde almacén',payload.confirmationCode,true);
+    if(!confirmation.success) throw new Error(confirmation.message);
     fo.status = 'DELIVERED';
     fo.updatedAt = new Date().toISOString();
 
@@ -1043,7 +1064,7 @@ export class FulfillmentService {
     // Shift inventory from inTransit to delivered
     fo.items.forEach(it => {
       const inv: FulfillmentInventoryItem | undefined = (data.fulfillmentInventory || []).find(
-        (i: FulfillmentInventoryItem) => i.storeId === fo.storeId && (i.productId === it.productId || i.sku === it.sku)
+        (i: FulfillmentInventoryItem) => i.storeId === fo.storeId && (it.productId ? i.productId === it.productId : i.sku === it.sku)
       );
       if (inv) {
         inv.inTransit = Math.max(0, inv.inTransit - it.quantity);
@@ -1065,17 +1086,7 @@ export class FulfillmentService {
       completed: true
     });
 
-    const parentOrder = (data.orders || []).find((o: Order) => o.id === fo.orderId);
-    if (parentOrder) {
-      parentOrder.status = 'DELIVERED';
-      parentOrder.fulfillmentStatus = 'DELIVERED';
-      parentOrder.statusHistory.push({
-        status: 'DELIVERED',
-        timestamp: new Date().toISOString(),
-        updatedBy: user?.name || 'Transportista',
-        note: `Pedido entregado al cliente (${payload.receivedByName || fo.customerName}). Proceso de Plazado Fulfillment finalizado con éxito.`
-      });
-    }
+    order.fulfillmentStatus='DELIVERED';
 
     this.commit('ORDER_DELIVERED', fo.id, `Orden ${fo.id} entregada al cliente final`);
     return fo;
@@ -1097,10 +1108,11 @@ export class FulfillmentService {
     evidencePhotos?: string[];
   }, user?: any): FulfillmentIncidence {
     const data = this.getDbData();
+    this.assertStoreAccess(payload.storeId,user);
     data.fulfillmentIncidences = data.fulfillmentIncidences || [];
 
     const newInc: FulfillmentIncidence = {
-      id: `INC-${Math.floor(10000 + Math.random() * 90000)}`,
+      id: `INC-${crypto.randomUUID()}`,
       type: payload.type,
       orderId: payload.orderId,
       pickingCode: payload.pickingCode,
@@ -1175,10 +1187,15 @@ export class FulfillmentService {
     evidencePhotos?: string[];
   }, user?: any): FulfillmentReturn {
     const data = this.getDbData();
+    if(user?.role!=='SUPER_ADMIN') throw new Error('La recepción física de devoluciones requiere Super Admin');
+    const order=(data.orders || []).find((o:Order)=>o.id===payload.orderId && o.storeId===payload.storeId);
+    if(!order || order.status!=='DELIVERED') throw new Error('La devolución requiere un pedido entregado del comercio indicado');
+    if(!Array.isArray(payload.items) || !payload.items.length || new Set(payload.items.map(it=>it.productId)).size!==payload.items.length || payload.items.some(it=>!Number.isSafeInteger(it.quantity) || it.quantity<=0 || !order.items.some((oi:any)=>oi.productId===it.productId && oi.quantity>=it.quantity))) throw new Error('Artículos o cantidades de devolución inválidos');
+    if((data.fulfillmentReturns || []).some((r:FulfillmentReturn)=>r.orderId===order.id)) throw new Error('El pedido ya tiene una devolución registrada');
     data.fulfillmentReturns = data.fulfillmentReturns || [];
 
     const newRet: FulfillmentReturn = {
-      id: `RET-${Math.floor(10000 + Math.random() * 90000)}`,
+      id: `RET-${crypto.randomUUID()}`,
       orderId: payload.orderId,
       storeId: payload.storeId,
       storeName: payload.storeName,
@@ -1210,6 +1227,8 @@ export class FulfillmentService {
     const ret: FulfillmentReturn | undefined = (data.fulfillmentReturns || []).find((r: FulfillmentReturn) => r.id === payload.returnId);
     if (!ret) throw new Error('Devolución no encontrada.');
 
+    if(ret.status!=='RECEIVED_AT_WAREHOUSE') throw new Error('Esta devolución ya fue clasificada');
+    if(!['RESTOCK','DAMAGE'].includes(payload.classification)) throw new Error('Clasificación inválida');
     ret.inspectorNotes = payload.inspectorNotes;
     ret.inspectedBy = user?.name || 'Inspector de Devoluciones Plazado';
     ret.inspectedAt = new Date().toISOString();
@@ -1227,7 +1246,7 @@ export class FulfillmentService {
         it.classificationOutcome = 'RETURNED_TO_AVAILABLE';
 
         const inv: FulfillmentInventoryItem | undefined = (data.fulfillmentInventory || []).find(
-          (i: FulfillmentInventoryItem) => i.storeId === ret.storeId && (i.productId === it.productId || i.sku === it.sku)
+          (i: FulfillmentInventoryItem) => i.storeId === ret.storeId && (it.productId ? i.productId === it.productId : i.sku === it.sku)
         );
         if (inv) {
           inv.available += it.quantity;
@@ -1269,7 +1288,7 @@ export class FulfillmentService {
         it.classificationOutcome = 'MOVED_TO_DAMAGED_BLOCKED';
 
         const inv: FulfillmentInventoryItem | undefined = (data.fulfillmentInventory || []).find(
-          (i: FulfillmentInventoryItem) => i.storeId === ret.storeId && (i.productId === it.productId || i.sku === it.sku)
+          (i: FulfillmentInventoryItem) => i.storeId === ret.storeId && (it.productId ? i.productId === it.productId : i.sku === it.sku)
         );
         if (inv) {
           inv.damaged += it.quantity;
@@ -1319,8 +1338,10 @@ export class FulfillmentService {
     destinationAddress?: string;
   }, user?: any): FulfillmentWithdrawal {
     const data = this.getDbData();
+    this.assertStoreAccess(payload.storeId,user);
     data.fulfillmentWithdrawals = data.fulfillmentWithdrawals || [];
 
+    if(!Number.isSafeInteger(payload.quantity) || payload.quantity<=0) throw new Error('La cantidad del retiro debe ser un entero positivo');
     const inv: FulfillmentInventoryItem | undefined = (data.fulfillmentInventory || []).find(
       (i: FulfillmentInventoryItem) => i.storeId === payload.storeId && (i.productId === payload.productId || i.sku === payload.sku)
     );
@@ -1329,7 +1350,7 @@ export class FulfillmentService {
     }
 
     const newWd: FulfillmentWithdrawal = {
-      id: `WD-${Math.floor(10000 + Math.random() * 90000)}`,
+      id: `WD-${crypto.randomUUID()}`,
       storeId: payload.storeId,
       storeName: payload.storeName,
       productId: payload.productId,
@@ -1363,6 +1384,13 @@ export class FulfillmentService {
     const wd: FulfillmentWithdrawal | undefined = (data.fulfillmentWithdrawals || []).find((w: FulfillmentWithdrawal) => w.id === id);
     if (!wd) throw new Error('Solicitud de retiro no encontrada.');
 
+    if(wd.status===status) return wd;
+    if(['DELIVERED','CANCELLED','REJECTED'].includes(wd.status)) throw new Error('El retiro ya fue cerrado');
+    if(!['REQUESTED','APPROVED','PREPARING','READY_FOR_PICKUP','DELIVERED','CANCELLED','REJECTED'].includes(status)) throw new Error('Estado de retiro inválido');
+    if(status==='DELIVERED') {
+      const inventory=(data.fulfillmentInventory || []).find((i:FulfillmentInventoryItem)=>i.storeId===wd.storeId && (wd.productId?i.productId===wd.productId:i.sku===wd.sku));
+      if(!inventory || inventory.available<wd.quantity || inventory.totalPhysical<wd.quantity) throw new Error('Inventario insuficiente para entregar el retiro');
+    }
     const prevStatus = wd.status;
     wd.status = status as any;
     wd.updatedAt = new Date().toISOString();
@@ -1417,7 +1445,12 @@ export class FulfillmentService {
 
   // --- FULFILLMENT CONFIGURATION (SUPER ADMIN) ---
   public updateConfig(newConfig: Partial<FulfillmentConfig>, user?: any): FulfillmentConfig {
+    if(user?.role!=='SUPER_ADMIN') throw new Error('Configuración exclusiva de Super Admin');
+    for(const key of ['storageFeePerM3PerDay','handlingFeePerOrder','packagingFee'] as const) if(newConfig[key]!==undefined && (!Number.isFinite(newConfig[key]) || newConfig[key]!<0)) throw new Error('Las tarifas deben ser importes válidos no negativos');
+    if(newConfig.warehouses!==undefined && (!Array.isArray(newConfig.warehouses) || newConfig.warehouses.some(w=>!w.id || !w.name?.trim()) || new Set(newConfig.warehouses.map(w=>w.id)).size!==newConfig.warehouses.length)) throw new Error('Almacenes inválidos o duplicados');
     const data = this.getDbData();
+    const candidate={...(data.fulfillmentConfig || DEFAULT_FULFILLMENT_CONFIG),...newConfig};
+    if(candidate.isFulfillmentEnabledGlobally && !candidate.warehouses.some((w:any)=>w.isActive)) throw new Error('Configura al menos un almacén activo antes de habilitar el servicio');
     data.fulfillmentConfig = {
       ...(data.fulfillmentConfig || DEFAULT_FULFILLMENT_CONFIG),
       ...newConfig

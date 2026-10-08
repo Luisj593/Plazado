@@ -100,3 +100,14 @@ Procedimiento: Super Admin → Verificaciones → usuario o tienda pendiente →
 ## Conversaciones de pedidos
 
 Mensajes y estados de lectura se guardan en una transacción de Firestore antes de confirmarse. Los remitentes y el acceso se determinan por la sesión y el pedido. El texto escrito se conserva cuando falla el envío; el cliente no crea mensajes ficticios locales ni marca lectura si el servidor falla. Identificadores aleatorios y límite de 5000 caracteres por mensaje. Pruebas aisladas de reinicio, rechazo de escritura y fallos de interfaz.
+
+
+## Almacén — cierre de la entrega actual
+
+- Mutaciones de recepción, inventario, preparación, entrega, incidencias, devoluciones, retiros y configuración se guardan en una transacción de Firestore antes de confirmarse. Se cargan los registros durables al reiniciar; conflictos concurrentes rechazan la escritura.
+- Entregar requiere el código del cliente y un pedido despachado. Usa el mismo ciclo financiero contra entrega, con comisión reconocida al validar la entrega. Rechazar el pedido revierte la reserva y evita simular reembolsos.
+- Recepción/clasificación/entrega no pueden duplicar movimientos. Cantidades inválidas y falta de inventario se rechazan; el personal administrativo procede desde una sesión verificada y las tiendas no operan sobre otra tienda.
+- Se retiran del código las ubicaciones/personas de almacén de ejemplo. No se modifica una configuración real existente. Sin configuración, el servicio empieza desactivado y el Super Admin debe registrar almacenes reales y activarlo expresamente.
+- Comprobaciones aisladas de recepción/entrega, fallos de persistencia, reinicio, intentos duplicados, código incorrecto, comisiones y acceso entre comercios. No se ejecutaron movimientos reales para probarlo.
+
+A solicitud del operador, se cierra aquí esta fase. Quedan pendientes la privacidad del historial Git, recuperación de acceso y comprobación operativa completa con respaldo externo restaurable. No se certifica producción abierta por aprobar pruebas aisladas o por mostrar disponibilidad técnica del piloto con códigos manuales.

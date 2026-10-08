@@ -540,36 +540,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [fulfillmentConfig, setFulfillmentConfig] = useState<FulfillmentConfig>({
     orderConfirmationTimeoutMinutes: 60,
     timeoutAction: 'AUTO_CANCEL_RELEASE',
-    warehouses: [
-      {
-        id: 'wh-sdo-01',
-        name: 'Centro Logístico Central Santo Domingo Oeste',
-        code: 'WH-SDO-01',
-        address: 'Av. Luperón esq. Autopista Duarte, Nave 4B, Zona Industrial Herrera',
-        province: 'Santo Domingo',
-        municipality: 'Santo Domingo Oeste',
-        contactPhone: '809-449-3325',
-        managerName: 'Ing. Carlos Mendoza (Operaciones Plazado)',
-        zones: ['Zona A - Almacén General', 'Zona B - Electrónica & Alto Valor', 'Zona C - Moda & Calzado', 'Zona D - Hogar & Frágil'],
-        isActive: true
-      },
-      {
-        id: 'wh-sti-02',
-        name: 'Centro Logístico Norte Santiago',
-        code: 'WH-STI-02',
-        address: 'Av. Circunvalación Norte, Parque Industrial Cibao, Módulo 12',
-        province: 'Santiago',
-        municipality: 'Santiago de los Caballeros',
-        contactPhone: '809-580-1200',
-        managerName: 'Lic. Ramón Batista',
-        zones: ['Zona A - General Norte', 'Zona B - Envíos Rápidos'],
-        isActive: true
-      }
-    ],
+    warehouses: [],
     storageFeePerM3PerDay: 15,
     handlingFeePerOrder: 75,
     packagingFee: 45,
-    isFulfillmentEnabledGlobally: true
+    isFulfillmentEnabledGlobally: false
   });
 
   // Server sync version tracking: start at 0 so initial sync always grabs production records
