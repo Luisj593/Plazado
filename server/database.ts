@@ -460,22 +460,13 @@ class GlobalDatabase {
       }
 
       let updated = false;
-      // Non-destructively merge stores from Firestore: preserve stores created by users
-      if (Array.isArray(firestoreData.stores) && firestoreData.stores.length > 0) {
-        console.log(`[GlobalDatabase] Syncing ${firestoreData.stores.length} stores from Firestore.`);
-        for (const fsStore of firestoreData.stores) {
-          const existingIdx = this.memoryData.stores.findIndex(s => s.id === fsStore.id);
-          if (existingIdx === -1) {
-            this.memoryData.stores.push(fsStore);
-            updated = true;
-          } else {
-            this.memoryData.stores[existingIdx] = {
-              ...fsStore,
-              ...this.memoryData.stores[existingIdx]
-            };
-          }
-        }
+      // Firestore is authoritative for stores in production. Never merge an
+      // ephemeral/local copy over persisted store configuration.
+      if (Array.isArray(firestoreData.stores)) {
+        console.log(`[GlobalDatabase] Loading ${firestoreData.stores.length} authoritative stores from Firestore.`);
+        this.memoryData.stores = [...firestoreData.stores];
         storesDb.syncFromFirestore(firestoreData.stores);
+        updated = true;
       }
       if (Array.isArray(firestoreData.products)) {
         console.log(`[GlobalDatabase] Loading ${firestoreData.products.length} authoritative products from Firestore.`);
@@ -503,44 +494,44 @@ class GlobalDatabase {
         this.memoryData.users = [...firestoreData.users];
         updated = true;
       }
-      if (firestoreData.orders && firestoreData.orders.length > 0) {
-        this.memoryData.orders = firestoreData.orders;
+      if (Array.isArray(firestoreData.orders)) {
+        this.memoryData.orders = [...firestoreData.orders];
         updated = true;
       }
-      if (firestoreData.banners && firestoreData.banners.length > 0) {
-        this.memoryData.banners = firestoreData.banners;
+      if (Array.isArray(firestoreData.banners)) {
+        this.memoryData.banners = [...firestoreData.banners];
         updated = true;
       }
-      if (firestoreData.coupons && firestoreData.coupons.length > 0) {
-        this.memoryData.coupons = firestoreData.coupons;
+      if (Array.isArray(firestoreData.coupons)) {
+        this.memoryData.coupons = [...firestoreData.coupons];
         updated = true;
       }
-      if (firestoreData.paymentGateways && firestoreData.paymentGateways.length > 0) {
-        this.memoryData.paymentGateways = firestoreData.paymentGateways;
+      if (Array.isArray(firestoreData.paymentGateways)) {
+        this.memoryData.paymentGateways = [...firestoreData.paymentGateways];
         updated = true;
       }
       if (firestoreData.storeBalances && Object.keys(firestoreData.storeBalances).length > 0) {
         this.memoryData.storeBalances = { ...this.memoryData.storeBalances, ...firestoreData.storeBalances };
         updated = true;
       }
-      if (firestoreData.settlements && firestoreData.settlements.length > 0) {
-        this.memoryData.settlements = firestoreData.settlements;
+      if (Array.isArray(firestoreData.settlements)) {
+        this.memoryData.settlements = [...firestoreData.settlements];
         updated = true;
       }
-      if (firestoreData.disputes && firestoreData.disputes.length > 0) {
-        this.memoryData.disputes = firestoreData.disputes;
+      if (Array.isArray(firestoreData.disputes)) {
+        this.memoryData.disputes = [...firestoreData.disputes];
         updated = true;
       }
-      if (firestoreData.reviews && firestoreData.reviews.length > 0) {
-        this.memoryData.reviews = firestoreData.reviews;
+      if (Array.isArray(firestoreData.reviews)) {
+        this.memoryData.reviews = [...firestoreData.reviews];
         updated = true;
       }
-      if (firestoreData.advertisements && firestoreData.advertisements.length > 0) {
-        this.memoryData.advertisements = firestoreData.advertisements;
+      if (Array.isArray(firestoreData.advertisements)) {
+        this.memoryData.advertisements = [...firestoreData.advertisements];
         updated = true;
       }
-      if (firestoreData.orderMessages && firestoreData.orderMessages.length > 0) {
-        this.memoryData.orderMessages = firestoreData.orderMessages;
+      if (Array.isArray(firestoreData.orderMessages)) {
+        this.memoryData.orderMessages = [...firestoreData.orderMessages];
         updated = true;
       }
       if (firestoreData.systemSettings) {
