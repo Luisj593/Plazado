@@ -385,15 +385,16 @@ export class FirestoreRepository {
   }
 
   public async saveProduct(product: Product): Promise<void> {
-    if (!this.db || !product.id) return;
+    if (!this.db || !product.id) throw new Error('Firestore no está configurado para guardar producto');
     try {
       const ref = doc(this.db, 'products', product.id);
-      await setDoc(ref, {
+      await setDoc(ref, firestoreSafe({
         ...product,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      }), { merge: true });
     } catch (e) {
       console.error(`[FirestoreRepository] Error saving product ${product.id}:`, e);
+      throw e;
     }
   }
 
