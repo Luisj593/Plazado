@@ -103,7 +103,7 @@ export const HomePage: React.FC = () => {
   const heroMode = systemSettings?.homeHeroMode || 'slider';
   const activeHeroProduct = heroMode === 'slider' ? heroProducts[heroSlideIndex] : undefined;
 
-  const activeCategories = (categories && categories.length > 0) ? categories : INITIAL_CATEGORIES;
+  const activeCategories = categories || [];
   const mainCategories = activeCategories.filter(c => !c.parentId);
 
   const handleCategorySelect = (slug: string) => {
@@ -157,11 +157,11 @@ export const HomePage: React.FC = () => {
       {/* 2. HERO PRINCIPAL — REPLICA VISUAL EXACTA DE LA REFERENCIA     */}
       {/* ============================================================== */}
       <section className="pt-2 sm:pt-4">
-        <div className="relative rounded-none sm:rounded-[20px] overflow-hidden bg-gradient-to-r from-black via-[#170005] to-[#360008] border border-stone-800 shadow-sm min-h-[420px] sm:min-h-[500px] lg:h-[560px] xl:h-[620px] flex items-center">
+        <div className="relative rounded-none sm:rounded-[20px] overflow-hidden bg-white dark:bg-stone-950 border border-slate-200 dark:border-stone-800 shadow-sm min-h-[380px] sm:min-h-[430px] lg:h-[470px] xl:h-[500px] flex items-center">
           
           {/* Suaves elementos de luz y ambientación de marca */}
-          <div className="absolute -right-16 -top-16 w-80 h-80 bg-rose-100/40 dark:bg-rose-900/20 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -left-16 -bottom-16 w-80 h-80 bg-teal-100/30 dark:bg-teal-900/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -right-16 -top-16 w-80 h-80 bg-rose-100/70 dark:bg-rose-900/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -left-16 -bottom-16 w-80 h-80 bg-slate-100 dark:bg-stone-900/40 rounded-full blur-3xl pointer-events-none" />
 
           {/* Contenido en dos zonas perfectamente integradas */}
           <div className="relative z-10 w-full h-full flex flex-col justify-center px-5 sm:px-10 lg:px-12 py-7 sm:py-8">
@@ -171,14 +171,14 @@ export const HomePage: React.FC = () => {
               <div className="lg:col-span-5 space-y-3 sm:space-y-5 text-left max-w-xl">
                 
                 {/* Título Principal Grande con Verde Corporativo de Alta Visibilidad */}
-                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[46px] font-black text-white tracking-tight leading-[1.05]">
+                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[52px] font-black text-slate-950 dark:text-white tracking-tight leading-[1.02]">
                   Todo lo que buscas,<br />
                   <span className="text-[#f20544] dark:text-rose-400">en un solo lugar</span>
                 </h1>
 
                 {/* Texto Descriptivo */}
-                <p className="text-sm sm:text-base lg:text-lg text-stone-200 font-normal leading-relaxed">
-                  Descubre miles de productos de tiendas Dominicanas. Compra fácil, seguro y apoya lo nuestro.
+                <p className="text-sm sm:text-base lg:text-lg text-slate-600 dark:text-stone-300 font-normal leading-relaxed">
+                  Descubre productos de tiendas verificadas, compra fácil y disfruta una experiencia segura en Plazado.
                 </p>
 
                 {/* Botones de Acción */}
@@ -192,8 +192,8 @@ export const HomePage: React.FC = () => {
                     }}
                     className="px-6 py-3.5 bg-[#f20544] hover:bg-[#d9043d] active:bg-[#b90334] text-white rounded-full text-sm sm:text-base font-bold shadow-md hover:shadow-rose-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <Search className="w-4 h-4 stroke-[2.5]" />
-                    <span>Explorar productos</span>
+                    <ShoppingCart className="w-4 h-4 stroke-[2.5]" />
+                    <span>Comprar ahora</span>
                     <ArrowRight className="w-4 h-4 ml-0.5" />
                   </button>
 
@@ -212,17 +212,17 @@ export const HomePage: React.FC = () => {
 
               {/* ZONA DERECHA: Slider moderno de productos publicados */}
               <div
-                className="lg:col-span-7 relative h-full flex items-center justify-center"
+                className="lg:col-span-7 relative h-full flex items-center justify-center lg:-mr-12"
                 onMouseEnter={() => setHeroPaused(true)}
                 onMouseLeave={() => setHeroPaused(false)}
               >
                 
                 {/* Contenedor de la Imagen con badges superpuestos */}
-                <div className="relative w-full h-[300px] sm:h-[420px] lg:h-[560px] xl:h-[620px] overflow-hidden shadow-md border-l border-slate-200/30 dark:border-stone-800 group flex items-center justify-center bg-black/10">
+                <div className="relative w-full h-[270px] sm:h-[350px] lg:h-[470px] xl:h-[500px] overflow-hidden group flex items-center justify-center bg-slate-50 dark:bg-stone-900">
                   <img 
                     src={heroMode === 'slider' && activeHeroProduct && !heroImageError ? activeHeroProduct.images[0] : heroImageSrc} 
                     alt={activeHeroProduct ? activeHeroProduct.name : "Compras en Plazado.com República Dominicana"} 
-                    className="w-full h-full object-cover object-center bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-900 dark:to-black transition-all duration-700"
+                    className="w-full h-full object-cover object-center bg-slate-50 dark:bg-stone-900 transition-all duration-700"
                     loading="eager"
                     onError={() => setHeroImageError(true)}
                   />
@@ -298,73 +298,21 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* ============================================================== */}
-      {/* 3. FRANJA DE CONFIANZA (4 Columnas uniformes a todo lo ancho)   */}
-      {/* ============================================================== */}
-      <section>
-        <div className="bg-white dark:bg-stone-900 rounded-2xl border border-slate-200/80 dark:border-stone-800 px-4 py-3 shadow-xs">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 dark:divide-stone-800">
-            
-            {/* 1. Compra segura */}
-            <div className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:px-3 first:pt-0">
-              <div className="w-11 h-11 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-[#f20544] dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-100/70 dark:border-rose-800/40">
-                <Lock className="w-5 h-5 stroke-[2.3]" />
+      {/* Franja de confianza integrada al hero, siguiendo la referencia aprobada */}
+      <section className="-mt-1 sm:-mt-2 relative z-20">
+        <div className="bg-white dark:bg-stone-900 border-y sm:border sm:rounded-2xl border-slate-200 dark:border-stone-800 px-4 sm:px-6 py-3 shadow-sm">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-6">
+            {[
+              [Truck, 'Envío rápido', 'Gestionado por cada tienda'],
+              [ShieldCheck, 'Tiendas verificadas', 'Comercios confiables'],
+              [Lock, 'Pagos seguros', 'Compra protegida'],
+              [Headphones, 'Soporte', 'Siempre contigo']
+            ].map(([Icon, title, subtitle]: any) => (
+              <div key={title} className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-[#f20544] text-white flex items-center justify-center shrink-0"><Icon className="w-5 h-5" /></div>
+                <div><div className="font-black text-xs sm:text-sm text-slate-900 dark:text-white">{title}</div><div className="text-[10px] sm:text-[11px] text-slate-500 dark:text-stone-400">{subtitle}</div></div>
               </div>
-              <div className="text-left">
-                <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white leading-tight">
-                  Compra segura
-                </h4>
-                <p className="text-[11px] text-slate-500 dark:text-stone-400 mt-0.5 leading-snug">
-                  Tus pagos protegidos
-                </p>
-              </div>
-            </div>
-
-            {/* 2. Tiendas verificadas */}
-            <div className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:px-3">
-              <div className="w-11 h-11 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-[#f20544] dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-100/70 dark:border-rose-800/40">
-                <ShieldCheck className="w-5 h-5 stroke-[2.3]" />
-              </div>
-              <div className="text-left">
-                <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white leading-tight">
-                  Tiendas verificadas
-                </h4>
-                <p className="text-[11px] text-slate-500 dark:text-stone-400 mt-0.5 leading-snug">
-                  Comercios confiables
-                </p>
-              </div>
-            </div>
-
-            {/* 3. Envíos en toda RD */}
-            <div className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:px-3">
-              <div className="w-11 h-11 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-[#f20544] dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-100/70 dark:border-rose-800/40">
-                <Truck className="w-5 h-5 stroke-[2.3]" />
-              </div>
-              <div className="text-left">
-                <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white leading-tight">
-                  Envíos en toda RD
-                </h4>
-                <p className="text-[11px] text-slate-500 dark:text-stone-400 mt-0.5 leading-snug">
-                  A través de las tiendas
-                </p>
-              </div>
-            </div>
-
-            {/* 4. Soporte personalizado */}
-            <div className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:px-3">
-              <div className="w-11 h-11 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-[#f20544] dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-100/70 dark:border-rose-800/40">
-                <Headphones className="w-5 h-5 stroke-[2.3]" />
-              </div>
-              <div className="text-left">
-                <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white leading-tight">
-                  Soporte personalizado
-                </h4>
-                <p className="text-[11px] text-slate-500 dark:text-stone-400 mt-0.5 leading-snug">
-                  Estamos para ayudarte
-                </p>
-              </div>
-            </div>
-
+            ))}
           </div>
         </div>
       </section>
