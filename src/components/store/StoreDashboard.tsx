@@ -591,7 +591,7 @@ export const StoreDashboard: React.FC = () => {
         });
         if (!saved) return;
         showNotification(
-          pStatus === 'published' 
+          pStatus === 'published'
             ? '¡Producto publicado exitosamente! Ya es visible para todos en el catálogo de PlazaDO.'
             : 'Producto guardado en tu panel de tienda.'
         );

@@ -703,7 +703,6 @@ export const HomePage: React.FC = () => {
               Ver todos <ArrowRight className="w-4 h-4" />
             </button>
           </div>
-          {offerProducts.length === 0 && <p className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500 dark:bg-stone-900 dark:border-stone-800">Pronto encontrarás aquí las ofertas publicadas por las tiendas.</p>}
           <div className="flex gap-3 overflow-x-auto pb-2 snap-x scrollbar-none">
             {categoryProducts.map(prod => {
               const store = stores.find(s => s.id === prod.storeId);
