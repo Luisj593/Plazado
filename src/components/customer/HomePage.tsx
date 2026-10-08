@@ -149,6 +149,25 @@ export const HomePage: React.FC = () => {
     }))
     .filter(group => group.products.length > 0);
 
+  const activePromoBanners = useMemo(
+    () => [...(banners || [])].filter(b => b.isActive).sort((a, b) => a.order - b.order).slice(0, 3),
+    [banners]
+  );
+
+  const offerProducts = useMemo(
+    () => publishedProducts
+      .filter(p => typeof p.promoPrice === 'number' && p.promoPrice > 0 && p.promoPrice < p.price)
+      .slice(0, 8),
+    [publishedProducts]
+  );
+
+  const handleBannerClick = (banner: any) => {
+    if (banner.targetType === 'PRODUCT' && banner.targetValue) return setSelectedProductId(banner.targetValue);
+    if (banner.targetType === 'STORE' && banner.targetValue) return handleStoreSelect(banner.targetValue);
+    if (banner.targetType === 'CATEGORY' && banner.targetValue) return handleCategorySelect(banner.targetValue);
+    if (banner.targetType === 'URL' && /^https?:\/\//i.test(banner.targetValue || '')) window.open(banner.targetValue, '_blank', 'noopener,noreferrer');
+  };
+
 
   return (
     <div className="max-w-[1920px] mx-auto px-0 sm:px-3 lg:px-4 space-y-4 pb-10 sm:pb-14 overflow-x-hidden">
@@ -380,6 +399,63 @@ export const HomePage: React.FC = () => {
         </div>
 
       </section>
+
+      {/* Promociones configuradas por el Super Admin: nunca se generan banners ficticios */}
+      {activePromoBanners.length > 0 && (
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {activePromoBanners.map((banner, index) => (
+            <button
+              key={banner.id}
+              type="button"
+              onClick={() => handleBannerClick(banner)}
+              className={`relative overflow-hidden rounded-2xl min-h-[150px] sm:min-h-[180px] text-left group border border-slate-200 dark:border-stone-800 ${activePromoBanners.length === 1 ? 'md:col-span-3' : activePromoBanners.length === 2 && index === 0 ? 'md:col-span-2' : ''}`}
+            >
+              <img src={banner.imageUrl} alt={banner.title} loading="lazy" className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
+              <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/25 to-transparent" />
+              <div className="relative z-10 p-5 sm:p-6 max-w-[70%] text-white">
+                {banner.badge && <span className="inline-block mb-2 px-2.5 py-1 rounded-full bg-[#f20544] text-[10px] font-black uppercase tracking-wide">{banner.badge}</span>}
+                <h3 className="text-xl sm:text-2xl font-black leading-tight">{banner.title}</h3>
+                {banner.subtitle && <p className="text-xs sm:text-sm text-white/90 mt-1.5 line-clamp-2">{banner.subtitle}</p>}
+                <span className="inline-flex items-center gap-1 mt-3 text-xs font-bold">Explorar <ArrowRight className="w-3.5 h-3.5" /></span>
+              </div>
+            </button>
+          ))}
+        </section>
+      )}
+
+      {/* Ofertas reales: solo productos publicados que tengan promoPrice válido */}
+      {offerProducts.length > 0 && (
+        <section className="space-y-3.5">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <h2 className="text-lg sm:text-xl font-black text-slate-950 dark:text-white flex items-center gap-2"><Percent className="w-5 h-5 text-[#f20544]" /> Ofertas destacadas</h2>
+              <p className="text-xs text-slate-500 dark:text-stone-400">Promociones publicadas actualmente por las tiendas.</p>
+            </div>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-2 snap-x scrollbar-none">
+            {offerProducts.map(prod => {
+              const discount = Math.round((1 - (prod.promoPrice! / prod.price)) * 100);
+              const store = stores.find(s => s.id === prod.storeId);
+              return (
+                <article key={prod.id} className="min-w-[165px] sm:min-w-[190px] max-w-[210px] snap-start bg-white dark:bg-stone-900 rounded-2xl border border-slate-200 dark:border-stone-800 p-2.5 shadow-sm">
+                  <div className="relative aspect-square rounded-xl overflow-hidden bg-white dark:bg-stone-800 cursor-pointer" onClick={() => setSelectedProductId(prod.id)}>
+                    {prod.images?.[0] ? <img src={prod.images[0]} alt={prod.name} loading="lazy" className="w-full h-full object-contain" /> : <Package className="absolute inset-0 m-auto w-10 h-10 text-slate-300" />}
+                    <span className="absolute top-2 left-2 bg-[#f20544] text-white text-[10px] font-black px-2 py-1 rounded-lg">-{discount}%</span>
+                  </div>
+                  <div className="pt-2">
+                    <h3 className="font-bold text-xs text-slate-900 dark:text-white line-clamp-2 cursor-pointer" onClick={() => setSelectedProductId(prod.id)}>{prod.name}</h3>
+                    {store && <p className="text-[10px] text-slate-500 truncate mt-1">{store.name}</p>}
+                    <div className="flex items-end justify-between gap-2 mt-2">
+                      <div><div className="text-[9px] line-through text-slate-400">RD$ {prod.price.toLocaleString()}</div><div className="font-black text-sm text-[#f20544]">RD$ {prod.promoPrice!.toLocaleString()}</div></div>
+                      <button type="button" disabled={prod.stock <= 0} onClick={() => addToCart(prod.id, prod.storeId, 1)} className="p-2 rounded-lg bg-[#f20544] text-white disabled:opacity-40"><ShoppingCart className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* ============================================================== */}
       {/* 5. PRODUCTOS DESTACADOS — GRID DE 8 TARJETA MARKETPLACE        */}
