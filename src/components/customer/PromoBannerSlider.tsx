@@ -44,8 +44,8 @@ export const PromoBannerSlider: React.FC<{ banners: Banner[]; onSelect: (banner:
               className="relative w-full shrink-0 aspect-[16/9] sm:aspect-[16/5] min-h-[180px] text-left group">
               <img src={banner.imageUrl} alt={banner.title} loading={position === 0 ? 'eager' : 'lazy'}
                 className="absolute inset-0 w-full h-full object-contain object-center" />
-              <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/25 to-transparent" />
-              <div className="relative z-10 p-5 sm:p-6 max-w-[85%] sm:max-w-[70%] text-white">
+              <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+              <div className="absolute bottom-0 left-0 z-10 p-5 sm:p-6 max-w-[85%] sm:max-w-[70%] text-white">
                 {banner.badge && <span className="inline-block mb-2 px-2.5 py-1 rounded-full bg-[#f20544] text-[10px] font-black uppercase tracking-wide">{banner.badge}</span>}
                 <h3 className="text-2xl sm:text-3xl lg:text-4xl font-black leading-[1.08] tracking-tight drop-shadow-sm">{banner.title}</h3>
                 {banner.subtitle && <p className="text-sm sm:text-base lg:text-lg font-medium text-white/95 mt-2 leading-snug line-clamp-3">{banner.subtitle}</p>}
