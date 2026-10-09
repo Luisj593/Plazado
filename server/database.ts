@@ -593,7 +593,10 @@ class GlobalDatabase {
       }
       this.lastFirestoreSync=new Date().toISOString();this.firestoreSyncStatus='CONNECTED';
     };
-    const operation=this.checkoutQueue.then(execute,execute);
+    const operation=this.checkoutQueue.then(execute,execute).catch(error=>{
+      this.firestoreSyncStatus='ERROR';
+      throw error;
+    });
     this.checkoutQueue=operation.then(()=>undefined,()=>undefined);
     return operation;
   }

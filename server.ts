@@ -169,6 +169,11 @@ async function startServer() {
 
   // Verify revocation and current privileges against durable identity for authenticated API requests.
   app.use('/api',async(req,res,next)=>{
+    // An unchanged version contains no account data and requires no identity lookup.
+    if(req.method==='GET' && req.path==='/sync' && typeof req.query.v==='string' && Number(req.query.v)===db.getVersion()) {
+      res.setHeader('Cache-Control','no-store');
+      return res.json({hasUpdates:false,version:db.getVersion()});
+    }
     if(req.path.startsWith('/public-media/') || req.path.startsWith('/health'))return next();
     const auth=req.headers.authorization;
     const cookie=req.headers.cookie?.split(';').map(part=>part.trim()).find(part=>part.startsWith('plazado_session='))?.slice('plazado_session='.length);

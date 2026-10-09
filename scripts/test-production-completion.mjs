@@ -40,7 +40,7 @@ console.log('Production completion: durable recovery/restart/replay/attempt limi
 // Exercise the production middleware with isolated durable identities and forged origins.
 const serverSource=fs.readFileSync('server.ts','utf8');const segment=serverSource.slice(serverSource.indexOf('  // Verify revocation'),serverSource.indexOf('  // Lightweight in-memory'));
 const middlewareCode=await transform(segment,{loader:'ts'});let middleware,readFailure=false,reads=0;
-new Function('app','verifySessionToken','firestoreRepo',middlewareCode.code)({use:(_,fn)=>middleware=fn},()=>({userId:'u',authVersion:1}),{getDurableUser:async()=>{reads++;if(readFailure)throw Error('unavailable');return {id:'u',role:'CUSTOMER',authVersion:2};}});
+new Function('app','verifySessionToken','firestoreRepo','db',middlewareCode.code)({use:(_,fn)=>middleware=fn},()=>({userId:'u',authVersion:1}),{getDurableUser:async()=>{reads++;if(readFailure)throw Error('unavailable');return {id:'u',role:'CUSTOMER',authVersion:2};}},{getVersion:()=>42});
 const req={path:'/orders',headers:{cookie:'plazado_session=isolated'},get(){}};let passed=false,reply;
 await middleware(req,{status:s=>({json:r=>reply={s,r}})},()=>passed=true);assert.equal(passed,true);assert.equal(req.durableIdentity,null);
 readFailure=true;await middleware(req,{status:s=>({json:r=>reply={s,r}})},()=>{});assert.equal(reply.s,503);const before=reads;await middleware({path:'/public-media/isolated',headers:{}},{},()=>{});assert.equal(reads,before);
@@ -49,3 +49,19 @@ const csrfCode=await transform(csrf,{loader:'ts'});new Function('app',csrfCode.c
 let rejected;middleware({method:'POST',headers:{cookie:'plazado_session=isolated'},get:key=>key==='origin'?'https://untrusted.example.invalid':key==='host'?'www.plazado.com':undefined},{status:s=>({json:()=>rejected=s})},()=>{});assert.equal(rejected,403);
 let accepted=false;middleware({method:'POST',headers:{cookie:'plazado_session=isolated'},get:key=>key==='origin'?'https://www.plazado.com':key==='host'?'www.plazado.com':undefined},{},()=>accepted=true);assert.equal(accepted,true);
 console.log('Session middleware: durable revocation rejects stale tokens, outages fail closed, public image requests skip identity reads, and foreign-origin cookie writes are blocked.');
+
+new Function('app','verifySessionToken','firestoreRepo','db',middlewareCode.code)({use:(_,fn)=>middleware=fn},()=>({userId:'u',authVersion:1}),{getDurableUser:async()=>{reads++;throw Error('unavailable');}},{getVersion:()=>42});
+// Unchanged polling returns no private payload and performs no durable read, even during an outage.
+let unchanged,cacheControl;const beforeUnchanged=reads;
+await middleware({method:'GET',path:'/sync',query:{v:'42'},headers:{cookie:'plazado_session=isolated'}},{setHeader:(key,value)=>cacheControl=value,json:value=>unchanged=value},()=>assert.fail('unchanged poll should end here'));
+assert.deepEqual(unchanged,{hasUpdates:false,version:42});assert.equal(cacheControl,'no-store');assert.equal(reads,beforeUnchanged);
+reply=undefined;await middleware({method:'GET',path:'/sync',query:{v:'41'},headers:{cookie:'plazado_session=isolated'}},{status:s=>({json:r=>reply={s,r}})},()=>assert.fail('changed poll requires durable identity'));
+assert.equal(reads,beforeUnchanged+1);assert.equal(reply.s,503);
+// A failed refresh blocks readiness without discarding cached records; recovery reopens it.
+const refreshSource=between('  public refreshDurableState()','  public async initCloudSqlSync');
+const refreshCode=await transform(`class RefreshHarness {memoryData={products:[{id:'cached'}],specifications:[],adPlacements:[],users:[],stores:[]};checkoutQueue=Promise.resolve();settingsUpdateQueue=Promise.resolve();firestoreSyncStatus='CONNECTED';lastFirestoreSync='';commit(){} ${refreshSource}};module.exports=RefreshHarness;`,{loader:'ts'});
+let unavailable=true;const refreshModule={exports:{}};
+new Function('module','firestoreRepo','storesDb',refreshCode.code)(refreshModule,{loadConsistentState:async()=>{if(unavailable)throw Error('quota');return {products:[{id:'durable'}],users:[],stores:[],specifications:[],adPlacements:[]};}},{syncFromFirestore(){}});
+const refreshing=new refreshModule.exports();await assert.rejects(refreshing.refreshDurableState());assert.equal(refreshing.firestoreSyncStatus,'ERROR');assert.equal(refreshing.memoryData.products[0].id,'cached');
+unavailable=false;await refreshing.refreshDurableState();assert.equal(refreshing.firestoreSyncStatus,'CONNECTED');assert.equal(refreshing.memoryData.products[0].id,'durable');
+console.log('Quota protection: unchanged polls avoid identity reads; changed polls fail closed; failed refresh blocks readiness and preserves cached records; subsequent refresh recovers.');
