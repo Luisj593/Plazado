@@ -472,7 +472,7 @@ export class FirestoreRepository {
       const storeIds = [...new Set(changes.filter(change => change.collection === 'orders').map(change => change.after.storeId))];
       const storeDocs = await Promise.all(storeIds.map(id => transaction.get(this.adminDb.doc(`stores/${id}`))));
       const settingsDoc = await transaction.get(this.adminDb.doc('systemSettings/default'));
-      if (isNewCheckout && settingsDoc.exists && (settingsDoc.data().plazaCommissionRate ?? 0.03) !== (previous.systemSettings.plazaCommissionRate ?? 0.03)) throw new Error('La comisión cambió. Actualiza el carrito.');
+      if (isNewCheckout && settingsDoc.exists && (settingsDoc.data().plazaCommissionRate ?? 0.20) !== (previous.systemSettings.plazaCommissionRate ?? 0.20)) throw new Error('La comisión cambió. Actualiza el carrito.');
       for (const document of storeDocs) if (isNewCheckout && (!document.exists || !isStorePubliclyVisible(document.data()))) throw new Error('Tienda no disponible');
       // A transaction must reject duplicate email identities across server instances.
       for(const change of changes.filter(change=>change.collection==='users')) {
@@ -536,13 +536,13 @@ export class FirestoreRepository {
 
   public async applyRequestedCommissionPolicy(): Promise<Partial<SystemSettings>> {
     if (!this.adminDb) throw new Error('Firebase Admin debe estar configurado para actualizar la comisión');
-    const version = 'commission-3-percent-2026-10-08';
+    const version = 'commission-20-percent-2026-10-08';
     const ref = this.adminDb.doc('systemSettings/default');
     return this.adminDb.runTransaction(async (transaction: any) => {
       const snapshot = await transaction.get(ref);
       const current = snapshot.exists ? snapshot.data() : {};
       if (current.commissionPolicyVersion === version) return current;
-      const patch = {plazaCommissionRate:0.03,defaultCommissionRate:0.03,commissionPolicyVersion:version,commissionPolicyAppliedAt:new Date().toISOString()};
+      const patch = {plazaCommissionRate:0.20,defaultCommissionRate:0.20,commissionPolicyVersion:version,commissionPolicyAppliedAt:new Date().toISOString()};
       transaction.set(ref, patch, {merge:true});
       return {...current,...patch};
     });

@@ -645,7 +645,7 @@ export interface SystemSettings {
   whatsappCommercial: string; // ej: "809-449-3325"
   commissionPolicyVersion?: string;
   commissionPolicyAppliedAt?: string;
-  plazaCommissionRate: number; // Fracción decimal: 3% = 0.03
+  plazaCommissionRate: number; // Fracción decimal: 20% = 0.20
   defaultCommissionRate: number; // Fallback legacy
   itbisTaxRate: number; // 0.18
   currency: string; // "DOP"

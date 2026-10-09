@@ -302,7 +302,7 @@ class GlobalDatabase {
       ...(activeData.systemSettings || {})
     };
     if (typeof activeData.systemSettings.plazaCommissionRate !== 'number') {
-      activeData.systemSettings.plazaCommissionRate = 0.03; // 3%
+      activeData.systemSettings.plazaCommissionRate = 0.20; // 20%
     }
     if (!activeData.systemSettings.mailConfig) {
       activeData.systemSettings.mailConfig = {
@@ -1820,7 +1820,7 @@ class GlobalDatabase {
 
     const rate = this.memoryData.systemSettings.plazaCommissionRate !== undefined 
       ? this.memoryData.systemSettings.plazaCommissionRate 
-      : 0.03; // 3% de Plazado.com
+      : 0.20; // 20% de Plazado.com
 
     orders.forEach((ord, idx) => {
       // Recalcular formalmente con la tasa de comisión oficial de Plazado.com

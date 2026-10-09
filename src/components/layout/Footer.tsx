@@ -164,7 +164,7 @@ export const Footer: React.FC = () => {
                 onClick={() => handleOpenPolicy('commission_policy')}
                 className="hover:text-stone-950 dark:text-white transition-colors"
               >
-                Comisión ({Number(((systemSettings.plazaCommissionRate ?? 0.03)*100).toFixed(4))}%)
+                Comisión ({Number(((systemSettings.plazaCommissionRate ?? 0.20)*100).toFixed(4))}%)
               </button>
             </li>
           </ul>

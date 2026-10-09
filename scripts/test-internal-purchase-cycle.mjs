@@ -17,7 +17,7 @@ let rejectWrite=false,persisted,writes=0;
 const repo={persistCheckout:async(previous,next)=>{if(rejectWrite)throw Error('isolated persistence failure');persisted=structuredClone(next);writes++;}};
 const cloud={saveRawOrders:async()=>{}};
 const Harness=new Function('firestoreRepo','cloudSqlRepo','commerceChanges','applyPayPalCapture','transitionOrder','processSettlementState','requestSettlementState','weeklySettlementsState','crypto',compiled.code+';return Harness;')(repo,cloud,commerceChanges,applyPayPalCapture,finance.transitionOrder,finance.processSettlementState,finance.requestSettlementState,finance.weeklySettlementsState,crypto);
-const fixture=()=>({products:[{id:'product-a',name:'Isolated A',storeId:'store-a',stock:5,price:1200,status:'published',images:[]},{id:'product-b',name:'Isolated B',storeId:'store-b',stock:3,price:1800,status:'published',images:[]}],stores:['a','b'].map(id=>({id:`store-${id}`,name:`Isolated ${id}`,status:'APPROVED',shippingConfig:{type:'fixed',fixedRate:100},bankInfo:{bank:'Isolated bank',accountNumber:`isolated-${id}`}})),systemSettings:{plazaCommissionRate:0.03},orders:[],storeBalances:{},paymentTransactions:[],financialAuditLogs:[],auditLogs:[],settlements:[],disputes:[]});
+const fixture=()=>({products:[{id:'product-a',name:'Isolated A',storeId:'store-a',stock:5,price:1200,status:'published',images:[]},{id:'product-b',name:'Isolated B',storeId:'store-b',stock:3,price:1800,status:'published',images:[]}],stores:['a','b'].map(id=>({id:`store-${id}`,name:`Isolated ${id}`,status:'APPROVED',shippingConfig:{type:'fixed',fixedRate:100},bankInfo:{bank:'Isolated bank',accountNumber:`isolated-${id}`}})),systemSettings:{plazaCommissionRate:0.20},orders:[],storeBalances:{},paymentTransactions:[],financialAuditLogs:[],auditLogs:[],settlements:[],disputes:[]});
 const buyer={id:'isolated-buyer',name:'Isolated buyer',email:'fixture@example.invalid'};
 const address={recipientName:'Isolated buyer',phone:'isolated',province:'Isolated',municipality:'Isolated',street:'Isolated'};
 const requests=['a','b'].map((id,i)=>({id:`isolated-cycle-attempt-${id}`,orderGroupCode:'isolated-cycle',storeId:`store-${id}`,items:[{productId:`product-${id}`,quantity:i===0?2:1,price:0.01}],total:i===0?2500:1900,paymentMethod:'PAYPAL',paymentStatus:'PAID',deliveryAddress:address}));
@@ -37,7 +37,7 @@ await db.updatePayPalOrders(ids,rows=>rows.forEach(o=>{o.paypalPayment={...meta}
 const remote={id:meta.orderId,status:'COMPLETED',purchase_units:[{custom_id:meta.groupCode,amount:{currency_code:'USD',value:meta.amountUsd},payments:{captures:[{id:'ISOLATED-CAPTURE',status:'COMPLETED',amount:{currency_code:'USD',value:meta.amountUsd}}]}}]};
 rejectWrite=true;await assert.rejects(db.confirmPayPalCapture(ids,remote));assert.ok(db.memoryData.orders.every(o=>o.paymentStatus==='PENDING'));assert.equal(db.memoryData.storeBalances['store-a'].pendingBalance,0);rejectWrite=false;
 await db.confirmPayPalCapture(ids,remote);await db.confirmPayPalCapture(ids,remote);
-assert.equal(db.memoryData.storeBalances['store-a'].pendingBalance,2425);assert.equal(db.memoryData.storeBalances['store-b'].pendingBalance,1843);assert.equal(db.memoryData.financialAuditLogs.filter(x=>x.status==='CAPTURED').length,2);
+assert.equal(db.memoryData.storeBalances['store-a'].pendingBalance,2000);assert.equal(db.memoryData.storeBalances['store-b'].pendingBalance,1520);assert.equal(db.memoryData.financialAuditLogs.filter(x=>x.status==='CAPTURED').length,2);
 assert.equal((await db.runWeeklySettlementProcess('isolated')).settlementsCreated.length,0);
 // Reload from the isolated durable snapshot, then finish delivery and payouts.
 db=new Harness(persisted);
@@ -47,17 +47,17 @@ for(const id of ids){for(const status of ['CONFIRMED','PREPARING','SHIPPED'])ass
  assert.equal((await db.updateOrderStatus(id,'DELIVERED',undefined,code)).success,true);
  assert.equal((await db.updateOrderStatus(id,'DELIVERED',undefined,code)).success,true);
 }
-assert.equal(db.memoryData.storeBalances['store-a'].availableBalance,2425);assert.equal(db.memoryData.storeBalances['store-b'].availableBalance,1843);
+assert.equal(db.memoryData.storeBalances['store-a'].availableBalance,2000);assert.equal(db.memoryData.storeBalances['store-b'].availableBalance,1520);
 const weekly=await db.runWeeklySettlementProcess('isolated');assert.equal(weekly.settlementsCreated.length,2);assert.equal(weekly.totalLiquidated,0);
 assert.equal((await db.runWeeklySettlementProcess('isolated')).settlementsCreated.length,0);
-assert.equal(db.memoryData.storeBalances['store-a'].availableBalance,0);assert.equal(db.memoryData.storeBalances['store-a'].retainedBalance,2425);
+assert.equal(db.memoryData.storeBalances['store-a'].availableBalance,0);assert.equal(db.memoryData.storeBalances['store-a'].retainedBalance,2000);
 for(const settlement of weekly.settlementsCreated){await assert.rejects(db.processSettlement(settlement.id,'PAID'));assert.equal(db.memoryData.settlements.find(s=>s.id===settlement.id).status,'PENDING');
  const reference=`BANK-CONFIRMED-ISOLATED-${settlement.storeId}`;
  await db.processSettlement(settlement.id,'PAID',reference);await db.processSettlement(settlement.id,'PAID',reference);
 }
-assert.equal(db.memoryData.storeBalances['store-a'].settledBalance,2425);assert.equal(db.memoryData.storeBalances['store-b'].settledBalance,1843);assert.equal(db.memoryData.storeBalances['store-a'].retainedBalance,0);assert.ok(db.memoryData.orders.every(o=>o.settlementStatus==='SETTLED'));
-assert.equal(db.memoryData.storeBalances['store-a'].plazaCommissionsPaid+db.memoryData.storeBalances['store-b'].plazaCommissionsPaid,132);
+assert.equal(db.memoryData.storeBalances['store-a'].settledBalance,2000);assert.equal(db.memoryData.storeBalances['store-b'].settledBalance,1520);assert.equal(db.memoryData.storeBalances['store-a'].retainedBalance,0);assert.ok(db.memoryData.orders.every(o=>o.settlementStatus==='SETTLED'));
+assert.equal(db.memoryData.storeBalances['store-a'].plazaCommissionsPaid+db.memoryData.storeBalances['store-b'].plazaCommissionsPaid,880);
 // An unpaid cancellation restores only the original stock, even if repeated.
 const cancelled=new Harness(fixture());const cash=validateOrders([{...requests[0],id:'isolated-cancel-attempt',paymentMethod:'CASH_ON_DELIVERY'}],cancelled.memoryData,buyer);await cancelled.createOrders(cash);
 await cancelled.updateOrderStatus(cash[0].id,'CANCELLED');await cancelled.updateOrderStatus(cash[0].id,'CANCELLED');assert.equal(cancelled.memoryData.products[0].stock,5);
-console.log(JSON.stringify({result:'PASS',mode:'isolated-memory-only',stores:2,orders:2,totalDop:4400,paypalUsd:'73.33',dopPerUsd:60,commissionDop:132,netStoreADop:2425,netStoreBDop:1843,checks:['trusted catalog prices','stock reserved once','pending payment blocks payout','failed capture persistence rolls back','capture retry credits once','restart preserves state','incorrect delivery code rejected','delivery releases funds once','weekly process schedules without transferring','bank reference required','settlement repeats do not duplicate','unpaid cancellation restores stock'],realCharges:0,realTransfers:0,productionWrites:0},null,2));
+console.log(JSON.stringify({result:'PASS',mode:'isolated-memory-only',stores:2,orders:2,totalDop:4400,paypalUsd:'73.33',dopPerUsd:60,commissionDop:880,netStoreADop:2000,netStoreBDop:1520,checks:['trusted catalog prices','stock reserved once','pending payment blocks payout','failed capture persistence rolls back','capture retry credits once','restart preserves state','incorrect delivery code rejected','delivery releases funds once','weekly process schedules without transferring','bank reference required','settlement repeats do not duplicate','unpaid cancellation restores stock'],realCharges:0,realTransfers:0,productionWrites:0},null,2));
