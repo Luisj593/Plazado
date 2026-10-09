@@ -21,7 +21,7 @@ export type OrderStatus =
   | 'DELIVERED'    // Entregado y validado con código secreto
   | 'CANCELLED';   // Cancelado
 
-export type PaymentMethodType = 'CARD_AZUL' | 'CASH_ON_DELIVERY' | 'BANK_TRANSFER';
+export type PaymentMethodType = 'CARD_AZUL' | 'CASH_ON_DELIVERY' | 'BANK_TRANSFER' | 'PAYPAL';
 export type PaymentStatusType = 'PAID' | 'PENDING' | 'REFUNDED' | 'FAILED';
 export type SettlementStatus = 'PENDING' | 'SCHEDULED' | 'PROCESSING' | 'PAID' | 'FAILED' | 'RETAINED' | 'CANCELLED' | 'REJECTED';
 
@@ -346,6 +346,7 @@ export interface OrderStatusHistoryItem {
 }
 
 export interface Order {
+  paypalPayment?: { orderId: string; gatewayId: string; amountUsd: string; dopPerUsd: number; groupCode: string; captureId?: string; captureStarted?: boolean };
   activeDisputeId?: string | null;
   accountingVersion?: number; // New orders recognize cash sale on validated delivery
   id: string; // ej: "ORD-2026-8912"
@@ -708,6 +709,7 @@ export type PaymentProviderType = 'AZUL' | 'CARDNET' | 'STRIPE' | 'PAYPAL' | 'CU
 export type PaymentProviderKey = PaymentProviderType;
 
 export interface PaymentGatewayConfig {
+  paypalDopPerUsd?: number; // Pesos dominicanos por un dólar; configurado por el administrador.
   id: string; // 'azul', 'cardnet', 'stripe', 'paypal', or custom
   providerKey: PaymentProviderType;
   providerName: string; // e.g. "AZUL (Servicios Digitales Popular)", "CardNET", "Stripe", "PayPal"

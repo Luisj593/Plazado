@@ -639,6 +639,9 @@ export class FulfillmentService {
       throw new Error(`Esta orden ya fue procesada (estado actual: ${fo.status}).`);
     }
 
+    const paymentOrder = (data.orders || []).find((o: Order) => o.id === fo.orderId);
+    if (paymentOrder?.paymentMethod === 'PAYPAL' && paymentOrder.paymentStatus !== 'PAID') throw new Error('Confirma el pago PayPal antes de preparar este pedido.');
+
     this.validateInventoryStage(fo,'reserved');
     fo.status = 'CONFIRMED_BY_STORE';
     fo.storeConfirmedAt = new Date().toISOString();

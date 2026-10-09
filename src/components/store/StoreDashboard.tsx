@@ -1410,7 +1410,7 @@ export const StoreDashboard: React.FC = () => {
                         {/* Payment method */}
                         <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-white border border-stone-200 text-stone-600 flex items-center gap-1">
                           <CreditCard className="w-3 h-3 text-stone-400" />
-                          {order.paymentMethod === 'CARD_AZUL' ? 'Tarjeta AZUL' : order.paymentMethod === 'CASH_ON_DELIVERY' ? 'Contra Entrega' : 'Transferencia'}
+                          {order.paymentMethod === 'PAYPAL' ? 'PayPal' : order.paymentMethod === 'CARD_AZUL' ? 'Tarjeta AZUL' : order.paymentMethod === 'CASH_ON_DELIVERY' ? 'Contra Entrega' : 'Transferencia'}
                         </span>
 
                         {order.fulfillmentType === 'PLAZADO_FULFILLMENT' && (
@@ -2139,7 +2139,7 @@ export const StoreDashboard: React.FC = () => {
                   <p className="font-mono font-black text-sm text-stone-900 mt-2">{printingPackingSlipOrder.id}</p>
                   <p className="text-[10px] text-stone-500">Fecha: {new Date(printingPackingSlipOrder.createdAt).toLocaleDateString('es-DO')}</p>
                   <p className="text-[10px] font-bold mt-1 text-stone-800">
-                    Método: {printingPackingSlipOrder.paymentMethod === 'CARD_AZUL' ? 'Tarjeta AZUL (PAGADO)' : printingPackingSlipOrder.paymentMethod === 'CASH_ON_DELIVERY' ? 'CONTRA ENTREGA' : 'Transferencia'}
+                    Método: {printingPackingSlipOrder.paymentMethod === 'PAYPAL' ? `PayPal (${printingPackingSlipOrder.paymentStatus})` : printingPackingSlipOrder.paymentMethod === 'CARD_AZUL' ? 'Tarjeta AZUL (PAGADO)' : printingPackingSlipOrder.paymentMethod === 'CASH_ON_DELIVERY' ? 'CONTRA ENTREGA' : 'Transferencia'}
                   </p>
                 </div>
               </div>

@@ -482,6 +482,19 @@ export const api = {
   },
 
   // Payment Gateways & Central Receivers
+  async payPalConfig(): Promise<{success:boolean;enabled:boolean;message?:string;clientId?:string;currency:string;dopPerUsd?:number}> {
+    return request('/api/paypal/config');
+  },
+  async startPayPal(orders: Order[]): Promise<{success:boolean;paypalOrderId?:string;message?:string}> {
+    return request('/api/paypal/orders',{method:'POST',body:JSON.stringify({orders})});
+  },
+  async capturePayPal(id: string): Promise<{success:boolean;orders?:Order[];message?:string}> {
+    return request(`/api/paypal/orders/${encodeURIComponent(id)}/capture`,{method:'POST'});
+  },
+  async cancelPayPal(id: string): Promise<{success:boolean;message?:string}> {
+    return request(`/api/paypal/orders/${encodeURIComponent(id)}/cancel`,{method:'POST'});
+  },
+
   async testPaymentGateway(id: string): Promise<{ success: boolean; message: string }> {
     return request(`/api/payment-gateways/${encodeURIComponent(id)}/test`, { method: 'POST' });
   },

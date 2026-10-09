@@ -1,3 +1,4 @@
+import { applyPayPalCapture } from './paypal-checkout';
 import { encryptPayPalSecret } from './paypal-credentials';
 import { transitionOrder, processSettlementState, requestSettlementState, weeklySettlementsState } from './financial-lifecycle';
 import { commerceChanges } from './commerce-changes';
@@ -1984,6 +1985,7 @@ class GlobalDatabase {
 
       if (ord.accountingVersion !== 2) currentBalance.totalSales += ord.total;
 
+      const isPayPal = ord.paymentMethod === 'PAYPAL';
       const isCard = ord.paymentMethod === 'CARD_AZUL';
       const authCode = ord.cardAuthorizationCode || `AUTH-AUTO-${Math.floor(100000 + Math.random() * 900000)}`;
       const cardLast4 = ord.cardLast4 || '4111';
@@ -1998,7 +2000,7 @@ class GlobalDatabase {
 
       const gatewayRef = isCard 
         ? `AZUL-${authCode}` 
-        : `CASH-ORD-${ord.id}`;
+        : isPayPal ? `PAYPAL-PENDING-${ord.id}` : `CASH-ORD-${ord.id}`;
       const idempotencyKey = `PAY-${ord.id}-${ord.storeId}`;
 
       // 1. CUENTA CENTRAL DE PLAZADO.COM / 3. PAGOS CON TARJETA / 4. PAGOS EN EFECTIVO
@@ -2025,6 +2027,8 @@ class GlobalDatabase {
           status: 'CAPTURED',
           notes: `Cargo automático aprobado a tarjeta ${cardBrand} ••••${cardLast4} (Aut: ${authCode}). Ingresado 100% en cuenta de custodia Plazado.com. Comisión: RD$ ${commission} (0.05%). Neto retenido en balance pendiente: RD$ ${netStore}.`
         });
+      } else if (isPayPal) {
+        ord.paymentStatus = 'PENDING';
       } else {
         // Efectivo: La tienda cobra directamente.
         // Comisión calculada como deuda pendiente de cobro en liquidación semanal.
@@ -2075,7 +2079,7 @@ class GlobalDatabase {
         idempotencyKey: idempotencyKey,
         cardLast4: isCard ? cardLast4 : undefined,
         cardBrand: isCard ? cardBrand : undefined,
-        notes: isCard ? `Cargo automático procesado con éxito (Aut: ${authCode})` : 'Efectivo contra entrega',
+        notes: isCard ? `Cargo automático procesado con éxito (Aut: ${authCode})` : isPayPal ? 'Pendiente de confirmación real PayPal' : 'Efectivo contra entrega',
         createdAt: new Date().toISOString()
       };
       this.memoryData.paymentTransactions.unshift(tx);
@@ -2134,6 +2138,19 @@ class GlobalDatabase {
       }
       return result;
     });
+  }
+
+  public updatePayPalOrders(ids: string[], mutate: (orders: Order[], state: any) => void): Promise<Order[]> {
+    return this.runCommerceMutation(() => {
+      const orders = ids.map(id => this.memoryData.orders.find(order => order.id === id));
+      if (orders.some(order => !order)) throw new Error('Pedido PayPal no encontrado');
+      mutate(orders as Order[], this.memoryData);
+      return orders as Order[];
+    });
+  }
+
+  public confirmPayPalCapture(ids: string[], remote: any): Promise<Order[]> {
+    return this.updatePayPalOrders(ids, (orders, state) => applyPayPalCapture(state, orders, remote));
   }
 
   public updateOrderStatus(orderId: string, status: OrderStatus, note?: string, confirmationCode?: string) {

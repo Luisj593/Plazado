@@ -174,7 +174,9 @@ interface AppContextType {
     paymentMethod: PaymentMethodType, 
     notes?: string,
     simulatedCard?: { number: string; expiry: string; cvc: string; holder?: string }
-  ) => Promise<{ success: boolean; orderIds: string[]; orderGroupCode: string; error?: string }>;
+  ) => Promise<{ success: boolean; orderIds: string[]; orderGroupCode: string; error?: string; paypalOrderId?: string }>;
+  completePayPalCheckout: (id:string) => Promise<{success:boolean;orderGroupCode:string;orderIds:string[];error?:string}>;
+  cancelPayPalCheckout: (id:string) => Promise<{success:boolean;message?:string}>;
 
   // Orders
   orders: Order[];
@@ -1643,7 +1645,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const processCheckout = async (address: CustomerAddress, paymentMethod: PaymentMethodType, notes?: string) => {
     const failure = (error: string) => ({success:false,orderIds:[],orderGroupCode:'',error});
     if (!currentUser || !cart.length) return failure('Inicia sesión y agrega productos al carrito');
-    if (paymentMethod !== 'CASH_ON_DELIVERY') return failure('Este método de pago todavía no está disponible');
+    if (paymentMethod !== 'CASH_ON_DELIVERY' && paymentMethod !== 'PAYPAL') return failure('Este método de pago todavía no está disponible');
     if (appliedCoupon) return failure('Los cupones requieren validación adicional. Retira el cupón para continuar.');
     const fingerprint = JSON.stringify({cart,address,paymentMethod,notes});
     if (checkoutAttempt.current?.fingerprint !== fingerprint) checkoutAttempt.current = {fingerprint,key:crypto.randomUUID()};
@@ -1655,6 +1657,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       paymentMethod,deliveryAddress:address,customerNotes:notes,total:group.storeTotal,
     }));
     try {
+      if (paymentMethod === 'PAYPAL') {
+        const started = await api.startPayPal(payload as unknown as Order[]);
+        if (!started.success || !started.paypalOrderId) return failure(started.message || 'No se pudo iniciar PayPal');
+        return {success:true,orderIds:[],orderGroupCode:'',paypalOrderId:started.paypalOrderId};
+      }
       const res = await api.createOrders(payload as unknown as Order[]);
       if (!res.success || !res.orders?.length) return failure((res as any).message || 'No se pudo confirmar el pedido. Tu carrito se conserva.');
       setOrders(prev => [...res.orders, ...prev.filter(o => !res.orders.some(saved => saved.id === o.id))]);
@@ -1664,6 +1671,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {
       return failure('No se pudo confirmar el pedido. Tu carrito se conserva para reintentar.');
     }
+  };
+
+  const completePayPalCheckout = async (id: string) => {
+    try {
+      const result = await api.capturePayPal(id);
+      if (!result.success || !result.orders?.length) return {success:false,orderIds:[],orderGroupCode:'',error:result.message || 'El pago todavía no está confirmado'};
+      setOrders(prev => [...result.orders!,...prev.filter(o => !result.orders!.some(row => row.id === o.id))]);
+      if (checkoutAttempt.current) { clearCart(); setAppliedCoupon(null); }
+      checkoutAttempt.current=null;
+      showNotification('Pago PayPal confirmado. Pedido registrado.', 'success');
+      return {success:true,orderIds:result.orders.map(o => o.id),orderGroupCode:result.orders[0].orderGroupCode || ''};
+    } catch {return {success:false,orderIds:[],orderGroupCode:'',error:'No se pudo confirmar el pago. Reintenta consultar el mismo pago.'};}
+  };
+  const cancelPayPalCheckout = async (id: string) => {
+    const result = await api.cancelPayPal(id);
+    if (result.success) {
+      checkoutAttempt.current=null;
+      const boot=await api.getBootstrap().catch(()=>null);
+      if(boot?.data) applyServerState(boot.data,boot.version || 1);
+    }
+    return result;
   };
 
   const updateOrderStatus = async (orderId: string, newStatus: OrderStatus, note?: string, providedConfirmationCode?: string): Promise<{success:boolean;message:string}> => {
@@ -2708,6 +2736,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       applyCoupon,
       removeCoupon,
       processCheckout,
+      completePayPalCheckout,
+      cancelPayPalCheckout,
 
       orders,
       updateOrderStatus,

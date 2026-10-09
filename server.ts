@@ -1,3 +1,4 @@
+import { registerPayPalCheckout } from './server/paypal-routes';
 import { testPayPalCredentials } from './server/paypal-credentials';
 import { validateOrders, checkoutOrderId } from './server/order-validation';
 import { sanitizeMarketplaceState, safeUser, safeOrder, publicSettings, editableFields, STORE_EDIT_FIELDS, PRODUCT_EDIT_FIELDS } from './server/public-state';
@@ -736,6 +737,8 @@ async function startServer() {
     res.json({ success: ok, version: db.getVersion() });
     } catch(error:any) {res.status(503).json({success:false,message:error.message || 'No se pudo guardar el cambio'}); }
   });
+
+  registerPayPalCheckout(app, db, getAuthenticatedUser, fulfillmentService);
 
   // --- ORDERS ---
   app.get('/api/orders', (req: Request, res: Response) => {

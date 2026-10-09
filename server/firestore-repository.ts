@@ -485,7 +485,7 @@ export class FirestoreRepository {
         const current = document.exists ? { id: document.id, ...document.data() } : null;
         if (!change.before && current) throw new Error('Compra ya registrada. Actualiza el carrito antes de reintentar.');
         if (change.before && (change.collection === 'orders' || change.collection === 'settlements')) {
-          if (!current || current.status !== change.before.status || current.paymentStatus !== change.before.paymentStatus || current.settlementStatus !== change.before.settlementStatus || (current.activeDisputeId ?? null)!==(change.before.activeDisputeId ?? null)) throw new Error('La operación ya cambió en otra sesión. Actualiza antes de reintentar.');
+          if (!current || current.status !== change.before.status || current.paymentStatus !== change.before.paymentStatus || JSON.stringify(current.paypalPayment) !== JSON.stringify(change.before.paypalPayment) || current.settlementStatus !== change.before.settlementStatus || (current.activeDisputeId ?? null)!==(change.before.activeDisputeId ?? null)) throw new Error('La operación ya cambió en otra sesión. Actualiza antes de reintentar.');
         }
         if (['reviews','users','stores','banners','disputes','orderMessages','storageRequests','fulfillmentIncidences','fulfillmentReturns','fulfillmentWithdrawals','fulfillmentOrders','fulfillmentInventory','fulfillmentConfig'].includes(change.collection) && change.before) {
           if(!current) throw new Error('El registro ya no existe. Actualiza antes de reintentar');

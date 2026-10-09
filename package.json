@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "node scripts/test-paypal-credentials.mjs && node scripts/test-registration-consent.mjs && node scripts/test-settings-persistence.mjs && node scripts/test-product-offers.mjs && node scripts/test-public-state.mjs && node scripts/test-checkout-security.mjs && node scripts/test-financial-lifecycle.mjs && node scripts/test-account-persistence.mjs && node scripts/test-mailer-delivery.mjs && node scripts/test-pilot-guards.mjs && node scripts/test-dispute-persistence.mjs && node scripts/test-fulfillment-persistence.mjs && node scripts/test-store-approval.mjs && node scripts/test-product-rotation.mjs && node scripts/test-review-integrity.mjs && node scripts/test-authentication-exact.mjs && node scripts/test-backup-preservation.mjs && node scripts/test-android-download.mjs"
+    "test": "node scripts/test-paypal-checkout.mjs && node scripts/test-paypal-credentials.mjs && node scripts/test-registration-consent.mjs && node scripts/test-settings-persistence.mjs && node scripts/test-product-offers.mjs && node scripts/test-public-state.mjs && node scripts/test-checkout-security.mjs && node scripts/test-financial-lifecycle.mjs && node scripts/test-account-persistence.mjs && node scripts/test-mailer-delivery.mjs && node scripts/test-pilot-guards.mjs && node scripts/test-dispute-persistence.mjs && node scripts/test-fulfillment-persistence.mjs && node scripts/test-store-approval.mjs && node scripts/test-product-rotation.mjs && node scripts/test-review-integrity.mjs && node scripts/test-authentication-exact.mjs && node scripts/test-backup-preservation.mjs && node scripts/test-android-download.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

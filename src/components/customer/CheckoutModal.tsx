@@ -1,3 +1,4 @@
+import { PayPalButton } from './PayPalButton';
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
@@ -46,7 +47,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     cart,
     cartTotal, 
     getCartGroups, 
-    processCheckout, 
+    processCheckout,
+    completePayPalCheckout,
+    cancelPayPalCheckout, 
     addCustomerAddress, 
     systemSettings,
     openAuthModal
@@ -255,6 +258,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setChargeProgressMessage('Confirmando pedido...');
     try {
       const res = await processCheckout(addressSnapshot, paymentMethod, customerNotes);
+      if (res.success && paymentMethod === 'PAYPAL') return res.paypalOrderId;
       if (res.success) onSuccess(res.orderGroupCode, res.orderIds);
       else setCheckoutError(res.error || 'No se pudo confirmar el pedido');
     } finally {
@@ -725,7 +729,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               3. Método de Pago Centralizado
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Tarjetas AZUL */}
               <button
                 type="button"
@@ -749,6 +753,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
               </button>
 
+              <button type="button" onClick={() => setPaymentMethod('PAYPAL')} className={`p-3.5 rounded-xl border text-left ${paymentMethod === 'PAYPAL' ? 'border-blue-700 bg-blue-50 ring-2 ring-blue-100' : 'border-stone-200 bg-white'}`}>
+                <span className="font-black text-lg text-blue-900">Pay<span className="text-blue-500">Pal</span></span>
+                <h4 className="font-bold text-xs text-stone-900 mt-2">Pagar con PayPal</h4>
+                <p className="text-[11px] text-stone-500 mt-0.5">Cobro seguro en USD. Verás la conversión antes de pagar.</p>
+              </button>
               {/* Contra Entrega */}
               <button
                 type="button"
@@ -834,7 +843,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             Regresar al Carrito
           </button>
 
-          <button
+          {paymentMethod === 'PAYPAL' ? <PayPalButton totalDop={cartTotal.grandTotal}
+            createOrder={async () => { const id = await handleConfirmOrder(); if (!id) throw Error('Valida la dirección y los datos de tu pedido'); return id; }}
+            onApprove={async id => { const result = await completePayPalCheckout(id); if (!result.success) throw Error(result.error); onSuccess(result.orderGroupCode,result.orderIds); }}
+            onCancel={async id => { if (!id) return; const result = await cancelPayPalCheckout(id); if (!result.success) throw Error(result.message); }}
+          /> : <button
             id="checkout-confirm-btn"
             onClick={handleConfirmOrder}
             disabled={isProcessing}
@@ -856,7 +869,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
-          </button>
+          </button>}
         </div>
 
       </div>

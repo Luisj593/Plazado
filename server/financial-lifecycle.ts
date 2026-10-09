@@ -19,6 +19,10 @@ export function transitionOrder(state: any, orderId: string, status: string, not
   if (!allowed.includes(status)) return {success:false,message:'Estado de pedido inválido'};
   if (status === order.status) return {success:true,message:'El pedido ya tiene este estado',order};
   if (['DELIVERED','CANCELLED'].includes(order.status)) return {success:false,message:'El pedido ya está cerrado'};
+  if (order.paymentMethod === 'PAYPAL' && order.paymentStatus !== 'PAID') {
+    if (order.paypalPayment?.captureStarted || status !== 'CANCELLED') return {success:false,message:'El pago PayPal debe confirmarse antes de procesar este pedido'};
+    if (order.paypalPayment?.orderId) return {success:false,message:'Cancela el pago desde el checkout de PayPal para liberar el inventario de forma segura'};
+  }
   const progress = ['PENDING','PENDING_STORE_CONFIRMATION','CONFIRMED','PREPARING','READY_FOR_PICKUP','SHIPPED','DELIVERED'];
   if (status !== 'CANCELLED' && progress.indexOf(status) < progress.indexOf(order.status)) return {success:false,message:'No se puede retroceder el estado del pedido'};
   if (order.fulfillmentOrderId && !fulfillmentAuthorized) return {success:false,message:'Este pedido debe gestionarse desde el flujo de Plazado Fulfillment'};

@@ -53,6 +53,7 @@ export const PaymentGatewaysTab: React.FC = () => {
   const [formAuthKey, setFormAuthKey] = useState('');
   const [formSecretKey, setFormSecretKey] = useState('');
   const [formApiKey, setFormApiKey] = useState('');
+  const [formPayPalRate, setFormPayPalRate] = useState('');
   const [formClientId, setFormClientId] = useState('');
   const [formNotes, setFormNotes] = useState('');
 
@@ -91,6 +92,7 @@ export const PaymentGatewaysTab: React.FC = () => {
     setFormAccountNumber('');
     setFormAccountHolder('Plazado Dominicana SRL');
     setFormRnc('1-32-48921-1');
+    setFormPayPalRate('');
     setFormClientId('');
     setFormAuthKey('');
     setFormSecretKey('');
@@ -114,6 +116,7 @@ export const PaymentGatewaysTab: React.FC = () => {
     setFormAccountNumber(g.associatedBankAccount.accountNumber);
     setFormAccountHolder(g.associatedBankAccount.accountHolder);
     setFormRnc(g.associatedBankAccount.rncOrCedula);
+    setFormPayPalRate(g.paypalDopPerUsd ? String(g.paypalDopPerUsd) : '');
     setFormClientId(g.credentials?.clientId || '');
     setFormAuthKey('');
     setFormSecretKey('');
@@ -129,6 +132,7 @@ export const PaymentGatewaysTab: React.FC = () => {
     const payload: PaymentGatewayConfig = {
       id: targetId,
       providerKey: formProviderKey,
+      paypalDopPerUsd: formProviderKey === 'PAYPAL' && formPayPalRate ? Number(formPayPalRate) : undefined,
       providerName: formProviderName || formProviderKey,
       accountCommercialName: formCommercialName,
       merchantId: formMerchantId,
@@ -583,8 +587,13 @@ export const PaymentGatewaysTab: React.FC = () => {
               {formProviderKey === 'PAYPAL' && <p className="p-3 bg-blue-50 text-blue-900 rounded-xl">
                 Puedes guardar PayPal con el secreto pendiente. Introduce el Client ID completo de tu aplicación y selecciona Live (Producción) o Sandbox.
                 {editingGateway?.credentials?.hasClientSecret ? ' Client Secret guardado; déjalo vacío para conservarlo.' : ' Client Secret pendiente.'}
-                {' '}Guardar estas credenciales no habilita cobros; el checkout de PayPal aún está pendiente de integración.
+                {' '}Para habilitar el botón de pago, completa ambas credenciales, selecciona Producción, define la tasa DOP/USD y activa esta pasarela.
               </p>}
+              {formProviderKey === 'PAYPAL' && <div>
+                <label className="block text-stone-700 font-bold mb-1" htmlFor="paypal-exchange-rate">Tasa de conversión: RD$ por US$1</label>
+                <input id="paypal-exchange-rate" type="number" min="1" max="1000" step="0.0001" value={formPayPalRate} onChange={e => setFormPayPalRate(e.target.value)} placeholder="Introduce la tasa de cobro" className="w-full border border-stone-300 rounded-xl p-2.5" />
+                <p className="text-stone-500 mt-1">El cliente verá el importe en USD antes de pagar. Sin tasa configurada, PayPal permanece deshabilitado.</p>
+              </div>}
               {/* API Credentials */}
               <div className="p-3.5 bg-stone-50 rounded-xl border border-stone-200 space-y-3">
                 <div className="font-bold text-stone-800 flex items-center justify-between text-xs">

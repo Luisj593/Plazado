@@ -2,13 +2,13 @@ import crypto from 'crypto';
 import { isProductPubliclyVisible, isStorePubliclyVisible } from '../src/types';
 export const checkoutOrderId = (customerId: string, key: string) => `ORD-${crypto.createHash('sha256').update(`${customerId}:${key}`).digest('hex').slice(0,32)}`;
 const money = (amount: number) => Math.round(amount * 100) / 100;
-export function validateOrders(requests: any[], state: any, customer: any): any[] {
+export function validateOrders(requests: any[], state: any, customer: any, allowPayPal = false): any[] {
   if (!Array.isArray(requests) || !requests.length || requests.length > 20) throw Error('Carrito inválido');
   const quantities = new Map<string, number>();
   const seenStores = new Set<string>();
   return requests.map(request => {
-    if (request.paymentMethod !== 'CASH_ON_DELIVERY') throw Error('Este método de pago todavía no tiene una integración verificada. Elige efectivo contra entrega.');
-    if (state.systemSettings.activePaymentMethods?.cashOnDelivery === false) throw Error('El pago contra entrega no está habilitado');
+    if (request.paymentMethod !== 'CASH_ON_DELIVERY' && !(allowPayPal && request.paymentMethod === 'PAYPAL')) throw Error('Este método de pago todavía no tiene una integración verificada. Elige efectivo contra entrega.');
+    if (request.paymentMethod === 'CASH_ON_DELIVERY' && state.systemSettings.activePaymentMethods?.cashOnDelivery === false) throw Error('El pago contra entrega no está habilitado');
     const store = state.stores.find((s: any) => s.id === request.storeId);
     if (!store || !isStorePubliclyVisible(store) || seenStores.has(store.id)) throw Error('Tienda no disponible o duplicada');
     seenStores.add(store.id);
@@ -46,9 +46,9 @@ export function validateOrders(requests: any[], state: any, customer: any): any[
     return {
       id,orderGroupCode:request.orderGroupCode,customerId:customer.id,customerName:customer.name,customerEmail:customer.email,customerPhone:customer.phone,
       storeId:store.id,storeName:store.name,items,subtotal,shippingCost:money(shippingCost),discount:0,total,
-      accountingVersion:2,status:'PENDING',paymentMethod:'CASH_ON_DELIVERY',paymentStatus:'PENDING',
+      accountingVersion:2,status:'PENDING',paymentMethod:request.paymentMethod,paymentStatus:'PENDING',
       deliveryConfirmationCode:crypto.randomInt(100000,1000000).toString(),deliveryAddress:{...address,userId:customer.id},customerNotes:String(request.customerNotes || '').slice(0,2000),
-      statusHistory:[{status:'PENDING',timestamp:now,updatedBy:customer.name,note:'Pedido contra entrega pendiente de confirmación'}],settlementStatus:'PENDING',createdAt:now,
+      statusHistory:[{status:'PENDING',timestamp:now,updatedBy:customer.name,note:request.paymentMethod === 'PAYPAL' ? 'Pedido pendiente de pago PayPal' : 'Pedido contra entrega pendiente de confirmación'}],settlementStatus:'PENDING',createdAt:now,
       plazaCommissionRate:state.systemSettings.plazaCommissionRate ?? 0.0005,plazaCommissionAmount:0,storeNetEarnings:0,
     };
   });

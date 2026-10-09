@@ -1,3 +1,4 @@
+import { PayPalButton } from './PayPalButton';
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
@@ -49,6 +50,8 @@ export const CustomerPortal: React.FC = () => {
     openOrderChat,
     getOrderUnreadCount,
     showNotification,
+    completePayPalCheckout,
+    cancelPayPalCheckout,
     submitKycVerification
   } = useApp();
 
@@ -571,6 +574,15 @@ export const CustomerPortal: React.FC = () => {
                         </div>
                       </div>
 
+                      {order.paymentMethod === 'PAYPAL' && <p className="text-xs font-bold text-blue-900">PayPal · {order.paymentStatus === 'PAID' ? 'Pago confirmado' : 'Pago pendiente'}</p>}
+                      {order.paymentMethod === 'PAYPAL' && order.paymentStatus === 'PENDING' && order.status !== 'CANCELLED' && order.paypalPayment?.orderId && customerOrders.find(o => o.paypalPayment?.orderId === order.paypalPayment?.orderId)?.id === order.id && <div className="space-y-2">
+                        <PayPalButton totalDop={0} fixedAmountUsd={order.paypalPayment.amountUsd} fixedRate={order.paypalPayment.dopPerUsd}
+                          createOrder={async () => order.paypalPayment!.orderId}
+                          onApprove={async id => {const result=await completePayPalCheckout(id);if(!result.success)throw Error(result.error);}}
+                          onCancel={async id => {if(!id)return;const result=await cancelPayPalCheckout(id);if(!result.success)throw Error(result.message);}}
+                        />
+                        {order.paypalPayment.captureStarted && <button type="button" className="text-xs text-blue-800 font-bold underline" onClick={async()=>{const result=await completePayPalCheckout(order.paypalPayment!.orderId);if(!result.success)showNotification(result.error || 'Pago pendiente','error');}}>Consultar confirmación del mismo pago</button>}
+                      </div>}
                       {/* In-Platform Official Store Chat */}
                       <div className="pt-2 space-y-2">
                         <button
