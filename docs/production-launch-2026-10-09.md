@@ -47,3 +47,11 @@ No declarar producción abierta mientras falte evidencia de estos puntos:
 - Corrección de consumo: lectura completa de 30 segundos a cinco minutos, con retroceso exponencial hasta una hora en fallos; protección interna de registros de cinco minutos a una hora, sin ejecuciones solapadas, omitida si no hay sincronización confirmada. Conserva copias existentes. No sustituye un respaldo externo ni garantiza que cualquier volumen de tráfico quepa en la cuota gratuita.
 - Para restablecer lecturas hoy, el propietario debe habilitar facturación/plan Blaze en el proyecto Google Cloud de producción y revisar presupuesto y alertas. Alternativa: esperar al reinicio de cuota, sin prometer disponibilidad entretanto. Después, verificar /api/health/ready y npm run smoke:production; si la aplicación no se recupera, redeplegar tras confirmar la cuota disponible.
 - El ajuste pasó TypeScript, los 21 scripts aislados y compilación. No se crearon cuentas, pedidos, cargos, correos ni transferencias reales para verificarlo.
+
+## Despliegue explícito de indisponibilidad
+
+La PR #37 bloquea en producción consultas y escrituras cuando Firestore no está conectado: devuelve 503 DATABASE_UNAVAILABLE sin presentar datos vacíos como una carga válida. No altera cuentas, roles, contactos ni publicaciones.
+
+Para publicar esta respuesta de indisponibilidad aun durante el agotamiento de cuota, la comprobación de arranque Railway usa /api/health (proceso HTTP); /api/health/ready sigue devolviendo 503 hasta cargar Firestore. SUCCESS del despliegue demuestra solamente que se publicó el servidor de indisponibilidad, no que se recuperó la plataforma. El guard de API impide acceso y operaciones con la base desconectada.
+
+Después de restablecer las lecturas: confirmar /api/health/ready y smoke:production; verificar la cuenta super admin y los registros persistidos. No recrear ni resembrar datos por ver una interfaz vacía.
