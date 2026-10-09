@@ -110,12 +110,18 @@ async function startServer() {
   });
 
   // Refresh authoritative data across instances without racing local transactions.
-  let refreshing=false;
+  const requestedRefreshMs=Number(process.env.FIRESTORE_REFRESH_INTERVAL_MS);
+  const refreshIntervalMs=Number.isFinite(requestedRefreshMs) && requestedRefreshMs>=300000 ? requestedRefreshMs : 300000;
+  let refreshing=false, refreshFailures=0, nextFirestoreAttempt=0;
   const refreshTimer=setInterval(()=>{
-    if(refreshing || !firestoreRepo.isAdminReady())return;
+    if(refreshing || !firestoreRepo.isAdminReady() || Date.now()<nextFirestoreAttempt)return;
     refreshing=true;
-    db.refreshDurableState().catch(()=>console.error('[Firestore] Durable refresh failed; previous state preserved')).finally(()=>{refreshing=false;});
-  },30000);
+    db.refreshDurableState().then(()=>{refreshFailures=0;nextFirestoreAttempt=0;}).catch(()=>{
+      refreshFailures+=1;
+      nextFirestoreAttempt=Date.now()+Math.min(3600000,refreshIntervalMs*Math.pow(2,Math.min(refreshFailures,10)));
+      console.error('[Firestore] Durable refresh failed; previous state preserved; retries backed off');
+    }).finally(()=>{refreshing=false;});
+  },refreshIntervalMs);
   refreshTimer.unref();
 
   const app = express();
@@ -136,11 +142,15 @@ async function startServer() {
 
   // Keep an independent durable copy refreshed while production is running.
   // This protects user-created stores/users from accidental disappearance between deployments.
+  let protectingRecords=false;
   setInterval(() => {
-    firestoreRepo.backupAndRecoverProductionRecords().catch(err => {
-      console.error('[PlazaDO] Scheduled production protection warning:', err);
-    });
-  }, 5 * 60 * 1000);
+    if(protectingRecords || !db.isFirestoreConnected() || Date.now()<nextFirestoreAttempt)return;
+    protectingRecords=true;
+    firestoreRepo.backupAndRecoverProductionRecords().catch(() => {
+      nextFirestoreAttempt=Date.now()+3600000;
+      console.error('[PlazaDO] Scheduled production protection failed; existing backups preserved');
+    }).finally(()=>{protectingRecords=false;});
+  }, 60 * 60 * 1000).unref();
 
   // Production security headers
   app.disable('x-powered-by');
