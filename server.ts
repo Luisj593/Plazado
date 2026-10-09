@@ -167,6 +167,14 @@ async function startServer() {
     next();
   });
 
+  // Reject unavailable durable state instead of presenting an empty production database.
+  app.use('/api',(req,res,next)=>{
+    if(req.path.startsWith('/health') || req.path==='/auth/logout' || process.env.NODE_ENV!=='production' || db.isFirestoreConnected())return next();
+    res.setHeader('Retry-After','300');
+    res.setHeader('Cache-Control','no-store');
+    return res.status(503).json({success:false,code:'DATABASE_UNAVAILABLE',message:'La base de datos está temporalmente no disponible. Esto no significa que tu cuenta o tus publicaciones hayan sido eliminadas. Reintenta más tarde.'});
+  });
+
   // Verify revocation and current privileges against durable identity for authenticated API requests.
   app.use('/api',async(req,res,next)=>{
     // An unchanged version contains no account data and requires no identity lookup.
@@ -174,7 +182,7 @@ async function startServer() {
       res.setHeader('Cache-Control','no-store');
       return res.json({hasUpdates:false,version:db.getVersion()});
     }
-    if(req.path.startsWith('/public-media/') || req.path.startsWith('/health'))return next();
+    if(req.path.startsWith('/public-media/') || req.path.startsWith('/health') || req.path==='/auth/logout')return next();
     const auth=req.headers.authorization;
     const cookie=req.headers.cookie?.split(';').map(part=>part.trim()).find(part=>part.startsWith('plazado_session='))?.slice('plazado_session='.length);
     const token=auth?.startsWith('Bearer ')?auth.slice(7).trim():cookie;

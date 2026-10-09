@@ -65,3 +65,17 @@ new Function('module','firestoreRepo','storesDb',refreshCode.code)(refreshModule
 const refreshing=new refreshModule.exports();await assert.rejects(refreshing.refreshDurableState());assert.equal(refreshing.firestoreSyncStatus,'ERROR');assert.equal(refreshing.memoryData.products[0].id,'cached');
 unavailable=false;await refreshing.refreshDurableState();assert.equal(refreshing.firestoreSyncStatus,'CONNECTED');assert.equal(refreshing.memoryData.products[0].id,'durable');
 console.log('Quota protection: unchanged polls avoid identity reads; changed polls fail closed; failed refresh blocks readiness and preserves cached records; subsequent refresh recovers.');
+
+// Production outages cannot expose a fabricated empty catalog or accept account mutations.
+const availability=serverSource.slice(serverSource.indexOf('  // Reject unavailable durable state'),serverSource.indexOf('  // Verify revocation'));
+const availabilityCode=await transform(availability,{loader:'ts'});let availabilityMiddleware,connected=false;
+const previousNodeEnv=process.env.NODE_ENV;process.env.NODE_ENV='production';
+new Function('app','db',availabilityCode.code)({use:(_,fn)=>availabilityMiddleware=fn},{isFirestoreConnected:()=>connected});
+for(const path of ['/bootstrap','/sync','/auth/login','/auth/register-customer','/admin/commissions/cash-receipts']){
+ let response,headers={};availabilityMiddleware({path},{setHeader:(key,value)=>headers[key]=value,status:status=>({json:body=>response={status,body}})},()=>assert.fail('outage must stop request'));
+ assert.equal(response.status,503);assert.equal(response.body.code,'DATABASE_UNAVAILABLE');assert.equal(response.body.data,undefined);assert.equal(headers['Cache-Control'],'no-store');
+}
+connected=true;let available=false;availabilityMiddleware({path:'/bootstrap'},{},()=>available=true);assert.equal(available,true);
+connected=false;let logoutAllowed=false;availabilityMiddleware({path:'/auth/logout'},{},()=>logoutAllowed=true);assert.equal(logoutAllowed,true);
+if(previousNodeEnv===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=previousNodeEnv;
+console.log('Availability: disconnected production rejects catalog, login and writes with explicit 503, exposes no empty data, allows logout and recovers when connected.');
