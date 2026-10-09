@@ -362,7 +362,7 @@ export interface Order {
   shippingCost: number;
   discount: number;
   total: number;
-  plazaCommissionRate: number; // ej: 0.05 (5%)
+  plazaCommissionRate: number; // Fracción decimal registrada por pedido; 30% = 0.30
   plazaCommissionAmount: number; // comisión en DOP
   storeNetEarnings: number; // total - comisión (+ envío)
   status: OrderStatus;
@@ -645,7 +645,7 @@ export interface SystemSettings {
   whatsappCommercial: string; // ej: "809-449-3325"
   commissionPolicyVersion?: string;
   commissionPolicyAppliedAt?: string;
-  plazaCommissionRate: number; // Fracción decimal: 20% = 0.20
+  plazaCommissionRate: number; // Fracción decimal: 30% = 0.30
   defaultCommissionRate: number; // Fallback legacy
   itbisTaxRate: number; // 0.18
   currency: string; // "DOP"

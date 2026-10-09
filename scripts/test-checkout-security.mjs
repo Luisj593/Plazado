@@ -53,3 +53,19 @@ rejectCommit=false;await repository.persistCheckout(warehouseBefore,warehouseAft
 const staleBefore=structuredClone(warehouseAfter),staleAfter=structuredClone(warehouseAfter);staleAfter.fulfillmentInventory[0].available=1;documents.get('fulfillmentInventory/warehouse-inventory').totalPhysical=9;
 await assert.rejects(repository.persistCheckout(staleBefore,staleAfter,false));assert.equal(documents.get('fulfillmentInventory/warehouse-inventory').available,2);
 console.log('Warehouse Firestore transaction: new inventory creation, full product badge, receipt atomicity and stale physical-inventory rejection.');
+
+// SQL mirrors preserve historical rates and zero amounts; new fallback includes shipping.
+{
+ const sqlSource=fs.readFileSync('server/cloudsql-repository.ts','utf8');
+ const begin=sqlSource.indexOf('  async saveRawOrders('),finish=sqlSource.indexOf('  // -------------------------------------------------------------',begin);
+ const compiled=await transform('class SQLHarness {'+sqlSource.slice(begin,finish)+'}',{loader:'ts',format:'cjs'});
+ const writes=[];const fakeDb={insert:table=>({values:row=>({onConflictDoNothing:async()=>writes.push({table,row})})})};
+ const Harness=new Function('db','orders','orderDetails','commissions','storeTransactions','stores','payments','products','eq','sql','generateOrderNumber','generateDeliveryCode',compiled.code+';return SQLHarness;')(fakeDb,'orders','details','commissions','transactions','stores','payments','products',()=>{},()=>{},()=> 'isolated-number',()=> 'isolated-code');
+ const repo=new Harness();repo.findStoreById=async()=>null;
+ for(const [id,fields,rate,amount,net] of [['current',{},0.30,1200,2800],['historic',{plazaCommissionRate:0.20,plazaCommissionAmount:800,storeNetEarnings:3200},0.20,800,3200],['zero',{plazaCommissionRate:0,plazaCommissionAmount:0,storeNetEarnings:4000},0,0,4000]]) {
+  await repo.saveRawOrders([{id,storeId:'isolated',subtotal:3800,shippingCost:200,total:4000,items:[],...fields}]);
+  const row=writes.find(w=>w.table==='orders'&&w.row.id===id).row;assert.equal(row.plazaCommissionRate,rate);assert.equal(row.plazaCommissionAmount,amount);assert.equal(row.storeNetEarnings,net);
+  const record=writes.find(w=>w.table==='commissions'&&w.row.orderId===id).row;assert.equal(record.commissionRate,rate);assert.equal(record.amount,amount);
+ }
+ console.log('SQL mirror: 4000 × 0.30 = 1200, shipping included, historical and zero commissions preserved. Isolated writes only.');
+}

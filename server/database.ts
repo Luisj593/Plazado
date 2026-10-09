@@ -302,7 +302,7 @@ class GlobalDatabase {
       ...(activeData.systemSettings || {})
     };
     if (typeof activeData.systemSettings.plazaCommissionRate !== 'number') {
-      activeData.systemSettings.plazaCommissionRate = 0.20; // 20%
+      activeData.systemSettings.plazaCommissionRate = 0.30; // 30%
     }
     if (!activeData.systemSettings.mailConfig) {
       activeData.systemSettings.mailConfig = {
@@ -813,9 +813,9 @@ class GlobalDatabase {
               shippingCost: o.shippingCost,
               discount: o.discount,
               total: o.total,
-              plazaCommissionRate: o.plazaCommissionRate || 0.05,
-              plazaCommissionAmount: o.plazaCommissionAmount || Math.round(o.subtotal * 0.05 * 100) / 100,
-              storeNetEarnings: o.storeNetEarnings || (o.total - (o.plazaCommissionAmount || 0)),
+              plazaCommissionRate: o.plazaCommissionRate ?? 0.05, // Historical SQL fallback; never apply current rate to old sales.
+              plazaCommissionAmount: o.plazaCommissionAmount ?? Math.round(o.total * (o.plazaCommissionRate ?? 0.05) * 100) / 100,
+              storeNetEarnings: o.storeNetEarnings ?? (o.total - (o.plazaCommissionAmount ?? 0)),
               deliveryConfirmationCode: o.deliveryCode || '000000',
               deliveryAddress: (o.shippingAddress as any) || { province: 'Distrito Nacional', municipality: 'Santo Domingo', street: '', phone: o.customerPhone || '' },
               items: (o.items as any) || [],
@@ -1820,7 +1820,7 @@ class GlobalDatabase {
 
     const rate = this.memoryData.systemSettings.plazaCommissionRate !== undefined 
       ? this.memoryData.systemSettings.plazaCommissionRate 
-      : 0.20; // 20% de Plazado.com
+      : 0.30; // 30% de Plazado.com
 
     orders.forEach((ord, idx) => {
       // Recalcular formalmente con la tasa de comisión oficial de Plazado.com

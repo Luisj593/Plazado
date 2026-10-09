@@ -49,7 +49,7 @@ export function validateOrders(requests: any[], state: any, customer: any, allow
       accountingVersion:2,status:'PENDING',paymentMethod:request.paymentMethod,paymentStatus:'PENDING',
       deliveryConfirmationCode:crypto.randomInt(100000,1000000).toString(),deliveryAddress:{...address,userId:customer.id},customerNotes:String(request.customerNotes || '').slice(0,2000),
       statusHistory:[{status:'PENDING',timestamp:now,updatedBy:customer.name,note:request.paymentMethod === 'PAYPAL' ? 'Pedido pendiente de pago PayPal' : 'Pedido contra entrega pendiente de confirmación'}],settlementStatus:'PENDING',createdAt:now,
-      plazaCommissionRate:state.systemSettings.plazaCommissionRate ?? 0.20,plazaCommissionAmount:0,storeNetEarnings:0,
+      plazaCommissionRate:state.systemSettings.plazaCommissionRate ?? 0.30,plazaCommissionAmount:0,storeNetEarnings:0,
     };
   });
 }

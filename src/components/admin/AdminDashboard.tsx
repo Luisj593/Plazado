@@ -202,10 +202,10 @@ export const AdminDashboard: React.FC = () => {
   // Settings form state
   const [defaultCommRate, setDefaultCommRate] = useState(systemSettings.defaultCommissionRate * 100);
   const [plazaCommRate, setPlazaCommRate] = useState(
-    Number(((systemSettings.plazaCommissionRate !== undefined ? systemSettings.plazaCommissionRate : 0.20) * 100).toFixed(4))
+    Number(((systemSettings.plazaCommissionRate !== undefined ? systemSettings.plazaCommissionRate : 0.30) * 100).toFixed(4))
   );
   useEffect(() => {
-    setPlazaCommRate(Number(((systemSettings.plazaCommissionRate ?? 0.20) * 100).toFixed(4)));
+    setPlazaCommRate(Number(((systemSettings.plazaCommissionRate ?? 0.30) * 100).toFixed(4)));
     setDefaultCommRate(systemSettings.defaultCommissionRate * 100);
   }, [systemSettings.plazaCommissionRate, systemSettings.defaultCommissionRate]);
   const [whatsappComm, setWhatsappComm] = useState(systemSettings.whatsappCommercial);
@@ -1118,7 +1118,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-2xs">
-              <span className="text-xs font-bold uppercase tracking-wider text-stone-400">Comisiones PlazaDO (5%)</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-stone-400">Comisiones PlazaDO</span>
               <div className="text-2xl font-black text-red-600 mt-1">
                 RD$ {totalPlazaCommissionEarned.toLocaleString()}
               </div>
@@ -1468,7 +1468,7 @@ export const AdminDashboard: React.FC = () => {
                       {/* Bottom Action bar */}
                       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-stone-100">
                         <span className="text-[11px] text-stone-400">
-                          Comisión estándar aplicable: <strong>5% sobre ventas netas</strong>
+                          Comisión vigente: <strong>{Number(((systemSettings.plazaCommissionRate ?? 0.30) * 100).toFixed(4))}% sobre el total del pedido, incluido el envío</strong>
                         </span>
                         <div className="flex items-center gap-2">
                           <button
@@ -2266,7 +2266,7 @@ ${message}`);
             <div>
               <h2 className="text-base font-bold text-stone-900">Liquidaciones y Finanzas Centralizadas</h2>
               <p className="text-xs text-stone-500">
-                Cuenta central de Plazado.com, comisiones ({((systemSettings.plazaCommissionRate ?? 0.20) * 100).toFixed(2)}%), retenciones de efectivo y desembolsos semanales
+                Cuenta central de Plazado.com, comisiones ({((systemSettings.plazaCommissionRate ?? 0.30) * 100).toFixed(2)}%), retenciones de efectivo y desembolsos semanales
               </p>
             </div>
             
@@ -2304,10 +2304,11 @@ ${message}`);
                 Comisión Plazado.com
               </span>
               <div className="text-xl font-black text-red-600 mt-1">
-                {((systemSettings.plazaCommissionRate !== undefined ? systemSettings.plazaCommissionRate : 0.20) * 100).toFixed(2)}%
+                {((systemSettings.plazaCommissionRate !== undefined ? systemSettings.plazaCommissionRate : 0.30) * 100).toFixed(2)}%
               </div>
               <span className="text-[10px] text-stone-400 mt-0.5 block">
-                Fórmula: Venta × {(systemSettings.plazaCommissionRate !== undefined ? systemSettings.plazaCommissionRate : 0.20)}
+                Fórmula: Total del pedido × {(systemSettings.plazaCommissionRate ?? 0.30).toFixed(2)}
+                <br />RD$4,000 × {(systemSettings.plazaCommissionRate ?? 0.30).toFixed(2)} = RD${(4000 * (systemSettings.plazaCommissionRate ?? 0.30)).toLocaleString('en-US')}
               </span>
             </div>
 

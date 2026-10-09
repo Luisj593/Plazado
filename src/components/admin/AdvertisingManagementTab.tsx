@@ -663,7 +663,7 @@ export const AdvertisingManagementTab: React.FC = () => {
                     value={formTitle}
                     onChange={(e) => setFormTitle(e.target.value)}
                     required
-                    placeholder="Ej. Abre tu tienda oficial en Plazado.com con 0% comisión primer mes"
+                    placeholder="Ej. Abre tu tienda oficial en Plazado.com con Promoción de temporada"
                     className="w-full bg-stone-50 border border-stone-300 rounded-xl p-2.5 font-medium text-stone-800"
                   />
                 </div>

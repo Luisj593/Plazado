@@ -107,7 +107,7 @@ export const DEFAULT_LEGAL_DOCUMENTS: LegalDocument[] = [
     description: 'Reglamento para comercios, marcas y emprendedores que comercializan sus productos en PlazaDO.com. Aislamiento estricto de datos, comisiones y condiciones de liquidación bancaria.',
     summaryPoints: [
       'Aislamiento de información: cada tienda solo tiene acceso a sus propios pedidos y clientes.',
-      'Comisión fijada según el acuerdo comercial sobre el valor neto de los productos vendidos.',
+      'Comisión vigente del 30% (0.30) sobre el total del pedido, incluido el envío. RD$4,000 × 0.30 = RD$1,200; neto de la tienda: RD$2,800. Cada pedido conserva su tasa histórica.',
       'Disponibilidad de fondos y liquidaciones bancarias directas en Banco Popular, Banreservas, BHD u otros.',
       'Compromiso de entrega oportuna y despacho de órdenes.'
     ],
@@ -175,8 +175,8 @@ export const INITIAL_SETTINGS: SystemSettings = {
   contactEmail: 'contacto@plazado.com',
   contactPhone: '',
   whatsappCommercial: '809-449-3325', // Solicitado en el prompt
-  plazaCommissionRate: 0.20, // 20% por venta (Monto * 0.20)
-  defaultCommissionRate: 0.20, // 20%
+  plazaCommissionRate: 0.30, // 30% por venta (Monto * 0.30)
+  defaultCommissionRate: 0.30, // 30%
   itbisTaxRate: 0.18,
   currency: 'DOP',
   currencySymbol: 'RD$',

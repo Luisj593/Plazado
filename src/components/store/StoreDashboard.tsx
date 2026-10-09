@@ -1146,7 +1146,7 @@ export const StoreDashboard: React.FC = () => {
               <div className="text-2xl font-black text-emerald-700 mt-1">
                 RD$ {totalNetEarnings.toLocaleString()}
               </div>
-              <p className="text-[11px] text-stone-500 mt-1">Ya descontada la comisión del 5%</p>
+              <p className="text-[11px] text-stone-500 mt-1">Ya descontada la comisión registrada en cada venta</p>
             </div>
 
           </div>
@@ -1568,7 +1568,7 @@ export const StoreDashboard: React.FC = () => {
                               <span className="font-semibold">RD$ {formatDOP(order.shippingCost)}</span>
                             </div>
                             <div className="flex justify-between text-rose-600">
-                              <span>Comisión Plaza (5%):</span>
+                              <span>Comisión Plaza ({Number((order.plazaCommissionRate * 100).toFixed(4))}%):</span>
                               <span>-RD$ {formatDOP(order.plazaCommissionAmount)}</span>
                             </div>
                           </div>
@@ -1986,7 +1986,7 @@ export const StoreDashboard: React.FC = () => {
                   <span className="font-semibold">RD$ {formatDOP(viewingOrderDetails.shippingCost)}</span>
                 </div>
                 <div className="flex justify-between text-rose-600 font-semibold">
-                  <span>Comisión PlazaDO (5%):</span>
+                  <span>Comisión PlazaDO ({Number((viewingOrderDetails.plazaCommissionRate * 100).toFixed(4))}%):</span>
                   <span>-RD$ {formatDOP(viewingOrderDetails.plazaCommissionAmount)}</span>
                 </div>
                 <div className="border-t border-stone-200 pt-2 flex justify-between items-baseline text-stone-900">
@@ -3059,7 +3059,7 @@ export const StoreDashboard: React.FC = () => {
                 RD$ {totalLifetimeSales.toLocaleString()}
               </div>
               <div className="text-[11px] text-stone-500 flex justify-between pt-1 border-t border-stone-100">
-                <span>Comisión PlazaDO (5%): -RD$ {totalCommissionPaid.toLocaleString()}</span>
+                <span>Comisión PlazaDO: -RD$ {totalCommissionPaid.toLocaleString()}</span>
               </div>
             </div>
           </div>

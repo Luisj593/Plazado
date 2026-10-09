@@ -54,7 +54,7 @@ export async function initCloudSqlData() {
         supportPhone: INITIAL_SETTINGS.contactPhone,
         whatsappCommercial: INITIAL_SETTINGS.whatsappCommercial,
         contactEmail: INITIAL_SETTINGS.contactEmail,
-        defaultCommissionRate: 0.05,
+        defaultCommissionRate: INITIAL_SETTINGS.defaultCommissionRate,
         minPayoutAmount: 1000,
         payoutSchedule: 'WEEKLY',
         autoApproveStores: false,

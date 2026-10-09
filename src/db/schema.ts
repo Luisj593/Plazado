@@ -36,7 +36,7 @@ export const stores = pgTable('stores', {
   balance: doublePrecision('balance').default(0).notNull(),
   pendingBalance: doublePrecision('pending_balance').default(0).notNull(),
   availableBalance: doublePrecision('available_balance').default(0).notNull(),
-  commissionRate: doublePrecision('commission_rate').default(0.05).notNull(),
+  commissionRate: doublePrecision('commission_rate').default(0.30).notNull(),
   bankInfo: jsonb('bank_info').$type<any>(),
   shippingConfig: jsonb('shipping_config').$type<any>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -134,7 +134,7 @@ export const orders = pgTable('orders', {
   shippingCost: doublePrecision('shipping_cost').notNull().default(0),
   discount: doublePrecision('discount').notNull().default(0),
   total: doublePrecision('total').notNull(),
-  plazaCommissionRate: doublePrecision('plaza_commission_rate').notNull().default(0.05),
+  plazaCommissionRate: doublePrecision('plaza_commission_rate').notNull().default(0.30),
   plazaCommissionAmount: doublePrecision('plaza_commission_amount').notNull().default(0),
   storeNetEarnings: doublePrecision('store_net_earnings').notNull(),
   deliveryCode: text('delivery_code').notNull(),
@@ -183,7 +183,7 @@ export const commissions = pgTable('commissions', {
   orderId: text('order_id').references(() => orders.id).notNull(),
   storeId: text('store_id').references(() => stores.id).notNull(),
   saleAmount: doublePrecision('sale_amount').notNull(),
-  commissionRate: doublePrecision('commission_rate').notNull(), // Historical rate, e.g. 0.05
+  commissionRate: doublePrecision('commission_rate').notNull(), // Historical rate saved on the order
   amount: doublePrecision('amount').notNull(),
   status: text('status').notNull().default('COLLECTED'), // 'COLLECTED' | 'PENDING' | 'RETAINED'
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -312,7 +312,7 @@ export const systemSettingsTable = pgTable('system_settings', {
   supportPhone: text('support_phone').notNull(),
   whatsappCommercial: text('whatsapp_commercial').notNull(),
   contactEmail: text('contact_email').notNull(),
-  defaultCommissionRate: doublePrecision('default_commission_rate').default(0.05).notNull(),
+  defaultCommissionRate: doublePrecision('default_commission_rate').default(0.30).notNull(),
   minPayoutAmount: doublePrecision('min_payout_amount').default(1000).notNull(),
   payoutSchedule: text('payout_schedule').default('WEEKLY').notNull(),
   autoApproveStores: boolean('auto_approve_stores').default(false).notNull(),

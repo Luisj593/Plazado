@@ -141,7 +141,7 @@ export const SellWithUsPage: React.FC = () => {
             <div>
               <h3 className="font-bold text-stone-900 text-sm">Comisión Justa y Transparente</h3>
               <p className="text-xs text-stone-500 mt-1 leading-relaxed">
-                Solo cobramos un 5% de comisión comercial sobre ventas efectivas. Sin mensualidades fijas obligatorias para empezar.
+                Cobramos una comisión comercial del {Number(((systemSettings.plazaCommissionRate ?? 0.30) * 100).toFixed(4))}% sobre el total del pedido, incluido el envío. Sin mensualidades fijas obligatorias para empezar.
               </p>
             </div>
           </div>
@@ -374,7 +374,7 @@ export const SellWithUsPage: React.FC = () => {
                     className="mt-0.5 rounded text-red-600 accent-red-600"
                   />
                   <span>
-                    He leído y acepto los <strong>Términos y Condiciones para Tiendas de PlazaDO.com</strong>, incluyendo la comisión del 5% sobre ventas y las políticas de despacho independiente.
+                    He leído y acepto los <strong>Términos y Condiciones para Tiendas de PlazaDO.com</strong>, incluyendo la comisión del {Number(((systemSettings.plazaCommissionRate ?? 0.30) * 100).toFixed(4))}% sobre el total del pedido, incluido el envío y las políticas de despacho independiente.
                   </span>
                 </label>
               </div>

@@ -1,6 +1,6 @@
 {
-  "version": "2026-10-08.2",
-  "effectiveDate": "2026-10-08",
+  "version": "2026-10-09.1",
+  "effectiveDate": "2026-10-09",
   "contactEmail": "contacto@plazado.com",
   "pdfUrl": "/legal/plazado-politicas-plataforma.pdf",
   "documents": [
@@ -78,7 +78,7 @@
         {
           "title": "3. Comisiones y servicios adicionales",
           "paragraphs": [
-            "La comisión aplicable será la tasa vigente informada en el panel y en el desglose de la operación antes de vender. Su base de cálculo y cualquier impuesto o cargo deben mostrarse de forma clara. Este documento no establece un porcentaje fijo ni autoriza cargos que no se hayan comunicado y aceptado.",
+            "La comisión comercial vigente es 30% (tasa decimal 0.30) sobre el total del pedido, incluido el envío. Ejemplo: RD$4,000 × 0.30 = RD$1,200 de comisión; RD$2,800 de ingreso neto para la tienda antes de otros ajustes autorizados. La tasa aplicada se informa en el panel y el desglose antes de confirmar la operación. Cada pedido conserva la tasa registrada al crearse; los cambios futuros se comunicarán previamente y no recalcularán ventas anteriores.",
             "Publicidad, almacenamiento, preparación de pedidos u otros servicios opcionales se rigen por las tarifas y condiciones aceptadas para cada servicio. No se entienden incluidos gratuitamente ni activados por aceptar el registro. Los cambios de tarifas se comunicarán antes de aplicarse y no modificarán retroactivamente ventas ya realizadas."
           ]
         },

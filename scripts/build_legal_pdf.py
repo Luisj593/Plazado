@@ -1,5 +1,7 @@
 """Generate the downloadable PDF from the same text used by registration."""
 import json
+import io
+from PIL import Image
 from pathlib import Path
 from xml.sax.saxutils import escape
 from reportlab.lib import colors
@@ -11,9 +13,14 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, 
 ROOT = Path(__file__).resolve().parents[1]
 data = json.loads((ROOT / 'src/legal/documents.json').read_text())
 red = colors.HexColor('#d7193f')
-logo = ImageReader(str(ROOT / 'public/legal/plazado-logo.png'))
+logo_image = Image.open(ROOT / 'public/legal/plazado-logo.png').convert('RGB')
+logo_image.thumbnail((700, 700))
+logo_stream = io.BytesIO()
+logo_image.save(logo_stream, format='JPEG', quality=94, optimize=True)
+logo_stream.seek(0)
+logo = ImageReader(logo_stream)
 
-# Frame the supplied logo without changing the original image bytes.
+# Preserve the supplied logo framing and optimize its embedded resolution.
 def draw_logo(canvas, x, y, width, height):
  canvas.saveState()
  clip = canvas.beginPath(); clip.rect(x, y, width, height)
@@ -73,3 +80,5 @@ for audience, category in [('usuarios', 'customer_terms'), ('tiendas', 'store_te
  build_pdf(f'plazado-terminos-{audience}.pdf', selected[0]['title'], selected)
 build_pdf('plazado-politicas-plataforma.pdf', 'Políticas de la plataforma Plazado.com',
           [doc for doc in data['documents'] if doc['id'] not in ['customer_terms', 'store_terms']])
+
+build_pdf('plazado-politicas-terminos-2026-10-08.pdf', 'Políticas y términos de Plazado.com', data['documents'])

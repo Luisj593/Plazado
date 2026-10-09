@@ -212,7 +212,7 @@ export class CloudSqlRepository {
       balance: 0,
       pendingBalance: 0,
       availableBalance: 0,
-      commissionRate: 0.05,
+      commissionRate: 0.30,
       bankInfo: data.bankInfo || null,
       shippingConfig: data.shippingConfig || null,
     }).returning();
@@ -585,7 +585,7 @@ export class CloudSqlRepository {
    * CRITICAL CHECKOUT ENGINE:
    * 1. Re-queries actual products and prices from backend (never trusts frontend prices/calculations)
    * 2. Groups items by Store: creates an independent Order for each Store
-   * 3. Calculates subtotal, shipping, commission (5%), storeNetEarnings strictly on server
+   * 3. Calculates subtotal, shipping, commission (current rate), storeNetEarnings strictly on server
    * 4. Generates unique orderNumber and non-predictable deliveryCode
    * 5. Saves product snapshots in orderDetails
    * 6. Updates stock
@@ -598,6 +598,7 @@ export class CloudSqlRepository {
     shippingAddress: any;
     paymentMethod: 'CARD' | 'CASH' | 'CARD_AZUL' | 'CASH_ON_DELIVERY' | 'BANK_TRANSFER';
     notes?: string;
+    commissionRate?: number;
   }) {
     const customer = await this.findUserById(input.customerId);
     if (!customer) throw new Error('Cliente no encontrado en el sistema');
@@ -624,7 +625,7 @@ export class CloudSqlRepository {
 
     const orderGroupCode = generateOrderGroupCode();
     const createdOrders: any[] = [];
-    const commissionRate = 0.05; // 5% Standard Plazado Commission
+    const commissionRate = input.commissionRate ?? 0.30; // Decimal rate for new orders
 
     // 3. Process each Store's independent order
     for (const [storeId, storeItems] of storeItemsMap.entries()) {
@@ -647,7 +648,7 @@ export class CloudSqlRepository {
       }
 
       const total = subtotal + shippingCost;
-      const plazaCommissionAmount = Math.round(subtotal * commissionRate * 100) / 100;
+      const plazaCommissionAmount = Math.round(total * commissionRate * 100) / 100;
       const storeNetEarnings = total - plazaCommissionAmount;
 
       const orderId = `ord-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
@@ -717,7 +718,7 @@ export class CloudSqlRepository {
         id: `comm-${newOrder.id}`,
         orderId: newOrder.id,
         storeId: store.id,
-        saleAmount: subtotal,
+        saleAmount: total,
         commissionRate,
         amount: plazaCommissionAmount,
         status: isCash ? 'PENDING' : 'COLLECTED',
@@ -726,7 +727,7 @@ export class CloudSqlRepository {
       // 6. Financial Ledger: StoreTransaction & Balances
       if (isCash) {
         // When CASH: Store receives cash directly. 
-        // 5% Commission is a debt/payable to Plazado.com
+        // The recorded commission is a debt/payable to Plazado.com
         const currentBalance = store.balance || 0;
         const newBalance = currentBalance - plazaCommissionAmount;
 
@@ -736,7 +737,7 @@ export class CloudSqlRepository {
           orderId: newOrder.id,
           type: 'CASH_COMMISSION',
           amount: -plazaCommissionAmount,
-          description: `Comisión PlazaDO 5% por venta en efectivo #${orderNumber}`,
+          description: `Comisión PlazaDO ${Number((commissionRate * 100).toFixed(4))}% por venta en efectivo #${orderNumber}`,
           balanceAfter: newBalance,
         });
 
@@ -755,7 +756,7 @@ export class CloudSqlRepository {
           orderId: newOrder.id,
           type: 'ORDER_SALE',
           amount: storeNetEarnings,
-          description: `Venta acreditada con tarjeta #${orderNumber} (Neto tras comisión 5%)`,
+          description: `Venta acreditada con tarjeta #${orderNumber} (Neto tras comisión ${Number((commissionRate * 100).toFixed(4))}%)`,
           balanceAfter: newBalance,
         });
 
@@ -794,15 +795,15 @@ export class CloudSqlRepository {
   }
 
   async saveRawOrders(rawOrders: any[]) {
-    const commissionRate = 0.05; // 5% Standard Plazado Commission
     for (const ord of rawOrders) {
+      const commissionRate = ord.plazaCommissionRate ?? 0.30; // Preserve each order’s recorded rate.
       const orderId = ord.id;
       const orderNumber = ord.orderNumber || generateOrderNumber();
       const deliveryCode = ord.deliveryConfirmationCode || ord.deliveryCode || generateDeliveryCode();
       const subtotal = ord.subtotal || (ord.total - (ord.shippingCost || 0));
       const total = ord.total || subtotal;
-      const commissionAmount = ord.plazaCommissionAmount || Math.round(subtotal * commissionRate * 100) / 100;
-      const storeNetEarnings = ord.storeNetEarnings || (total - commissionAmount);
+      const commissionAmount = ord.plazaCommissionAmount ?? Math.round(total * commissionRate * 100) / 100;
+      const storeNetEarnings = ord.storeNetEarnings ?? (total - commissionAmount);
       const isCash = ord.paymentMethod === 'CASH_ON_DELIVERY' || ord.paymentMethod === 'CASH';
 
       // 1. Insert order
@@ -862,7 +863,7 @@ export class CloudSqlRepository {
         id: `comm-${orderId}`,
         orderId,
         storeId: ord.storeId,
-        saleAmount: subtotal,
+        saleAmount: total,
         commissionRate,
         amount: commissionAmount,
         status: isCash ? 'PENDING' : 'COLLECTED',
@@ -879,7 +880,7 @@ export class CloudSqlRepository {
             orderId,
             type: 'CASH_COMMISSION',
             amount: -commissionAmount,
-            description: `Comisión PlazaDO 5% por venta en efectivo #${orderNumber}`,
+            description: `Comisión PlazaDO ${Number((commissionRate * 100).toFixed(4))}% por venta en efectivo #${orderNumber}`,
             balanceAfter: newBal,
           }).onConflictDoNothing();
 
@@ -895,7 +896,7 @@ export class CloudSqlRepository {
             orderId,
             type: 'ORDER_SALE',
             amount: storeNetEarnings,
-            description: `Venta acreditada con tarjeta #${orderNumber} (Neto tras comisión 5%)`,
+            description: `Venta acreditada con tarjeta #${orderNumber} (Neto tras comisión ${Number((commissionRate * 100).toFixed(4))}%)`,
             balanceAfter: newBal,
           }).onConflictDoNothing();
 

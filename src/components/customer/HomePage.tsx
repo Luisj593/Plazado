@@ -863,7 +863,7 @@ export const HomePage: React.FC = () => {
 
             <div className="flex items-center gap-1.5 bg-white/15 px-3 py-1.5 rounded-full backdrop-blur-2xs border border-white/10">
               <Percent className="w-4 h-4 text-rose-200" />
-              <span>0.5% de comisión por venta</span>
+              <span>{Number(((systemSettings.plazaCommissionRate ?? 0.30) * 100).toFixed(4))}% de comisión por venta</span>
             </div>
 
             <div className="flex items-center gap-1.5 bg-white/15 px-3 py-1.5 rounded-full backdrop-blur-2xs border border-white/10">

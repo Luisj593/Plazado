@@ -47,8 +47,8 @@ Toda tienda o vendedor independiente debe someter su solicitud con información 
 Cada tienda opera con un identificador único (\`store_id\`). Ningún vendedor podrá visualizar, manipular ni acceder a información de pedidos, clientes o estados financieros pertenecientes a otras tiendas de la plataforma.
 
 ### 3. Comisión por Venta
-- El modelo comercial vigente contempla una comisión del **${(systemSettings.defaultCommissionRate * 100).toLocaleString('es-DO', { maximumFractionDigits: 2 })}%** sobre el valor bruto de los productos vendidos.
-- Las tarifas de envío cobradas por la tienda no están sujetas a comisión.
+- El modelo comercial vigente contempla una comisión del **${(systemSettings.plazaCommissionRate * 100).toLocaleString('es-DO', { maximumFractionDigits: 2 })}%** sobre el total del pedido, incluido el envío.
+- La comisión se calcula multiplicando el total por la tasa decimal. Con 30%: RD$4,000 × 0.30 = RD$1,200; neto de la tienda: RD$2,800. Cada pedido conserva su tasa histórica.
 - No se cobra mensualidad obligatoria de suscripción durante la fase inicial.
 
 ### 4. Liquidaciones y Desembolsos
@@ -92,7 +92,7 @@ Todas las transacciones se realizan en pesos dominicanos (DOP / RD$). Consulta c
   } else {
     title = 'Comisión Comercial PlazaDO';
     content = `
-PlazaDO.com opera con una comisión comercial del **${(systemSettings.defaultCommissionRate * 100).toLocaleString('es-DO', { maximumFractionDigits: 2 })}%** sobre las ventas generadas por cada tienda. Dicho monto cubre el mantenimiento tecnológico de la plataforma, el soporte a compradores, la seguridad transaccional y la exposición en el catálogo unificado de comercios dominicanos.
+PlazaDO.com opera con una comisión comercial del **${(systemSettings.plazaCommissionRate * 100).toLocaleString('es-DO', { maximumFractionDigits: 2 })}%** sobre el total del pedido, incluido el envío. Dicho monto cubre el mantenimiento tecnológico de la plataforma, el soporte a compradores, la seguridad transaccional y la exposición en el catálogo unificado de comercios dominicanos.
     `;
   }
 
