@@ -1,3 +1,4 @@
+import { testPayPalCredentials } from './server/paypal-credentials';
 import { validateOrders, checkoutOrderId } from './server/order-validation';
 import { sanitizeMarketplaceState, safeUser, safeOrder, publicSettings, editableFields, STORE_EDIT_FIELDS, PRODUCT_EDIT_FIELDS } from './server/public-state';
 import 'dotenv/config';
@@ -593,6 +594,19 @@ async function startServer() {
       res.json({ success: true, gateway: saved, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message || 'Error guardando proveedor de pago' });
+    }
+  });
+
+  app.post('/api/payment-gateways/:id/test', async (req: Request, res: Response) => {
+    if (!getAuthenticatedSuperAdmin(req)) return res.status(403).json({success:false,message:'Acceso denegado'});
+    const gateway = db.getPaymentGatewayById(req.params.id, false);
+    if (!gateway) return res.status(404).json({success:false,message:'Pasarela no encontrada'});
+    if (gateway.providerKey !== 'PAYPAL') return res.status(400).json({success:false,message:'Este proveedor todavía no dispone de una prueba de conexión real.'});
+    try {
+      await testPayPalCredentials(gateway);
+      res.json({success:true,message:`Credenciales PayPal verificadas (${gateway.environment}). Esta prueba no realiza cobros.`});
+    } catch (error: any) {
+      res.status(400).json({success:false,message:error.message});
     }
   });
 

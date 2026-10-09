@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { api } from '../../services/api';
 import { 
   CreditCard, 
   ShieldCheck, 
@@ -52,6 +53,7 @@ export const PaymentGatewaysTab: React.FC = () => {
   const [formAuthKey, setFormAuthKey] = useState('');
   const [formSecretKey, setFormSecretKey] = useState('');
   const [formApiKey, setFormApiKey] = useState('');
+  const [formClientId, setFormClientId] = useState('');
   const [formNotes, setFormNotes] = useState('');
 
   const handleCopy = (text: string, id: string) => {
@@ -60,25 +62,28 @@ export const PaymentGatewaysTab: React.FC = () => {
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const handleTestConnection = (gateway: PaymentGatewayConfig) => {
+  const handleTestConnection = async (gateway: PaymentGatewayConfig) => {
     setTestingConnectionId(gateway.id);
     setTestSuccessMessage(null);
-    setTimeout(() => {
+    try {
+      const result = await api.testPaymentGateway(gateway.id);
+      setTestSuccessMessage(result.message);
+    } catch (error) {
+      setTestSuccessMessage(error instanceof Error ? error.message : 'No se pudo validar la conexión. Revisa las credenciales guardadas.');
+    } finally {
       setTestingConnectionId(null);
-      setTestSuccessMessage(`¡Conexión validada exitosamente con el endpoint de ${gateway.providerName} (${gateway.environment})!`);
-      setTimeout(() => setTestSuccessMessage(null), 4000);
-    }, 1200);
+    }
   };
 
-  const openCreateModal = () => {
+  const openCreateModal = (provider: PaymentProviderKey = 'AZUL') => {
     setIsCreatingNew(true);
     setEditingGateway(null);
-    setFormProviderKey('AZUL');
-    setFormProviderName('AZUL Dominicana');
+    setFormProviderKey(provider);
+    setFormProviderName(provider === 'PAYPAL' ? 'PayPal' : 'AZUL Dominicana');
     setFormCommercialName('Plazado Dominicana SRL');
     setFormMerchantId('');
     setFormAffiliationNumber('');
-    setFormCurrency('DOP');
+    setFormCurrency(provider === 'PAYPAL' ? 'USD' : 'DOP');
     setFormEnvironment('PRODUCTION');
     setFormWebhookUrl('https://plazado.com/api/payments/webhook');
     setFormBank('Banco Popular Dominicano');
@@ -86,6 +91,7 @@ export const PaymentGatewaysTab: React.FC = () => {
     setFormAccountNumber('');
     setFormAccountHolder('Plazado Dominicana SRL');
     setFormRnc('1-32-48921-1');
+    setFormClientId('');
     setFormAuthKey('');
     setFormSecretKey('');
     setFormApiKey('');
@@ -108,8 +114,9 @@ export const PaymentGatewaysTab: React.FC = () => {
     setFormAccountNumber(g.associatedBankAccount.accountNumber);
     setFormAccountHolder(g.associatedBankAccount.accountHolder);
     setFormRnc(g.associatedBankAccount.rncOrCedula);
-    setFormAuthKey(g.credentials?.authKey || '');
-    setFormSecretKey(g.credentials?.secretKey || g.credentials?.merchantSecret || '');
+    setFormClientId(g.credentials?.clientId || '');
+    setFormAuthKey('');
+    setFormSecretKey('');
     setFormApiKey(g.credentials?.apiKey || '');
     setFormNotes(g.notes || '');
   };
@@ -138,10 +145,12 @@ export const PaymentGatewaysTab: React.FC = () => {
       environment: formEnvironment,
       webhookUrl: formWebhookUrl,
       credentials: {
+        clientId: formProviderKey === 'PAYPAL' ? formClientId.trim() || undefined : undefined,
+        clientSecret: formProviderKey === 'PAYPAL' ? formSecretKey.trim() || undefined : undefined,
         authKey: formAuthKey || undefined,
-        secretKey: formSecretKey || undefined,
+        secretKey: formProviderKey !== 'PAYPAL' ? formSecretKey || undefined : undefined,
         apiKey: formApiKey || undefined,
-        merchantSecret: formSecretKey || undefined,
+        merchantSecret: formProviderKey !== 'PAYPAL' ? formSecretKey || undefined : undefined,
         hasCredentials: true
       },
       lastModified: new Date().toISOString(),
@@ -179,7 +188,7 @@ export const PaymentGatewaysTab: React.FC = () => {
           </div>
 
           <button
-            onClick={openCreateModal}
+            onClick={() => openCreateModal()}
             className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-2 shadow-xs shrink-0 self-start md:self-center"
           >
             <Plus className="w-4 h-4" />
@@ -187,6 +196,12 @@ export const PaymentGatewaysTab: React.FC = () => {
           </button>
         </div>
 
+        <button type="button" onClick={() => {
+          const paypal = paymentGateways.find(g => g.providerKey === 'PAYPAL');
+          if (paypal) openEditModal(paypal); else openCreateModal('PAYPAL');
+        }} className="mt-4 px-4 py-2.5 bg-blue-700 text-white font-bold rounded-xl text-xs">
+          Configurar PayPal · Client ID y Client Secret
+        </button>
         {/* Active Gateway Highlight Card */}
         {activePaymentGateway && (
           <div className="mt-5 pt-5 border-t border-stone-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
@@ -436,7 +451,7 @@ export const PaymentGatewaysTab: React.FC = () => {
                       if (k === 'AZUL') setFormProviderName('AZUL (Servicios Digitales Popular)');
                       else if (k === 'CARDNET') setFormProviderName('CardNET (Consorcio de Tarjetas Dominicanas)');
                       else if (k === 'STRIPE') setFormProviderName('Stripe Payments International');
-                      else if (k === 'PAYPAL') setFormProviderName('PayPal Commerce Platform');
+                      else if (k === 'PAYPAL') { setFormProviderName('PayPal'); setFormCurrency('USD'); }
                       else setFormProviderName('Pasarela Bancaria Personalizada');
                     }}
                     className="w-full bg-stone-50 border border-stone-300 rounded-xl p-2.5 font-medium text-stone-800"
@@ -455,7 +470,7 @@ export const PaymentGatewaysTab: React.FC = () => {
                     type="text"
                     value={formProviderName}
                     onChange={(e) => setFormProviderName(e.target.value)}
-                    required
+                    required={formProviderKey !== 'PAYPAL'}
                     placeholder="Ej. AZUL Dominicana"
                     className="w-full bg-stone-50 border border-stone-300 rounded-xl p-2.5 font-medium text-stone-800"
                   />
@@ -467,7 +482,7 @@ export const PaymentGatewaysTab: React.FC = () => {
                     type="text"
                     value={formMerchantId}
                     onChange={(e) => setFormMerchantId(e.target.value)}
-                    required
+                    required={formProviderKey !== 'PAYPAL'}
                     placeholder="Ej. 39038540019"
                     className="w-full bg-stone-50 border border-stone-300 rounded-xl p-2.5 font-mono text-stone-800"
                   />
@@ -479,7 +494,7 @@ export const PaymentGatewaysTab: React.FC = () => {
                     type="text"
                     value={formAffiliationNumber}
                     onChange={(e) => setFormAffiliationNumber(e.target.value)}
-                    required
+                    required={formProviderKey !== 'PAYPAL'}
                     placeholder="Ej. 84729103"
                     className="w-full bg-stone-50 border border-stone-300 rounded-xl p-2.5 font-mono text-stone-800"
                   />
@@ -524,7 +539,7 @@ export const PaymentGatewaysTab: React.FC = () => {
                       type="text"
                       value={formBank}
                       onChange={(e) => setFormBank(e.target.value)}
-                      required
+                      required={formProviderKey !== 'PAYPAL'}
                       placeholder="Ej. Banco Popular Dominicano"
                       className="w-full bg-white border border-stone-300 rounded-lg p-2 font-medium text-stone-800"
                     />
@@ -535,7 +550,7 @@ export const PaymentGatewaysTab: React.FC = () => {
                       type="text"
                       value={formAccountNumber}
                       onChange={(e) => setFormAccountNumber(e.target.value)}
-                      required
+                      required={formProviderKey !== 'PAYPAL'}
                       placeholder="Ej. 8192847192"
                       className="w-full bg-white border border-stone-300 rounded-lg p-2 font-mono text-stone-800"
                     />
@@ -546,7 +561,7 @@ export const PaymentGatewaysTab: React.FC = () => {
                       type="text"
                       value={formAccountHolder}
                       onChange={(e) => setFormAccountHolder(e.target.value)}
-                      required
+                      required={formProviderKey !== 'PAYPAL'}
                       placeholder="Ej. Plazado Dominicana SRL"
                       className="w-full bg-white border border-stone-300 rounded-lg p-2 font-medium text-stone-800"
                     />
@@ -557,7 +572,7 @@ export const PaymentGatewaysTab: React.FC = () => {
                       type="text"
                       value={formRnc}
                       onChange={(e) => setFormRnc(e.target.value)}
-                      required
+                      required={formProviderKey !== 'PAYPAL'}
                       placeholder="Ej. 1-32-48921-1"
                       className="w-full bg-white border border-stone-300 rounded-lg p-2 font-mono text-stone-800"
                     />
@@ -565,6 +580,11 @@ export const PaymentGatewaysTab: React.FC = () => {
                 </div>
               </div>
 
+              {formProviderKey === 'PAYPAL' && <p className="p-3 bg-blue-50 text-blue-900 rounded-xl">
+                Puedes guardar PayPal con el secreto pendiente. Introduce el Client ID completo de tu aplicación y selecciona Live (Producción) o Sandbox.
+                {editingGateway?.credentials?.hasClientSecret ? ' Client Secret guardado; déjalo vacío para conservarlo.' : ' Client Secret pendiente.'}
+                {' '}Guardar estas credenciales no habilita cobros; el checkout de PayPal aún está pendiente de integración.
+              </p>}
               {/* API Credentials */}
               <div className="p-3.5 bg-stone-50 rounded-xl border border-stone-200 space-y-3">
                 <div className="font-bold text-stone-800 flex items-center justify-between text-xs">
@@ -573,25 +593,26 @@ export const PaymentGatewaysTab: React.FC = () => {
                     <span>Llaves de Seguridad y Credenciales</span>
                   </div>
                   <span className="text-[10px] text-stone-400 font-normal">
-                    (Deja en blanco para conservar el valor actual cifrado)
+                    (Deja el secreto en blanco para conservar el guardado)
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-stone-600 font-semibold mb-1 text-[11px]">AuthKey / Llave de Autenticación</label>
+                    <label className="block text-stone-600 font-semibold mb-1 text-[11px]">{formProviderKey === 'PAYPAL' ? 'PayPal Client ID (completo)' : 'AuthKey / Llave de Autenticación'}</label>
                     <input 
-                      type="password"
-                      value={formAuthKey}
-                      onChange={(e) => setFormAuthKey(e.target.value)}
+                      type={formProviderKey === 'PAYPAL' ? 'text' : 'password'}
+                      value={formProviderKey === 'PAYPAL' ? formClientId : formAuthKey}
+                      onChange={(e) => formProviderKey === 'PAYPAL' ? setFormClientId(e.target.value) : setFormAuthKey(e.target.value)}
                       placeholder="••••••••••••••••"
                       className="w-full bg-white border border-stone-300 rounded-lg p-2 font-mono text-stone-800"
                     />
                   </div>
                   <div>
-                    <label className="block text-stone-600 font-semibold mb-1 text-[11px]">Merchant Secret / Secret Key</label>
+                    <label className="block text-stone-600 font-semibold mb-1 text-[11px]">{formProviderKey === 'PAYPAL' ? 'PayPal Client Secret' : 'Merchant Secret / Secret Key'}</label>
                     <input 
                       type="password"
+                      autoComplete="new-password"
                       value={formSecretKey}
                       onChange={(e) => setFormSecretKey(e.target.value)}
                       placeholder="••••••••••••••••"
@@ -606,7 +627,7 @@ export const PaymentGatewaysTab: React.FC = () => {
                     type="url"
                     value={formWebhookUrl}
                     onChange={(e) => setFormWebhookUrl(e.target.value)}
-                    required
+                    required={formProviderKey !== 'PAYPAL'}
                     placeholder="https://plazado.com/api/payments/webhook"
                     className="w-full bg-white border border-stone-300 rounded-lg p-2 font-mono text-stone-800 text-[11px]"
                   />

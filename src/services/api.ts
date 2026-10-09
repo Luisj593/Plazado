@@ -482,6 +482,10 @@ export const api = {
   },
 
   // Payment Gateways & Central Receivers
+  async testPaymentGateway(id: string): Promise<{ success: boolean; message: string }> {
+    return request(`/api/payment-gateways/${encodeURIComponent(id)}/test`, { method: 'POST' });
+  },
+
   async fetchPaymentGateways(): Promise<{ success: boolean; gateways: PaymentGatewayConfig[] }> {
     return request('/api/payment-gateways');
   },

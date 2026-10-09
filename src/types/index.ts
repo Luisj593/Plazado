@@ -693,6 +693,9 @@ export interface AssociatedBankAccount {
 }
 
 export interface PaymentGatewayCredentials {
+  clientId?: string;
+  clientSecret?: string;
+  hasClientSecret?: boolean;
   apiKey?: string;
   secretKey?: string;
   authKey?: string;

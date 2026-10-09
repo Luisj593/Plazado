@@ -1,3 +1,4 @@
+import { encryptPayPalSecret } from './paypal-credentials';
 import { transitionOrder, processSettlementState, requestSettlementState, weeklySettlementsState } from './financial-lifecycle';
 import { commerceChanges } from './commerce-changes';
 import fs from 'fs';
@@ -1543,7 +1544,14 @@ class GlobalDatabase {
         mergedCreds[k] = val;
       }
     });
-    mergedCreds.hasCredentials = !!(mergedCreds.apiKey || mergedCreds.secretKey || mergedCreds.authKey || mergedCreds.token || mergedCreds.merchantSecret);
+    if (gatewayData.providerKey === 'PAYPAL') {
+      if (typeof incomingCreds.clientId === 'string' && incomingCreds.clientId.trim()) mergedCreds.clientId = incomingCreds.clientId.trim();
+      if (typeof incomingCreds.clientSecret === 'string' && incomingCreds.clientSecret.trim() && !incomingCreds.clientSecret.startsWith('••••••••')) {
+        mergedCreds.clientSecret = encryptPayPalSecret(incomingCreds.clientSecret.trim());
+      }
+      mergedCreds.hasClientSecret = !!mergedCreds.clientSecret;
+    }
+    mergedCreds.hasCredentials = !!(mergedCreds.clientSecret || mergedCreds.apiKey || mergedCreds.secretKey || mergedCreds.authKey || mergedCreds.token || mergedCreds.merchantSecret);
 
     const updatedGateway: PaymentGatewayConfig = {
       ...gatewayData,
@@ -1631,6 +1639,8 @@ class GlobalDatabase {
     return {
       ...g,
       credentials: {
+        clientId: g.credentials?.clientId,
+        hasClientSecret: !!g.credentials?.clientSecret,
         hasCredentials: !!(g.credentials?.apiKey || g.credentials?.secretKey || g.credentials?.authKey || g.credentials?.token || g.credentials?.merchantSecret || g.credentials?.hasCredentials),
         apiKey: g.credentials?.apiKey ? this.maskSecret(g.credentials.apiKey) : undefined,
         secretKey: g.credentials?.secretKey ? this.maskSecret(g.credentials.secretKey) : undefined,
