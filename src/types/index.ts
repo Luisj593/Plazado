@@ -415,7 +415,7 @@ export interface PaymentTransaction {
   storeName?: string;
   amount: number; // Monto total
   method: PaymentMethodType;
-  commissionAmount: number; // Comisión de Plazado.com (0.05%)
+  commissionAmount: number; // Comisión registrada para esta venta
   netAmount: number; // Monto neto tienda
   orderStatus: OrderStatus;
   paymentStatus: PaymentStatusType;
@@ -643,7 +643,9 @@ export interface SystemSettings {
   contactEmail: string;
   contactPhone: string;
   whatsappCommercial: string; // ej: "809-449-3325"
-  plazaCommissionRate: number; // Tasa de comisión de Plazado.com (0.05% = 0.0005)
+  commissionPolicyVersion?: string;
+  commissionPolicyAppliedAt?: string;
+  plazaCommissionRate: number; // Fracción decimal: 3% = 0.03
   defaultCommissionRate: number; // Fallback legacy
   itbisTaxRate: number; // 0.18
   currency: string; // "DOP"

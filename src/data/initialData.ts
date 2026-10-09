@@ -175,8 +175,8 @@ export const INITIAL_SETTINGS: SystemSettings = {
   contactEmail: 'contacto@plazado.com',
   contactPhone: '',
   whatsappCommercial: '809-449-3325', // Solicitado en el prompt
-  plazaCommissionRate: 0.0005, // 0.05% solicitado en el prompt (Monto * 0.0005)
-  defaultCommissionRate: 0.0005, // 0.05%
+  plazaCommissionRate: 0.03, // 3% por venta (Monto * 0.03)
+  defaultCommissionRate: 0.03, // 3%
   itbisTaxRate: 0.18,
   currency: 'DOP',
   currencySymbol: 'RD$',

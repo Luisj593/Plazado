@@ -202,10 +202,10 @@ export const AdminDashboard: React.FC = () => {
   // Settings form state
   const [defaultCommRate, setDefaultCommRate] = useState(systemSettings.defaultCommissionRate * 100);
   const [plazaCommRate, setPlazaCommRate] = useState(
-    Number(((systemSettings.plazaCommissionRate !== undefined ? systemSettings.plazaCommissionRate : 0.0005) * 100).toFixed(4))
+    Number(((systemSettings.plazaCommissionRate !== undefined ? systemSettings.plazaCommissionRate : 0.03) * 100).toFixed(4))
   );
   useEffect(() => {
-    setPlazaCommRate(Number(((systemSettings.plazaCommissionRate ?? 0.0005) * 100).toFixed(4)));
+    setPlazaCommRate(Number(((systemSettings.plazaCommissionRate ?? 0.03) * 100).toFixed(4)));
     setDefaultCommRate(systemSettings.defaultCommissionRate * 100);
   }, [systemSettings.plazaCommissionRate, systemSettings.defaultCommissionRate]);
   const [whatsappComm, setWhatsappComm] = useState(systemSettings.whatsappCommercial);
@@ -2266,7 +2266,7 @@ ${message}`);
             <div>
               <h2 className="text-base font-bold text-stone-900">Liquidaciones y Finanzas Centralizadas</h2>
               <p className="text-xs text-stone-500">
-                Cuenta central de Plazado.com, comisiones (0.05%), retenciones de efectivo y desembolsos semanales
+                Cuenta central de Plazado.com, comisiones ({((systemSettings.plazaCommissionRate ?? 0.03) * 100).toFixed(2)}%), retenciones de efectivo y desembolsos semanales
               </p>
             </div>
             
@@ -2304,10 +2304,10 @@ ${message}`);
                 Comisión Plazado.com
               </span>
               <div className="text-xl font-black text-red-600 mt-1">
-                {((systemSettings.plazaCommissionRate !== undefined ? systemSettings.plazaCommissionRate : 0.0005) * 100).toFixed(2)}%
+                {((systemSettings.plazaCommissionRate !== undefined ? systemSettings.plazaCommissionRate : 0.03) * 100).toFixed(2)}%
               </div>
               <span className="text-[10px] text-stone-400 mt-0.5 block">
-                Fórmula: Venta × {(systemSettings.plazaCommissionRate !== undefined ? systemSettings.plazaCommissionRate : 0.0005)}
+                Fórmula: Venta × {(systemSettings.plazaCommissionRate !== undefined ? systemSettings.plazaCommissionRate : 0.03)}
               </span>
             </div>
 

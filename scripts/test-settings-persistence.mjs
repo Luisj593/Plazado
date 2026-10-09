@@ -54,3 +54,18 @@ for(const socialLinks of [{instagram:'javascript:alert(1)'},{facebook:'https://f
  const before=structuredClone(persisted);await assert.rejects(db.updateSystemSettings({socialLinks}));assert.deepEqual(persisted,before);
 }
 console.log('Social links: official HTTPS domains only, persisted across restart, partial updates preserve other networks, empty disables, invalid links do not write.');
+// Owner-authorized 3% change: one settings document, one application, no historical rewrites.
+{
+ const repoSource=fs.readFileSync(root+'/server/firestore-repository.ts','utf8');
+ const begin=repoSource.indexOf('  public async applyRequestedCommissionPolicy('),end=repoSource.indexOf('  public async saveSystemSettings(',begin);
+ const compiled=await transform(`class CommissionHarness {adminDb:any;constructor(admin:any){this.adminDb=admin;} ${repoSource.slice(begin,end)}}`,{loader:'ts'});
+ const CommissionHarness=new Function(compiled.code+';return CommissionHarness;')();
+ let settings={plazaCommissionRate:0.0005,defaultCommissionRate:0.0005,contactEmail:'preserved@example.invalid',socialLinks:{instagram:'https://instagram.com/isolated'},primaryPaymentGatewayId:'preserved'},writeCount=0,reject=false;
+ const admin={doc:path=>{assert.equal(path,'systemSettings/default');return path;},runTransaction:async callback=>{let staged;const result=await callback({get:async()=>({exists:true,data:()=>structuredClone(settings)}),set:(ref,patch,options)=>{assert.deepEqual(options,{merge:true});assert.deepEqual(Object.keys(patch).sort(),['commissionPolicyAppliedAt','commissionPolicyVersion','defaultCommissionRate','plazaCommissionRate']);staged=patch;}});if(reject)throw Error('isolated commission persistence failure');if(staged){settings={...settings,...staged};writeCount++;}return result;}};
+ const repository=new CommissionHarness(admin);
+ reject=true;await assert.rejects(repository.applyRequestedCommissionPolicy());assert.equal(settings.plazaCommissionRate,0.0005);assert.equal(writeCount,0);
+ reject=false;await repository.applyRequestedCommissionPolicy();assert.equal(settings.plazaCommissionRate,0.03);assert.equal(settings.defaultCommissionRate,0.03);assert.equal(settings.primaryPaymentGatewayId,'preserved');assert.equal(settings.contactEmail,'preserved@example.invalid');assert.equal(writeCount,1);
+ await repository.applyRequestedCommissionPolicy();assert.equal(writeCount,1);
+ settings.plazaCommissionRate=0.04;await repository.applyRequestedCommissionPolicy();assert.equal(settings.plazaCommissionRate,0.04);assert.equal(writeCount,1);
+ console.log('Authorized commission change: 3% persisted once, rejected writes preserve prior rate, unrelated settings untouched, subsequent administrator edits preserved.');
+}

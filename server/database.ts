@@ -302,7 +302,7 @@ class GlobalDatabase {
       ...(activeData.systemSettings || {})
     };
     if (typeof activeData.systemSettings.plazaCommissionRate !== 'number') {
-      activeData.systemSettings.plazaCommissionRate = 0.0005; // 0.05%
+      activeData.systemSettings.plazaCommissionRate = 0.03; // 3%
     }
     if (!activeData.systemSettings.mailConfig) {
       activeData.systemSettings.mailConfig = {
@@ -552,6 +552,12 @@ class GlobalDatabase {
         this.memoryData.systemSettings = { ...this.memoryData.systemSettings, ...firestoreData.systemSettings };
         updated = true;
       }
+
+      // One-time, narrowly scoped commission change explicitly requested by the owner.
+      // Historical orders, balances and all other settings remain untouched.
+      const commissionSettings = await firestoreRepo.applyRequestedCommissionPolicy();
+      this.memoryData.systemSettings = { ...this.memoryData.systemSettings, ...commissionSettings };
+      updated = true;
 
       this.lastFirestoreSync = new Date().toISOString();
       this.firestoreSyncStatus = 'CONNECTED';
@@ -1814,7 +1820,7 @@ class GlobalDatabase {
 
     const rate = this.memoryData.systemSettings.plazaCommissionRate !== undefined 
       ? this.memoryData.systemSettings.plazaCommissionRate 
-      : 0.0005; // 0.05% de Plazado.com
+      : 0.03; // 3% de Plazado.com
 
     orders.forEach((ord, idx) => {
       // Recalcular formalmente con la tasa de comisión oficial de Plazado.com
@@ -2025,7 +2031,7 @@ class GlobalDatabase {
           newBalance: currentBalance.pendingBalance,
           externalRef: gatewayRef,
           status: 'CAPTURED',
-          notes: `Cargo automático aprobado a tarjeta ${cardBrand} ••••${cardLast4} (Aut: ${authCode}). Ingresado 100% en cuenta de custodia Plazado.com. Comisión: RD$ ${commission} (0.05%). Neto retenido en balance pendiente: RD$ ${netStore}.`
+          notes: `Cargo automático aprobado a tarjeta ${cardBrand} ••••${cardLast4} (Aut: ${authCode}). Ingresado 100% en cuenta de custodia Plazado.com. Comisión: RD$ ${commission} (${(rate * 100).toFixed(2)}%). Neto retenido en balance pendiente: RD$ ${netStore}.`
         });
       } else if (isPayPal) {
         ord.paymentStatus = 'PENDING';
@@ -2049,7 +2055,7 @@ class GlobalDatabase {
           newBalance: currentBalance.pendingCashCommissions,
           externalRef: gatewayRef,
           status: 'PENDING_COLLECTION',
-          notes: `Venta en efectivo recibida directamente por la tienda. Comisión de Plazado.com (0.05% = RD$ ${commission}) acumulada para descuento en liquidación de viernes.`
+          notes: `Venta en efectivo recibida directamente por la tienda. Comisión de Plazado.com (${(rate * 100).toFixed(2)}% = RD$ ${commission}) acumulada para descuento en liquidación de viernes.`
         });
       }
 
