@@ -335,7 +335,7 @@ export const HeroProductSlider: React.FC<HeroProductSliderProps> = ({
         {/* Right Column: Perfectly Fitted Image Stage (object-contain with showcase frame) */}
         <div className="w-full md:w-1/2 h-[220px] sm:h-[280px] md:h-[380px] lg:h-[420px] flex items-center justify-center order-1 md:order-2">
           <div className="relative w-full h-full flex items-center justify-center p-3 sm:p-6 rounded-2xl sm:rounded-3xl bg-white/[0.04] border border-white/10 shadow-2xl backdrop-blur-xs overflow-hidden group/img transition-all hover:border-white/20">
-            <img 
+            <img data-product-image="true" 
               key={currentSlide.id}
               src={currentSlide.image} 
               alt={currentSlide.alt}

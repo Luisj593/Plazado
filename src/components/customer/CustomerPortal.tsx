@@ -485,7 +485,7 @@ export const CustomerPortal: React.FC = () => {
                       <div className="space-y-2">
                         {order.items.map((item, idx) => (
                           <div key={idx} className="flex items-center gap-3 text-xs">
-                            <img src={item.productImage} alt="" className="w-12 h-12 rounded-lg object-cover bg-stone-100 border border-stone-200" />
+                            <img data-product-image="true" src={item.productImage} alt="" className="w-12 h-12 rounded-lg object-cover bg-stone-100 border border-stone-200" />
                             <div>
                               <p className="font-semibold text-stone-900">{item.productName}</p>
                               <p className="text-stone-500">{item.quantity}x a RD$ {item.price.toLocaleString()}</p>
@@ -708,7 +708,7 @@ export const CustomerPortal: React.FC = () => {
                     onClick={() => setSelectedProductId(p.id)}
                     className="bg-white rounded-xl border border-stone-200 overflow-hidden cursor-pointer hover:shadow-md transition-all p-3"
                   >
-                    <img src={p.images[0]} alt="" className="w-full aspect-square object-cover rounded-lg mb-2" />
+                    <img data-product-image="true" src={p.images[0]} alt="" className="w-full aspect-square object-cover rounded-lg mb-2" />
                     <h4 className="font-semibold text-xs text-stone-900 line-clamp-2">{p.name}</h4>
                     <p className="font-bold text-xs text-red-600 mt-1">RD$ {(p.promoPrice || p.price).toLocaleString()}</p>
                   </div>

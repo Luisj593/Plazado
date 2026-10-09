@@ -238,7 +238,7 @@ export const HomePage: React.FC = () => {
                 {/* Contenedor de la Imagen con badges superpuestos */}
                 <div className="relative w-full h-[300px] sm:h-[350px] lg:h-[470px] xl:h-[500px] overflow-hidden group flex items-center justify-center bg-slate-50 dark:bg-stone-900">
                   <button type="button" className="w-full h-full" onClick={() => activeHeroProduct && setSelectedProductId(activeHeroProduct.id)} aria-label={activeHeroProduct ? `Ver producto: ${activeHeroProduct.name}` : 'Imagen de portada'}>
-                  <img
+                  <img data-product-image={heroMode === 'slider' && !!activeHeroProduct}
                     src={heroMode === 'slider' && activeHeroProduct ? rotation.image : heroImageSrc} 
                     alt={activeHeroProduct ? activeHeroProduct.name : "Compras en Plazado.com República Dominicana"} 
                     className={`w-full h-full object-center bg-slate-50 dark:bg-stone-900 transition-all duration-700 ${heroMode === 'slider' && activeHeroProduct ? 'object-contain' : 'object-cover'}`}
@@ -302,7 +302,7 @@ export const HomePage: React.FC = () => {
                     <div className="absolute right-3 top-3 z-30 hidden sm:flex flex-col gap-2">
                       {rotation.images.map((image, index) => (
                         <button key={image + index} type="button" aria-label={`Ver imagen ${index + 1}`} onClick={() => { rotation.selectPhoto(image); }} className="w-14 h-14 lg:w-16 lg:h-16 rounded-xl overflow-hidden bg-white/95 border-2 border-white shadow-md">
-                          <img src={image} alt={`${activeHeroProduct.name} ${index + 1}`} loading="lazy" className="w-full h-full object-contain" />
+                          <img data-product-image="true" src={image} alt={`${activeHeroProduct.name} ${index + 1}`} loading="lazy" className="w-full h-full object-contain" />
                         </button>
                       ))}
                     </div>
@@ -440,7 +440,7 @@ export const HomePage: React.FC = () => {
               return (
                 <article key={prod.id} className="min-w-[165px] sm:min-w-[190px] max-w-[210px] snap-start bg-white dark:bg-stone-900 rounded-2xl border border-slate-200 dark:border-stone-800 p-2.5 shadow-sm">
                   <div className="relative aspect-square rounded-xl overflow-hidden bg-white dark:bg-stone-800 cursor-pointer" onClick={() => setSelectedProductId(prod.id)}>
-                    {prod.images?.[0] ? <img src={prod.images[0]} alt={prod.name} loading="lazy" className="w-full h-full object-contain" /> : <Package className="absolute inset-0 m-auto w-10 h-10 text-slate-300" />}
+                    {prod.images?.[0] ? <img data-product-image="true" src={prod.images[0]} alt={prod.name} loading="lazy" className="w-full h-full object-contain" /> : <Package className="absolute inset-0 m-auto w-10 h-10 text-slate-300" />}
                     <span className="absolute top-2 left-2 bg-[#f20544] text-white text-[10px] font-black px-2 py-1 rounded-lg">-{discount}%</span>
                   </div>
                   <div className="pt-2">
@@ -547,7 +547,7 @@ export const HomePage: React.FC = () => {
                     onClick={() => setSelectedProductId(prod.id)}
                   >
                     {prod.images && prod.images[0] ? (
-                      <img
+                      <img data-product-image="true"
                         src={prod.images[0]}
                         alt={prod.name}
                         className="w-full h-full object-contain p-1 group-hover:scale-105 transition-transform duration-300"
@@ -652,7 +652,7 @@ export const HomePage: React.FC = () => {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {trendingCategories.map(({ category, count, image }) => (
               <button key={category.id} type="button" onClick={() => handleCategorySelect(category.slug)} className="relative min-h-[150px] sm:min-h-[180px] overflow-hidden rounded-2xl border border-slate-200 dark:border-stone-800 text-left group bg-slate-900">
-                {image ? <img src={image} alt={category.name} loading="lazy" className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-300" /> : <div className="absolute inset-0 flex items-center justify-center text-6xl bg-slate-100 dark:bg-stone-800">{getCategoryEmoji(category.slug || category.id)}</div>}
+                {image ? <img data-product-image="true" src={image} alt={category.name} loading="lazy" className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-300" /> : <div className="absolute inset-0 flex items-center justify-center text-6xl bg-slate-100 dark:bg-stone-800">{getCategoryEmoji(category.slug || category.id)}</div>}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
                 <div className="absolute inset-x-0 bottom-0 p-3.5 text-white"><h3 className="font-black text-sm sm:text-base leading-tight">{category.name}</h3><p className="text-[10px] sm:text-xs text-white/80 mt-1">{count} {count === 1 ? 'producto publicado' : 'productos publicados'}</p><span className="inline-flex items-center gap-1 text-[10px] font-bold mt-2">Explorar <ArrowRight className="w-3 h-3" /></span></div>
               </button>
@@ -686,7 +686,7 @@ export const HomePage: React.FC = () => {
               return (
                 <article key={prod.id} className="min-w-[165px] sm:min-w-[190px] lg:min-w-[210px] max-w-[210px] snap-start bg-white dark:bg-stone-900 rounded-2xl border border-slate-200 dark:border-stone-800 p-2.5 shadow-sm hover:shadow-md transition-all">
                   <div className="relative aspect-square rounded-xl overflow-hidden bg-white dark:bg-stone-800 cursor-pointer" onClick={() => setSelectedProductId(prod.id)}>
-                    {prod.images?.[0] ? <img src={prod.images[0]} alt={prod.name} loading="lazy" className="w-full h-full object-contain" /> : <Package className="w-10 h-10 text-slate-300 absolute inset-0 m-auto" />}
+                    {prod.images?.[0] ? <img data-product-image="true" src={prod.images[0]} alt={prod.name} loading="lazy" className="w-full h-full object-contain" /> : <Package className="w-10 h-10 text-slate-300 absolute inset-0 m-auto" />}
                     <button type="button" aria-label={`Guardar ${prod.name} en favoritos`} onClick={(e) => { e.stopPropagation(); toggleFavoriteProduct(prod.id); }} className="absolute top-2 right-2 p-1.5 rounded-full bg-white/90 text-slate-600 shadow-sm">
                       <Heart className={`w-4 h-4 ${isFav ? 'fill-rose-500 text-rose-500' : ''}`} />
                     </button>

@@ -269,7 +269,7 @@ export const ProductImagesManager: React.FC<ProductImagesManagerProps> = ({
               {imgUrl ? (
                 <div className="relative group p-1 flex-1 flex flex-col justify-center">
                   <div className="aspect-square w-full rounded-lg overflow-hidden bg-stone-100 relative">
-                    <img
+                    <img data-product-image="true"
                       src={imgUrl}
                       alt={`Foto ${slotIndex + 1}`}
                       className="w-full h-full object-cover"

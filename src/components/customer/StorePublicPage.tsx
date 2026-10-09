@@ -360,7 +360,7 @@ export const StorePublicPage: React.FC = () => {
                     onClick={() => setSelectedProductId(product.id)}
                     className="aspect-square bg-stone-100 relative overflow-hidden cursor-pointer"
                   >
-                    <img 
+                    <img data-product-image="true" 
                       src={product.images[0]} 
                       alt={product.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"

@@ -104,7 +104,7 @@ export const ProductDetailModal: React.FC = () => {
           {/* Images Gallery */}
           <div className="space-y-3">
             <div className="aspect-square w-full rounded-xl overflow-hidden bg-stone-100 border border-stone-200 relative group">
-              <img 
+              <img data-product-image="true" 
                 src={product.images[selectedImageIndex] || product.images[0]} 
                 alt={product.name}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
@@ -137,7 +137,7 @@ export const ProductDetailModal: React.FC = () => {
                       selectedImageIndex === idx ? 'border-red-600 ring-2 ring-red-100' : 'border-stone-200 opacity-70 hover:opacity-100'
                     }`}
                   >
-                    <img src={img} alt="" className="w-full h-full object-cover" />
+                    <img data-product-image="true" src={img} alt="" className="w-full h-full object-cover" />
                   </button>
                 ))}
               </div>

@@ -515,7 +515,7 @@ export const SearchCatalogPage: React.FC = () => {
                     className="bg-white rounded-xl border border-stone-200 overflow-hidden shadow-2xs hover:shadow-md transition-all group flex flex-col"
                   >
                     <div className="aspect-square bg-stone-100 relative overflow-hidden">
-                      <img 
+                      <img data-product-image="true" 
                         src={product.images[0]} 
                         alt={product.name}
                         onClick={() => setSelectedProductId(product.id)}
@@ -907,7 +907,7 @@ const CategoryRowCatalog: React.FC<CategoryRowCatalogProps> = ({
             >
               <div className="relative aspect-square bg-stone-100 overflow-hidden cursor-pointer" onClick={() => onSelectProduct(product.id)}>
                 {product.images && product.images[0] ? (
-                  <img
+                  <img data-product-image="true"
                     src={product.images[0]}
                     alt={product.name}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"

@@ -863,7 +863,7 @@ export const FulfillmentStoreView: React.FC<FulfillmentStoreViewProps> = ({
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-3">
                             {item.productImage ? (
-                              <img src={item.productImage} alt={item.productName} className="w-9 h-9 object-cover rounded-lg border border-slate-200 dark:border-slate-700 shrink-0" />
+                              <img data-product-image="true" src={item.productImage} alt={item.productName} className="w-9 h-9 object-cover rounded-lg border border-slate-200 dark:border-slate-700 shrink-0" />
                             ) : (
                               <div className="w-9 h-9 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center text-slate-400 shrink-0">
                                 <Package className="w-4 h-4" />

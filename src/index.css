@@ -203,3 +203,14 @@ html.dark .admin-actions-scroll::-webkit-scrollbar-thumb:hover {
 
 
 
+
+/* Product image surfaces follow the selected theme without altering photo pixels. */
+:root { --product-image-background: #ffffff; }
+html.dark { --product-image-background: #0c0a09; }
+:root body img[data-product-image="true"] {
+  background-color: var(--product-image-background) !important;
+}
+:root body :is(div, button, figure):has(> img[data-product-image="true"]),
+:root body :is(div, figure):has(> button > img[data-product-image="true"]) {
+  background-color: var(--product-image-background) !important;
+}

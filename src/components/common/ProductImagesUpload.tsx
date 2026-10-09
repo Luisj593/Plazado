@@ -57,7 +57,7 @@ export const ProductImagesUpload: React.FC<ProductImagesUploadProps> = ({
             key={`${imgUrl}-${index}`}
             className="group relative aspect-square rounded-xl overflow-hidden border border-stone-200 bg-stone-100 shadow-2xs"
           >
-            <img 
+            <img data-product-image="true" 
               src={imgUrl} 
               alt={`Foto ${index + 1}`}
               className="w-full h-full object-cover"

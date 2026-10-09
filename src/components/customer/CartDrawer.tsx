@@ -134,7 +134,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       const effectivePrice = product.promoPrice || product.price;
                       return (
                         <div key={cartItem.productId} className="p-3.5 flex gap-3">
-                          <img 
+                          <img data-product-image="true" 
                             src={product.images[0]} 
                             alt={product.name}
                             onClick={() => {

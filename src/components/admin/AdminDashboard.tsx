@@ -2014,7 +2014,7 @@ ${message}`);
                 <div key={p.id} className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-2xs flex flex-col justify-between">
                   <div className="p-4 space-y-3">
                     <div className="flex gap-3 items-start">
-                      <img 
+                      <img data-product-image="true" 
                         src={p.images?.[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30'} 
                         alt="" 
                         className="w-16 h-16 rounded-xl object-cover border border-stone-200 shrink-0" 
