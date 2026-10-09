@@ -8,6 +8,7 @@ const one='Exact fixture A 123!',two='Exact fixture B 456!';
 const hashes=[await hashPassword(one),await hashPassword(two)];assert.equal(await verifyPassword(one,hashes[0]),true);
 for(const wrong of [two,one.toLowerCase(),one+' ',one.slice(0,-1),'',null])assert.equal(await verifyPassword(wrong,hashes[0]),false);
 for(const hash of ['',null,'invalid','$2b$invalid'])assert.equal(await verifyPassword(one,hash),false);
+const limitPassword='A'.repeat(72),limitHash=await hashPassword(limitPassword);assert.equal(await verifyPassword(limitPassword,limitHash),true);assert.equal(await verifyPassword(limitPassword+'x',limitHash),false);await assert.rejects(hashPassword(limitPassword+'x'));
 const source=fs.readFileSync('server.ts','utf8'),start=source.indexOf("  app.post('/api/auth/login'"),end=source.indexOf('  // Active email verification',start);
 const compiled=await transform(source.slice(start,end),{loader:'ts'});
 let handler,tokens=0;const users=[{id:'a',email:'a@example.invalid',passwordHash:hashes[0],role:'CUSTOMER'},{id:'b',email:'b@example.invalid',passwordHash:hashes[1],role:'CUSTOMER'}];

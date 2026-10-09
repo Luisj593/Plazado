@@ -1,6 +1,6 @@
 import { applyPayPalCapture } from './paypal-checkout';
 import { encryptPayPalSecret } from './paypal-credentials';
-import { transitionOrder, processSettlementState, requestSettlementState, weeklySettlementsState } from './financial-lifecycle';
+import { recordCashCommissionState, transitionOrder, processSettlementState, requestSettlementState, weeklySettlementsState } from './financial-lifecycle';
 import { commerceChanges } from './commerce-changes';
 import fs from 'fs';
 import path from 'path';
@@ -128,6 +128,8 @@ class GlobalDatabase {
     this.snapshotPath = path.resolve(process.cwd(), 'server', 'data_snapshot.json');
 
     this.memoryData = this.loadOrInitialize();
+    // Each process uses an independent cache version; equal counters across instances must not hide updates.
+    this.memoryData.version=crypto.randomInt(1,2**48-1);
   }
 
   private tryParseJson(filePath: string): GlobalDatabaseData | null {
@@ -574,7 +576,30 @@ class GlobalDatabase {
     }
   }
 
+
+  public refreshDurableState():Promise<void> {
+    const priorSettings=this.settingsUpdateQueue;
+    const execute=async()=>{
+      await priorSettings;
+      const durable=await firestoreRepo.loadConsistentState();
+      durable.specifications=Array.from(new Map([...(this.memoryData.specifications || []),...(durable.specifications || [])].map(row=>[row.id,row])).values());
+      durable.adPlacements=Array.from(new Map([...(this.memoryData.adPlacements || []),...(durable.adPlacements || [])].map(row=>[row.code,row])).values());
+      const changed=Object.entries(durable).some(([key,value])=>JSON.stringify((this.memoryData as any)[key])!==JSON.stringify(value));
+      if(changed){
+        for(const [key,value] of Object.entries(durable)) (this.memoryData as any)[key]=value;
+        storesDb.syncFromFirestore(this.memoryData.stores);
+        this.memoryData.userCredentials=this.memoryData.users.filter(u=>u.passwordHash).map(u=>({id:`cred-${u.id}`,userId:u.id,passwordHash:u.passwordHash!,createdAt:u.createdAt,updatedAt:new Date().toISOString()}));
+        this.commit();
+      }
+      this.lastFirestoreSync=new Date().toISOString();this.firestoreSyncStatus='CONNECTED';
+    };
+    const operation=this.checkoutQueue.then(execute,execute);
+    this.checkoutQueue=operation.then(()=>undefined,()=>undefined);
+    return operation;
+  }
+
   public async initCloudSqlSync(): Promise<void> {
+    if(firestoreRepo.isAdminReady()) {console.log('[CloudSQL] Production authority is Firestore; legacy bidirectional import disabled.');return;}
     try {
       console.log('[GlobalDatabase] Initiating Cloud SQL synchronization...');
       const [sqlUsers, sqlStores, sqlProducts, sqlCategories, sqlOrders, sqlAds] = await Promise.all([
@@ -1229,7 +1254,7 @@ class GlobalDatabase {
     const idx = this.memoryData.products.findIndex(p => p.id === productId);
     if (idx === -1) return null;
     const prev = this.memoryData.products[idx];
-    const updated = { ...prev, ...data };
+    const updated = { ...prev, ...data, id:prev.id };
     await firestoreRepo.saveProduct(updated);
     this.memoryData.products[idx] = updated;
     this.addAuditLog('PRODUCT_UPDATED', productId, prev.name, updated.name);
@@ -1283,11 +1308,15 @@ class GlobalDatabase {
 
   // --- CATEGORIES ---
   public getCategories(): Category[] {
-    return this.memoryData.categories;
+    return this.memoryData.categories.filter((row:any)=>!row.deleted);
   }
 
-  public addCategory(cat: Omit<Category, 'id'>): Category {
-    const newId = `cat-${Date.now()}`;
+  public addCategory(cat: Omit<Category, 'id'>): Promise<Category> {
+    return this.runCommerceMutation(()=>this.buildAddCategory(cat));
+  }
+
+  private buildAddCategory(cat: Omit<Category, 'id'>): Category {
+    const newId = `cat-${crypto.randomUUID()}`;
     const newCat: Category = {
       ...cat,
       id: newId,
@@ -1299,18 +1328,26 @@ class GlobalDatabase {
     return newCat;
   }
 
-  public updateCategory(categoryId: string, data: Partial<Category>): Category | null {
+  public updateCategory(categoryId: string, data: Partial<Category>): Promise<Category | null> {
+    return this.runCommerceMutation(()=>this.buildUpdateCategory(categoryId,data));
+  }
+
+  private buildUpdateCategory(categoryId: string, data: Partial<Category>): Category | null {
     const idx = this.memoryData.categories.findIndex(c => c.id === categoryId);
     if (idx === -1) return null;
     const prev = this.memoryData.categories[idx];
-    const updated = { ...prev, ...data };
+    const updated = { ...prev, ...data, id:prev.id };
     this.memoryData.categories[idx] = updated;
     this.addAuditLog('CATEGORY_UPDATED', categoryId, prev.name, updated.name);
     this.commit();
     return updated;
   }
 
-  public deleteCategory(categoryId: string): { success: boolean; message?: string } {
+  public deleteCategory(categoryId: string): Promise<{ success: boolean; message?: string }> {
+    return this.runCommerceMutation(()=>this.buildDeleteCategory(categoryId));
+  }
+
+  private buildDeleteCategory(categoryId: string): { success: boolean; message?: string } {
     const idx = this.memoryData.categories.findIndex(c => c.id === categoryId);
     if (idx === -1) return { success: false, message: 'Categoría no encontrada' };
 
@@ -1327,7 +1364,7 @@ class GlobalDatabase {
     }
 
     const name = this.memoryData.categories[idx].name;
-    this.memoryData.categories.splice(idx, 1);
+    (this.memoryData.categories[idx] as any).deleted=true;
     this.addAuditLog('CATEGORY_DELETED', categoryId, name, 'Categoría eliminada');
     this.commit();
     return { success: true };
@@ -1335,7 +1372,7 @@ class GlobalDatabase {
 
   // --- TECHNICAL SPECIFICATIONS ---
   public getSpecifications(subcategoryId?: string, categoryId?: string): CategorySpecification[] {
-    let specs = this.memoryData.specifications || [];
+    let specs = (this.memoryData.specifications || []).filter((row:any)=>!row.deleted);
     if (subcategoryId) {
       specs = specs.filter(s => 
         s.subcategoryId === subcategoryId || 
@@ -1349,11 +1386,15 @@ class GlobalDatabase {
   }
 
   public getAllSpecifications(): CategorySpecification[] {
-    return (this.memoryData.specifications || []).sort((a, b) => (a.order || 99) - (b.order || 99));
+    return (this.memoryData.specifications || []).filter((row:any)=>!row.deleted).sort((a, b) => (a.order || 99) - (b.order || 99));
   }
 
-  public addSpecification(specData: Omit<CategorySpecification, 'id'>): CategorySpecification {
-    const newId = `spec-${Date.now()}`;
+  public addSpecification(specData: Omit<CategorySpecification, 'id'>): Promise<CategorySpecification> {
+    return this.runCommerceMutation(()=>this.buildAddSpecification(specData));
+  }
+
+  private buildAddSpecification(specData: Omit<CategorySpecification, 'id'>): CategorySpecification {
+    const newId = `spec-${crypto.randomUUID()}`;
     const newSpec: CategorySpecification = {
       ...specData,
       id: newId,
@@ -1366,30 +1407,42 @@ class GlobalDatabase {
     return newSpec;
   }
 
-  public updateSpecification(specId: string, data: Partial<CategorySpecification>): CategorySpecification | null {
+  public updateSpecification(specId: string, data: Partial<CategorySpecification>): Promise<CategorySpecification | null> {
+    return this.runCommerceMutation(()=>this.buildUpdateSpecification(specId,data));
+  }
+
+  private buildUpdateSpecification(specId: string, data: Partial<CategorySpecification>): CategorySpecification | null {
     this.memoryData.specifications = this.memoryData.specifications || [];
     const idx = this.memoryData.specifications.findIndex(s => s.id === specId);
     if (idx === -1) return null;
     const prev = this.memoryData.specifications[idx];
-    const updated = { ...prev, ...data };
+    const updated = { ...prev, ...data, id:prev.id };
     this.memoryData.specifications[idx] = updated;
     this.addAuditLog('SPECIFICATION_UPDATED', specId, prev.name, updated.name);
     this.commit();
     return updated;
   }
 
-  public deleteSpecification(specId: string): boolean {
+  public deleteSpecification(specId: string): Promise<boolean> {
+    return this.runCommerceMutation(()=>this.buildDeleteSpecification(specId));
+  }
+
+  private buildDeleteSpecification(specId: string): boolean {
     this.memoryData.specifications = this.memoryData.specifications || [];
     const idx = this.memoryData.specifications.findIndex(s => s.id === specId);
     if (idx === -1) return false;
     const name = this.memoryData.specifications[idx].name;
-    this.memoryData.specifications.splice(idx, 1);
+    (this.memoryData.specifications[idx] as any).deleted=true;
     this.addAuditLog('SPECIFICATION_DELETED', specId, name, 'Especificación técnica eliminada');
     this.commit();
     return true;
   }
 
-  public mergeCategories(sourceId: string, targetId: string): boolean {
+  public mergeCategories(sourceId: string, targetId: string): Promise<boolean> {
+    return this.runCommerceMutation(()=>this.buildMergeCategories(sourceId,targetId));
+  }
+
+  private buildMergeCategories(sourceId: string, targetId: string): boolean {
     const source = this.memoryData.categories.find(c => c.id === sourceId);
     const target = this.memoryData.categories.find(c => c.id === targetId);
     if (!source || !target) return false;
@@ -1407,7 +1460,7 @@ class GlobalDatabase {
       }
     });
     // Remove source
-    this.memoryData.categories = this.memoryData.categories.filter(c => c.id !== sourceId);
+    (source as any).deleted=true;
     this.addAuditLog('CATEGORY_MERGED', sourceId, source.name, `Fusionada hacia ${target.name}`);
     this.commit();
     return true;
@@ -1420,7 +1473,9 @@ class GlobalDatabase {
 
   public updateSystemSettings(settings: Partial<SystemSettings>): Promise<SystemSettings> {
     const patch = { ...settings };
+    const priorCheckout=this.checkoutQueue;
     const operation = this.settingsUpdateQueue.then(async () => {
+      await priorCheckout;
       for (const key of ['plazaCommissionRate', 'defaultCommissionRate'] as const) {
         const value = patch[key];
         if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1)) {
@@ -1514,24 +1569,28 @@ class GlobalDatabase {
 
   // --- PAYMENT GATEWAYS & RECEIVER (Plazado.com Central Account) ---
   public getPaymentGateways(mask: boolean = true): PaymentGatewayConfig[] {
-    const gateways = this.memoryData.paymentGateways || [];
+    const gateways = (this.memoryData.paymentGateways || []).filter((row:any)=>!row.deleted);
     if (!mask) return gateways;
     return gateways.map(g => this.maskGateway(g));
   }
 
   public getPaymentGatewayById(id: string, mask: boolean = true): PaymentGatewayConfig | null {
-    const gateways = this.memoryData.paymentGateways || [];
+    const gateways = (this.memoryData.paymentGateways || []).filter((row:any)=>!row.deleted);
     const found = gateways.find(g => g.id === id);
     if (!found) return null;
     return mask ? this.maskGateway(found) : found;
   }
 
   public getActivePaymentGateway(): PaymentGatewayConfig | null {
-    const gateways = this.memoryData.paymentGateways || [];
+    const gateways = (this.memoryData.paymentGateways || []).filter((row:any)=>!row.deleted);
     return gateways.find(g => g.isActive) || gateways[0] || null;
   }
 
-  public savePaymentGateway(gatewayData: PaymentGatewayConfig): PaymentGatewayConfig {
+  public savePaymentGateway(gatewayData: PaymentGatewayConfig): Promise<PaymentGatewayConfig> {
+    return this.runCommerceMutation(()=>this.buildSavePaymentGateway(gatewayData));
+  }
+
+  private buildSavePaymentGateway(gatewayData: PaymentGatewayConfig): PaymentGatewayConfig {
     if (!this.memoryData.paymentGateways) {
       this.memoryData.paymentGateways = [...INITIAL_PAYMENT_GATEWAYS];
     }
@@ -1596,7 +1655,11 @@ class GlobalDatabase {
     return this.maskGateway(updatedGateway);
   }
 
-  public setActivePaymentGateway(gatewayId: string): boolean {
+  public setActivePaymentGateway(gatewayId: string): Promise<boolean> {
+    return this.runCommerceMutation(()=>this.buildSetActivePaymentGateway(gatewayId));
+  }
+
+  private buildSetActivePaymentGateway(gatewayId: string): boolean {
     if (!this.memoryData.paymentGateways) return false;
     const target = this.memoryData.paymentGateways.find(g => g.id === gatewayId);
     if (!target) return false;
@@ -1621,7 +1684,11 @@ class GlobalDatabase {
     return true;
   }
 
-  public deletePaymentGateway(gatewayId: string): boolean {
+  public deletePaymentGateway(gatewayId: string): Promise<boolean> {
+    return this.runCommerceMutation(()=>this.buildDeletePaymentGateway(gatewayId));
+  }
+
+  private buildDeletePaymentGateway(gatewayId: string): boolean {
     if (!this.memoryData.paymentGateways) return false;
     const idx = this.memoryData.paymentGateways.findIndex(g => g.id === gatewayId);
     if (idx === -1) return false;
@@ -1629,7 +1696,8 @@ class GlobalDatabase {
       throw new Error('No se puede eliminar la cuenta receptora que actualmente está activa.');
     }
     const name = this.memoryData.paymentGateways[idx].providerName;
-    this.memoryData.paymentGateways.splice(idx, 1);
+    if(this.memoryData.orders.some(o=>o.paypalPayment?.gatewayId===gatewayId))throw Error('Esta pasarela tiene pedidos asociados. Desactívala y conserva su historial.');
+    (this.memoryData.paymentGateways[idx] as any).deleted=true;
     this.addAuditLog('PAYMENT_GATEWAY_DELETED', gatewayId, name, 'Pasarela de pago eliminada');
     this.commit();
     return true;
@@ -1660,7 +1728,7 @@ class GlobalDatabase {
 
   // --- ADVERTISING MANAGEMENT (Publicidad) ---
   public getAdvertisements(): Advertisement[] {
-    return this.memoryData.advertisements || [];
+    return (this.memoryData.advertisements || []).filter((row:any)=>!row.deleted);
   }
 
   public getActiveAdvertisements(placement?: string, device?: string): Advertisement[] {
@@ -1668,7 +1736,7 @@ class GlobalDatabase {
     const today = new Date().toISOString().split('T')[0];
 
     return ads.filter(ad => {
-      if (!ad.isActive) return false;
+      if (!ad.isActive || (ad as any).deleted) return false;
       // Auto-expire check: do not show expired ads
       if (ad.startDate && ad.startDate > today) return false;
       if (ad.endDate && ad.endDate < today) return false;
@@ -1681,7 +1749,11 @@ class GlobalDatabase {
     });
   }
 
-  public addAdvertisement(data: Omit<Advertisement, 'id' | 'impressions' | 'clicks' | 'createdAt'>): Advertisement {
+  public addAdvertisement(data: Omit<Advertisement, 'id' | 'impressions' | 'clicks' | 'createdAt'>): Promise<Advertisement> {
+    return this.runCommerceMutation(()=>this.buildAddAdvertisement(data));
+  }
+
+  private buildAddAdvertisement(data: Omit<Advertisement, 'id' | 'impressions' | 'clicks' | 'createdAt'>): Advertisement {
     if (!this.memoryData.advertisements) {
       this.memoryData.advertisements = [];
     }
@@ -1700,7 +1772,11 @@ class GlobalDatabase {
     return newAd;
   }
 
-  public updateAdvertisement(id: string, data: Partial<Advertisement>): Advertisement | null {
+  public updateAdvertisement(id: string, data: Partial<Advertisement>): Promise<Advertisement | null> {
+    return this.runCommerceMutation(()=>this.buildUpdateAdvertisement(id,data));
+  }
+
+  private buildUpdateAdvertisement(id: string, data: Partial<Advertisement>): Advertisement | null {
     if (!this.memoryData.advertisements) return null;
     const idx = this.memoryData.advertisements.findIndex(a => a.id === id);
     if (idx === -1) return null;
@@ -1708,6 +1784,7 @@ class GlobalDatabase {
     const updated: Advertisement = {
       ...prev,
       ...data,
+      id:prev.id,
       updatedAt: new Date().toISOString()
     };
     this.memoryData.advertisements[idx] = updated;
@@ -1716,7 +1793,11 @@ class GlobalDatabase {
     return updated;
   }
 
-  public toggleAdvertisementStatus(id: string): boolean {
+  public toggleAdvertisementStatus(id: string): Promise<boolean> {
+    return this.runCommerceMutation(()=>this.buildToggleAdvertisementStatus(id));
+  }
+
+  private buildToggleAdvertisementStatus(id: string): boolean {
     if (!this.memoryData.advertisements) return false;
     const ad = this.memoryData.advertisements.find(a => a.id === id);
     if (!ad) return false;
@@ -1727,12 +1808,16 @@ class GlobalDatabase {
     return true;
   }
 
-  public deleteAdvertisement(id: string): boolean {
+  public deleteAdvertisement(id: string): Promise<boolean> {
+    return this.runCommerceMutation(()=>this.buildDeleteAdvertisement(id));
+  }
+
+  private buildDeleteAdvertisement(id: string): boolean {
     if (!this.memoryData.advertisements) return false;
     const idx = this.memoryData.advertisements.findIndex(a => a.id === id);
     if (idx === -1) return false;
     const title = this.memoryData.advertisements[idx].title;
-    this.memoryData.advertisements.splice(idx, 1);
+    (this.memoryData.advertisements[idx] as any).deleted=true;this.memoryData.advertisements[idx].isActive=false;
     this.addAuditLog('AD_CAMPAIGN_DELETED', id, title, 'Campaña publicitaria eliminada');
     this.commit();
     return true;
@@ -1742,7 +1827,11 @@ class GlobalDatabase {
     return this.memoryData.adPlacements || INITIAL_AD_PLACEMENTS;
   }
 
-  public saveAdPlacement(placement: AdPlacement): AdPlacement {
+  public saveAdPlacement(placement: AdPlacement): Promise<AdPlacement> {
+    return this.runCommerceMutation(()=>this.buildSaveAdPlacement(placement));
+  }
+
+  private buildSaveAdPlacement(placement: AdPlacement): AdPlacement {
     if (!this.memoryData.adPlacements) {
       this.memoryData.adPlacements = [...INITIAL_AD_PLACEMENTS];
     }
@@ -2101,7 +2190,9 @@ class GlobalDatabase {
   }
 
   private runCommerceMutation<T>(mutate: () => T): Promise<T> {
+    const priorSettings=this.settingsUpdateQueue;
     const execute = async () => {
+      await priorSettings;
       const current = this.memoryData;
       const previous = structuredClone(current);
       this.memoryData = structuredClone(previous);
@@ -2115,10 +2206,11 @@ class GlobalDatabase {
       for(const change of changes) if(change.collection==='users' && change.before && change.after.passwordHash!==change.before.passwordHash) change.after.authVersion=(change.before.authVersion || 0)+1;
       await firestoreRepo.persistCheckout(previous,next!,false);
       for (const change of changes) {
-        if (change.collection === 'fulfillmentConfig') this.memoryData.fulfillmentConfig=change.after;
+        if (change.collection === 'systemSettings') this.memoryData.systemSettings=change.after;
+        else if (change.collection === 'fulfillmentConfig') this.memoryData.fulfillmentConfig=change.after;
         else if (change.collection === 'storeBalances') this.memoryData.storeBalances[change.id]=change.after;
         else {
-          const list=((this.memoryData as any)[change.collection] ||= []),index=list.findIndex((row:any)=>row.id===change.id);
+          const list=((this.memoryData as any)[change.collection] ||= []),index=list.findIndex((row:any)=>(row.id || row.code)===change.id);
           if (change.collection==='products' && index>=0) list[index]={...list[index],...change.after};
           else if(index>=0) list[index]=change.after;else list.unshift(change.after);
         }
@@ -2452,6 +2544,30 @@ class GlobalDatabase {
       if(this.memoryData.users.some(u=>u.id===user.id || u.email.toLowerCase()===user.email.toLowerCase())) throw Error('La cuenta ya existe');
       this.memoryData.users.push(structuredClone(user));return user;
     });
+  }
+
+  public requestPasswordRecovery(email:string,codeHash:string) {
+    return this.runCommerceMutation(() => {
+      const user=this.memoryData.users.find(u=>u.email.toLowerCase()===email);
+      if(!user || Date.now()-(user.passwordRecovery?.requestedAt || 0)<60000) return false;
+      user.passwordRecovery={codeHash,expiresAt:Date.now()+15*60000,attempts:0,requestedAt:Date.now()};
+      return true;
+    });
+  }
+
+  public completePasswordRecovery(email:string,codeHash:string,passwordHash:string) {
+    return this.runCommerceMutation(() => {
+      const user=this.memoryData.users.find(u=>u.email.toLowerCase()===email),recovery=user?.passwordRecovery;
+      if(!user || !recovery || recovery.expiresAt<Date.now() || recovery.attempts>=5) return {success:false};
+      if(recovery.codeHash!==codeHash) {recovery.attempts++;return {success:false,commitFailure:true};}
+      user.passwordHash=passwordHash;user.passwordRecovery=null;
+      this.addAuditLog('PASSWORD_RECOVERED',user.id,undefined,'Contraseña recuperada; sesiones anteriores revocadas');
+      return {success:true};
+    });
+  }
+
+  public recordCashCommission(storeId:string,amount:number,reference:string,actor:string) {
+    return this.runCommerceMutation(()=>recordCashCommissionState(this.memoryData,storeId,amount,reference,actor));
   }
 
   public updateUser(userId:string,data:Partial<User>) {

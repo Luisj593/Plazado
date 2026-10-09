@@ -77,11 +77,12 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   const token = typeof window !== 'undefined' ? localStorage.getItem('plazado_auth_token') : null;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    ...(token && token!=='cookie-session' ? { 'Authorization': `Bearer ${token}` } : {}),
     ...((options.headers as Record<string, string>) || {})
   };
   const res = await fetch(endpoint, {
     ...options,
+    credentials: 'same-origin',
     headers
   });
   const json = await res.json();
@@ -89,6 +90,14 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 }
 
 export const api = {
+  async reconcilePayPal(id:string) {return request<{success:boolean;message:string}>(`/api/admin/paypal/${encodeURIComponent(id)}/reconcile`,{method:'POST',body:'{}'});},
+  async refundPayPal(id:string,reason:string) {return request<{success:boolean;message:string}>(`/api/admin/paypal/${encodeURIComponent(id)}/refund`,{method:'POST',body:JSON.stringify({reason})});},
+  async logout() {return request<{success:boolean}>('/api/auth/logout',{method:'POST',body:'{}'});},
+  async requestRecovery(email:string) {return request<{success:boolean;message:string}>('/api/auth/recovery/request',{method:'POST',body:JSON.stringify({email})});},
+  async completeRecovery(email:string,code:string,password:string) {return request<{success:boolean;message:string}>('/api/auth/recovery/complete',{method:'POST',body:JSON.stringify({email,code,password})});},
+  async recoveryRequests() {return request<{success:boolean;requests:{email:string;name:string;requestedAt:number}[]}>('/api/admin/recovery');},
+  async prepareRecovery(email:string) {return request<{success:boolean;message:string}>('/api/admin/recovery/prepare',{method:'POST',body:JSON.stringify({email})});},
+  async cashCommissionReceipt(storeId:string,amount:number,reference:string) {return request<{success:boolean;message:string}>('/api/admin/commissions/cash-receipts',{method:'POST',body:JSON.stringify({storeId,amount,reference})});},
   // Bootstrap & Real-time Sync
   async getBootstrap(): Promise<{ success: boolean; data: BootstrapResponse; version: number }> {
     return request('/api/bootstrap');

@@ -18,14 +18,15 @@ export function usdQuote(orders: any[], rate: number): string {
   return usd.toFixed(2);
 }
 
-export async function payPalRequest(gateway: PaymentGatewayConfig, path: string, body?: any, key?: string, fetcher: typeof fetch = fetch) {
+export async function payPalRequest(gateway: PaymentGatewayConfig, path: string, body?: any, key?: string, fetcher: typeof fetch = fetch, resource=false) {
+  if(resource && !/^\/(v2\/payments\/(captures\/[A-Z0-9-]+(?:\/refund)?|refunds\/[A-Z0-9-]+)|v1\/notifications\/verify-webhook-signature)$/.test(path)) throw Error('Recurso PayPal inválido');
   if (!gateway.credentials?.clientId || !gateway.credentials?.clientSecret) throw Error('Credenciales PayPal incompletas');
   const host = gateway.environment === 'PRODUCTION' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
   const tokenResponse = await fetcher(`${host}/v1/oauth2/token`, {method:'POST',headers:{Authorization:`Basic ${Buffer.from(`${gateway.credentials.clientId}:${decryptPayPalSecret(gateway.credentials.clientSecret)}`).toString('base64')}`,'Content-Type':'application/x-www-form-urlencoded'},body:'grant_type=client_credentials',signal:AbortSignal.timeout(10000)});
   if (!tokenResponse.ok) throw Error('PayPal rechazó las credenciales. Revisa el ambiente y las llaves.');
   const token = await tokenResponse.json();
   if (!token.access_token) throw Error('PayPal no confirmó la autenticación');
-  const response = await fetcher(`${host}/v2/checkout/orders${path}`, {method:body === undefined ? 'GET' : 'POST',headers:{Authorization:`Bearer ${token.access_token}`,'Content-Type':'application/json',...(key ? {'PayPal-Request-Id':crypto.createHash('sha256').update(key).digest('hex').slice(0,38)} : {})},body:body === undefined ? undefined : JSON.stringify(body),signal:AbortSignal.timeout(20000)});
+  const response = await fetcher(`${host}${resource?path:`/v2/checkout/orders${path}`}`, {method:body === undefined ? 'GET' : 'POST',headers:{Authorization:`Bearer ${token.access_token}`,'Content-Type':'application/json','Prefer':'return=representation',...(key ? {'PayPal-Request-Id':crypto.createHash('sha256').update(key).digest('hex').slice(0,38)} : {})},body:body === undefined ? undefined : JSON.stringify(body),signal:AbortSignal.timeout(20000)});
   if (!response.ok) throw Error('No se pudo confirmar la operación con PayPal. Reintenta para consultar su estado; no generes otro pago.');
   return response.json();
 }

@@ -141,6 +141,29 @@ export class FirestoreRepository {
   }
 
   public isAdminReady(): boolean { return this.adminDb !== null; }
+  public async getDurableUser(id:string):Promise<User|null> {
+    if(!this.adminDb)throw Error('Identidad durable no disponible');
+    if(!id || id.includes('/'))return null;
+    const document=await this.adminDb.doc(`users/${id}`).get();
+    return document.exists?{...document.data(),id:document.id}:null;
+  }
+
+
+  public async loadConsistentState():Promise<Record<string,any>> {
+    if(!this.adminDb)throw Error('Firebase Admin no disponible');
+    const names=['users','stores','products','categories','specifications','orders','banners','coupons','storeBalances','settlements','disputes','reviews','paymentGateways','advertisements','adPlacements','orderMessages','paymentTransactions','financialAuditLogs','auditLogs','fulfillmentInventory','inventoryMovements','fulfillmentOrders','storageRequests','fulfillmentIncidences','fulfillmentReturns','fulfillmentWithdrawals'];
+    return this.adminDb.runTransaction(async(tx:any)=>{
+      const snapshots=await Promise.all(names.map(name=>tx.get(this.adminDb.collection(name))));
+      const settings=await tx.get(this.adminDb.doc('systemSettings/default'));
+      const fulfillment=await tx.get(this.adminDb.doc('fulfillmentConfig/default'));
+      const result:Record<string,any>={};
+      names.forEach((name,i)=>{const rows=snapshots[i].docs.map((d:any)=>({...d.data(),id:d.id}));result[name]=name==='storeBalances'?Object.fromEntries(rows.map((row:any)=>[row.id,{...row,storeId:row.id}])):rows;});
+      if(settings.exists)result.systemSettings=settings.data();
+      if(fulfillment.exists)result.fulfillmentConfig=fulfillment.data();
+      return result;
+    },{readOnly:true});
+  }
+
 
   public isReady(): boolean {
     return this.isConfigured && this.db !== null;
@@ -233,7 +256,7 @@ export class FirestoreRepository {
       console.log(`[FirestoreRepository] Successfully loaded from Firestore: ${stores.length} stores, ${products.length} products, ${users.length} users, ${categories.length} categories.`);
 
       const commerceState: Record<string, any[]> = {};
-      for (const key of ['paymentTransactions','financialAuditLogs','fulfillmentInventory','inventoryMovements','fulfillmentOrders','storageRequests','fulfillmentIncidences','fulfillmentReturns','fulfillmentWithdrawals']) {
+      for (const key of ['specifications','adPlacements','paymentTransactions','financialAuditLogs','fulfillmentInventory','inventoryMovements','fulfillmentOrders','storageRequests','fulfillmentIncidences','fulfillmentReturns','fulfillmentWithdrawals']) {
         const snapshot = await getDocs(collection(this.db, key));
         commerceState[key] = snapshot.docs.map((d: any) => ({id:d.id,...d.data()}));
       }
@@ -487,7 +510,8 @@ export class FirestoreRepository {
         if (change.before && (change.collection === 'orders' || change.collection === 'settlements')) {
           if (!current || current.status !== change.before.status || current.paymentStatus !== change.before.paymentStatus || JSON.stringify(current.paypalPayment) !== JSON.stringify(change.before.paypalPayment) || current.settlementStatus !== change.before.settlementStatus || (current.activeDisputeId ?? null)!==(change.before.activeDisputeId ?? null)) throw new Error('La operación ya cambió en otra sesión. Actualiza antes de reintentar.');
         }
-        if (['reviews','users','stores','banners','disputes','orderMessages','storageRequests','fulfillmentIncidences','fulfillmentReturns','fulfillmentWithdrawals','fulfillmentOrders','fulfillmentInventory','fulfillmentConfig'].includes(change.collection) && change.before) {
+        if (['categories','specifications','paymentGateways','advertisements','adPlacements','systemSettings','reviews','users','stores','banners','disputes','orderMessages','storageRequests','fulfillmentIncidences','fulfillmentReturns','fulfillmentWithdrawals','fulfillmentOrders','fulfillmentInventory','fulfillmentConfig'].includes(change.collection) && change.before) {
+          if(!current && ['specifications','adPlacements'].includes(change.collection))continue;
           if(!current) throw new Error('El registro ya no existe. Actualiza antes de reintentar');
           for(const key of Object.keys(change.before)) if(JSON.stringify(current[key])!==JSON.stringify(change.before[key])) throw new Error('El registro cambió en otra sesión. Actualiza antes de reintentar');
         }

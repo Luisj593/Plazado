@@ -111,3 +111,9 @@ Mensajes y estados de lectura se guardan en una transacción de Firestore antes 
 - Comprobaciones aisladas de recepción/entrega, fallos de persistencia, reinicio, intentos duplicados, código incorrecto, comisiones y acceso entre comercios. No se ejecutaron movimientos reales para probarlo.
 
 A solicitud del operador, se cierra aquí esta fase. Quedan pendientes la privacidad del historial Git, recuperación de acceso y comprobación operativa completa con respaldo externo restaurable. No se certifica producción abierta por aprobar pruebas aisladas o por mostrar disponibilidad técnica del piloto con códigos manuales.
+
+## Entrega del 9 de octubre: recuperación, comisiones y cierre técnico
+
+Ver [guía de lanzamiento y validación](production-launch-2026-10-09.md). Se incorporan recuperación de acceso, cobros de comisiones contra entrega, conciliación/reembolso PayPal, firma de webhook, imágenes públicas por URL, cookies protegidas y guardado durable de configuración de pasarelas/catálogo/publicidad. Se conservan publicaciones, archivos originales y tasas históricas. No se realizan pruebas escribiendo en producción.
+
+La entrega prepara código y herramientas; la privacidad de GitHub, credenciales externas, recepción de correo, activación de webhook, respaldo externo/restauración y validación operativa del despliegue siguen necesitando evidencia. No se declara producción abierta.

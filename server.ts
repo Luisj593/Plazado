@@ -1,3 +1,6 @@
+import { registerPublicMedia } from './server/public-media';
+import { registerPayPalProduction } from './server/paypal-production';
+import { registerRecovery } from './server/recovery-routes';
 import { registerPayPalCheckout } from './server/paypal-routes';
 import { testPayPalCredentials } from './server/paypal-credentials';
 import { validateOrders, checkoutOrderId } from './server/order-validation';
@@ -34,7 +37,7 @@ export function createSessionToken(user: User): string {
     storeId: user.storeId,
     authVersion: user.authVersion || 0,
     iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days session
+    exp: Math.floor(Date.now() / 1000) + (user.role === 'SUPER_ADMIN' ? 8 * 60 * 60 : 7 * 24 * 60 * 60)
   };
   const head = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -51,7 +54,7 @@ export function verifySessionToken(token: string): { userId: string; email: stri
     const actual = Buffer.from(sig), expected = Buffer.from(expectedSig);
     if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    if (!Number.isFinite(payload.exp) || payload.exp <= Math.floor(Date.now() / 1000) || typeof payload.userId !== 'string') return null;
     return payload;
   } catch (e) {
     return null;
@@ -59,9 +62,11 @@ export function verifySessionToken(token: string): { userId: string; email: stri
 }
 
 export function getAuthenticatedUser(req: Request): User | null {
+  if(Object.hasOwn(req,'durableIdentity'))return (req as any).durableIdentity;
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
-  const token = authHeader.slice(7).trim();
+  const cookieToken=req.headers.cookie?.split(';').map(part=>part.trim()).find(part=>part.startsWith('plazado_session='))?.slice('plazado_session='.length);
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : cookieToken;
+  if(!token)return null;
   const session = verifySessionToken(token);
   if (!session) return null;
   const user = db.getUserById(session.userId);
@@ -104,6 +109,15 @@ async function startServer() {
     console.error('[PlazaDO] Cloud SQL sync background warning:', err);
   });
 
+  // Refresh authoritative data across instances without racing local transactions.
+  let refreshing=false;
+  const refreshTimer=setInterval(()=>{
+    if(refreshing || !firestoreRepo.isAdminReady())return;
+    refreshing=true;
+    db.refreshDurableState().catch(()=>console.error('[Firestore] Durable refresh failed; previous state preserved')).finally(()=>{refreshing=false;});
+  },30000);
+  refreshTimer.unref();
+
   const app = express();
   const PORT = Number(process.env.PORT || 3000);
   app.set('trust proxy', 1);
@@ -134,18 +148,35 @@ async function startServer() {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
-    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self)');
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    if(process.env.NODE_ENV==='production') res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' https://www.paypal.com https://www.paypalobjects.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.paypal.com https://*.paypalobjects.com https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com; frame-src https://*.paypal.com https://*.paypalobjects.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests");
     if (process.env.NODE_ENV === 'production') {
       res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     }
     next();
   });
 
+  // Verify revocation and current privileges against durable identity for authenticated API requests.
+  app.use('/api',async(req,res,next)=>{
+    if(req.path.startsWith('/public-media/') || req.path.startsWith('/health'))return next();
+    const auth=req.headers.authorization;
+    const cookie=req.headers.cookie?.split(';').map(part=>part.trim()).find(part=>part.startsWith('plazado_session='))?.slice('plazado_session='.length);
+    const token=auth?.startsWith('Bearer ')?auth.slice(7).trim():cookie;
+    (req as any).durableIdentity=null;
+    if(!token)return next();
+    const session=verifySessionToken(token);if(!session)return next();
+    try {
+      const user=await firestoreRepo.getDurableUser(session.userId);
+      if(user && (user.authVersion || 0)===(session.authVersion || 0) && user.adminApprovalStatus!=='REJECTED') (req as any).durableIdentity=user;
+      return next();
+    }catch{return res.status(503).json({success:false,message:'No se pudo validar la sesión. Reintenta.'});}
+  });
+
   // Lightweight in-memory abuse protection for authentication/verification endpoints.
   // It does not touch production data and resets naturally when the process restarts.
   const securityRateBuckets = new Map<string, { count: number; resetAt: number }>();
-  app.use('/api/auth', (req, res, next) => {
+  app.use(['/api/auth','/api/admin'], (req, res, next) => {
     const ip = req.ip || 'unknown';
     const key = `${ip}:${req.path}`;
     const now = Date.now();
@@ -171,9 +202,19 @@ async function startServer() {
     }
   }, 15 * 60 * 1000);
 
-  // Middlewares (allow up to 100mb for PDF and APK file uploads)
-  app.use(express.json({ limit: '100mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+  // Cookie-authenticated writes must originate from this application.
+  app.use('/api',(req,res,next)=>{
+    if(!['GET','HEAD','OPTIONS'].includes(req.method) && req.headers.cookie?.includes('plazado_session=')){
+      const origin=req.get('origin');
+      let sameOrigin=false;try{sameOrigin=!!origin && new URL(origin).host===req.get('host');}catch{}
+      if(!sameOrigin && req.get('sec-fetch-site')!=='same-origin')return res.status(403).json({success:false,message:'Origen de solicitud no permitido.'});
+    }
+    next();
+  });
+
+  // Bounded JSON uploads; privileged uploads receive a larger limit.
+  app.use('/api', (req,res,next)=>{const auth=getAuthenticatedUser(req);const upload=auth && (auth.role==='SUPER_ADMIN' || (auth.role==='STORE_OWNER' && /^\/products(?:\/|$)/.test(req.path)) || /^\/users\/[^/]+\/kyc$/.test(req.path));express.json({limit:upload?'25mb':'10mb'})(req,res,next);});
+  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
   // Disable caching on API responses so all clients get immediate fresh state
   app.use('/api', (req, res, next) => {
@@ -182,6 +223,8 @@ async function startServer() {
     res.setHeader('Expires', '0');
     next();
   });
+
+  app.use((error:any,_req:Request,res:Response,next:any)=>{if(error?.type==='entity.too.large')return res.status(413).json({success:false,message:'El archivo supera el tamaño permitido.'});if(error instanceof SyntaxError)return res.status(400).json({success:false,message:'Solicitud inválida.'});next(error);});
 
   // ==========================================
   // API ROUTES
@@ -200,11 +243,21 @@ async function startServer() {
     res.status(ready?200:503).json({status:ready?'ready':'blocked',mode:'CASH_ON_DELIVERY_PILOT',registrationDelivery:manual?'SUPER_ADMIN_MANUAL':'AUTOMATIC_EMAIL',automaticEmailReady:checks.smtpVerified,mailProvider:mailProvider(),checks,...(!smtpVerified && smtpFailureReason ? {smtpFailureReason}:{}),timestamp:new Date().toISOString()});
   });
 
+  const publicMedia=registerPublicMedia(app,()=>db.getFullState());
+  app.post('/api/auth/logout',(_req,res)=>{res.clearCookie('plazado_session',{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/'});res.json({success:true});});
+  registerRecovery(app,db,getAuthenticatedSuperAdmin);
+  registerPayPalProduction(app,db,getAuthenticatedSuperAdmin);
+  app.post('/api/admin/commissions/cash-receipts',async(req,res)=>{
+    const actor=getAuthenticatedSuperAdmin(req);if(!actor)return res.status(403).json({success:false});
+    try {const result=await db.recordCashCommission(req.body.storeId,req.body.amount,req.body.reference,actor.id);res.json({...result,version:db.getVersion()});}
+    catch(error:any){res.status(400).json({success:false,message:error.message || 'No se guardó el cobro'});}
+  });
+
   // Global Bootstrap (Single-call fast hydration for all clients/devices)
   app.get('/api/bootstrap', (req: Request, res: Response) => {
     const caller = getAuthenticatedUser(req);
     const rawState = db.getFullState();
-    const data = sanitizeBootstrapForCaller(rawState, caller);
+    const data = publicMedia.project(sanitizeBootstrapForCaller(rawState, caller));
     res.json({
       success: true,
       data,
@@ -223,7 +276,7 @@ async function startServer() {
 
     const caller = getAuthenticatedUser(req);
     const rawState = db.getFullState();
-    const data = sanitizeBootstrapForCaller(rawState, caller);
+    const data = publicMedia.project(sanitizeBootstrapForCaller(rawState, caller));
     res.json({
       hasUpdates: true,
       data,
@@ -467,37 +520,45 @@ async function startServer() {
     res.json({ success: true, categories: db.getCategories() });
   });
 
-  app.post('/api/categories', (req: Request, res: Response) => {
+  app.post('/api/categories', async (req: Request, res: Response) => {
+    try {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
-    const cat = db.addCategory(req.body);
+    const cat = await db.addCategory(req.body);
     res.json({ success: true, category: cat, version: db.getVersion() });
+    }catch(error:any){res.status(503).json({success:false,message:error.message || 'No se pudo guardar la configuración.'});}
   });
 
-  app.put('/api/categories/:id', (req: Request, res: Response) => {
+  app.put('/api/categories/:id', async (req: Request, res: Response) => {
+    try {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
-    const cat = db.updateCategory(req.params.id, req.body);
+    const cat = await db.updateCategory(req.params.id, req.body);
     if (!cat) return res.status(404).json({ success: false, message: 'Category not found' });
     res.json({ success: true, category: cat, version: db.getVersion() });
+    }catch(error:any){res.status(503).json({success:false,message:error.message || 'No se pudo guardar la configuración.'});}
   });
 
-  app.delete('/api/categories/:id', (req: Request, res: Response) => {
+  app.delete('/api/categories/:id', async (req: Request, res: Response) => {
+    try {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
-    const result = db.deleteCategory(req.params.id);
+    const result = await db.deleteCategory(req.params.id);
     if (!result.success) {
       return res.status(400).json({ success: false, message: result.message || 'No se pudo eliminar la categoría' });
     }
     res.json({ success: true, version: db.getVersion() });
+    }catch(error:any){res.status(503).json({success:false,message:error.message || 'No se pudo guardar la configuración.'});}
   });
 
-  app.post('/api/categories/merge', (req: Request, res: Response) => {
+  app.post('/api/categories/merge', async (req: Request, res: Response) => {
+    try {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     const { sourceId, targetId } = req.body;
-    const ok = db.mergeCategories(sourceId, targetId);
+    const ok = await db.mergeCategories(sourceId, targetId);
     res.json({ success: ok, version: db.getVersion() });
+    }catch(error:any){res.status(503).json({success:false,message:error.message || 'No se pudo guardar la configuración.'});}
   });
 
   // --- TECHNICAL SPECIFICATIONS ---
@@ -511,26 +572,32 @@ async function startServer() {
     res.json({ success: true, specifications: db.getAllSpecifications() });
   });
 
-  app.post('/api/specifications', (req: Request, res: Response) => {
+  app.post('/api/specifications', async (req: Request, res: Response) => {
+    try {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado' });
-    const spec = db.addSpecification(req.body);
+    const spec = await db.addSpecification(req.body);
     res.json({ success: true, specification: spec, version: db.getVersion() });
+    }catch(error:any){res.status(503).json({success:false,message:error.message || 'No se pudo guardar la configuración.'});}
   });
 
-  app.put('/api/specifications/:id', (req: Request, res: Response) => {
+  app.put('/api/specifications/:id', async (req: Request, res: Response) => {
+    try {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado' });
-    const spec = db.updateSpecification(req.params.id, req.body);
+    const spec = await db.updateSpecification(req.params.id, req.body);
     if (!spec) return res.status(404).json({ success: false, message: 'Specification not found' });
     res.json({ success: true, specification: spec, version: db.getVersion() });
+    }catch(error:any){res.status(503).json({success:false,message:error.message || 'No se pudo guardar la configuración.'});}
   });
 
-  app.delete('/api/specifications/:id', (req: Request, res: Response) => {
+  app.delete('/api/specifications/:id', async (req: Request, res: Response) => {
+    try {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado' });
-    const ok = db.deleteSpecification(req.params.id);
+    const ok = await db.deleteSpecification(req.params.id);
     res.json({ success: ok, version: db.getVersion() });
+    }catch(error:any){res.status(503).json({success:false,message:error.message || 'No se pudo guardar la configuración.'});}
   });
 
   // --- SETTINGS (Super Admin platform_settings) ---
@@ -587,11 +654,11 @@ async function startServer() {
     res.json({ success: true, activeGateway: gateway ? editableFields(gateway, ['id','providerKey','providerName','currency','isActive','environment']) : null });
   });
 
-  app.post('/api/payment-gateways', (req: Request, res: Response) => {
+  app.post('/api/payment-gateways', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     try {
-      const saved = db.savePaymentGateway(req.body);
+      const saved = await db.savePaymentGateway(req.body);
       res.json({ success: true, gateway: saved, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message || 'Error guardando proveedor de pago' });
@@ -611,11 +678,11 @@ async function startServer() {
     }
   });
 
-  app.put('/api/payment-gateways/:id/activate', (req: Request, res: Response) => {
+  app.put('/api/payment-gateways/:id/activate', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     try {
-      const ok = db.setActivePaymentGateway(req.params.id);
+      const ok = await db.setActivePaymentGateway(req.params.id);
       if (!ok) return res.status(404).json({ success: false, message: 'Proveedor de pago no encontrado' });
       res.json({ success: true, activeGatewayId: req.params.id, version: db.getVersion() });
     } catch (err: any) {
@@ -623,11 +690,11 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/payment-gateways/:id', (req: Request, res: Response) => {
+  app.delete('/api/payment-gateways/:id', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     try {
-      const ok = db.deletePaymentGateway(req.params.id);
+      const ok = await db.deletePaymentGateway(req.params.id);
       res.json({ success: ok, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message || 'Error eliminando proveedor de pago' });
@@ -636,7 +703,8 @@ async function startServer() {
 
   // --- GESTIÓN DE PUBLICIDAD & ESPACIOS PUBLICITARIOS ---
   app.get('/api/advertising/campaigns', (req: Request, res: Response) => {
-    res.json({ success: true, campaigns: db.getAdvertisements() });
+    const admin=getAuthenticatedSuperAdmin(req);
+    res.json({ success: true, campaigns: admin?db.getAdvertisements():db.getActiveAdvertisements() });
   });
 
   app.get('/api/advertising/active', (req: Request, res: Response) => {
@@ -645,22 +713,22 @@ async function startServer() {
     res.json({ success: true, ads: db.getActiveAdvertisements(placement, device) });
   });
 
-  app.post('/api/advertising/campaigns', (req: Request, res: Response) => {
+  app.post('/api/advertising/campaigns', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     try {
-      const ad = db.addAdvertisement(req.body);
+      const ad = await db.addAdvertisement(req.body);
       res.json({ success: true, ad, version: db.getVersion() });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message || 'Error creando publicidad' });
     }
   });
 
-  app.put('/api/advertising/campaigns/:id', (req: Request, res: Response) => {
+  app.put('/api/advertising/campaigns/:id', async (req: Request, res: Response) => {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
     try {
-      const ad = db.updateAdvertisement(req.params.id, req.body);
+      const ad = await db.updateAdvertisement(req.params.id, req.body);
       if (!ad) return res.status(404).json({ success: false, message: 'Publicidad no encontrada' });
       res.json({ success: true, ad, version: db.getVersion() });
     } catch (err: any) {
@@ -668,29 +736,35 @@ async function startServer() {
     }
   });
 
-  app.patch('/api/advertising/campaigns/:id/toggle', (req: Request, res: Response) => {
+  app.patch('/api/advertising/campaigns/:id/toggle', async (req: Request, res: Response) => {
+    try {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
-    const ok = db.toggleAdvertisementStatus(req.params.id);
+    const ok = await db.toggleAdvertisementStatus(req.params.id);
     res.json({ success: ok, version: db.getVersion() });
+    }catch(error:any){res.status(503).json({success:false,message:error.message || 'No se pudo guardar la configuración.'});}
   });
 
-  app.delete('/api/advertising/campaigns/:id', (req: Request, res: Response) => {
+  app.delete('/api/advertising/campaigns/:id', async (req: Request, res: Response) => {
+    try {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
-    const ok = db.deleteAdvertisement(req.params.id);
+    const ok = await db.deleteAdvertisement(req.params.id);
     res.json({ success: ok, version: db.getVersion() });
+    }catch(error:any){res.status(503).json({success:false,message:error.message || 'No se pudo guardar la configuración.'});}
   });
 
   app.get('/api/advertising/placements', (req: Request, res: Response) => {
     res.json({ success: true, placements: db.getAdPlacements() });
   });
 
-  app.post('/api/advertising/placements', (req: Request, res: Response) => {
+  app.post('/api/advertising/placements', async (req: Request, res: Response) => {
+    try {
     const admin = getAuthenticatedSuperAdmin(req);
     if (!admin) return res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol SUPER_ADMIN.' });
-    const placement = db.saveAdPlacement(req.body);
+    const placement = await db.saveAdPlacement(req.body);
     res.json({ success: true, placement, version: db.getVersion() });
+    }catch(error:any){res.status(503).json({success:false,message:error.message || 'No se pudo guardar la configuración.'});}
   });
 
   app.post('/api/advertising/track/impression', (req: Request, res: Response) => {
@@ -1140,7 +1214,8 @@ async function startServer() {
       if (!user) {
         return res.status(401).json({ success: false, message: 'No autenticado o sesión expirada' });
       }
-      res.json({ success: true, user: sanitizeUser(user) });
+      if(req.headers.authorization)res.cookie('plazado_session',createSessionToken(user),{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/',maxAge:(user.role==='SUPER_ADMIN'?8*60*60:7*24*60*60)*1000});
+    res.json({ success: true, user: sanitizeUser(user) });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Error validando sesión' });
     }
@@ -1170,7 +1245,7 @@ async function startServer() {
 
       // PASO 4: Obtener EXCLUSIVAMENTE el passwordHash asociado al user.id encontrado
       const credential = db.getUserCredential(user.id);
-      const storedHash = credential?.passwordHash || user.passwordHash;
+      const storedHash = user.passwordHash || credential?.passwordHash;
       if (!storedHash || typeof storedHash !== 'string' || storedHash.length === 0) {
         return res.status(401).json({ success: false, message: 'Correo electrónico o contraseña incorrectos.' });
       }
@@ -1191,6 +1266,7 @@ async function startServer() {
 
       // Generar sesión / token EXCLUSIVAMENTE tras validar la contraseña correctamente
       const token = createSessionToken(user);
+      res.cookie?.('plazado_session',token,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/',maxAge:(user.role==='SUPER_ADMIN'?8*60*60:7*24*60*60)*1000});
       db.addAuditLog('USER_LOGIN', user.id, undefined, `Inicio de sesión exitoso como ${user.role} (${user.email})`);
       return res.json({ success: true, user: sanitizeUser(user), token, version: db.getVersion() });
     } catch (err: any) {
@@ -2012,6 +2088,8 @@ async function startServer() {
       delete updateData.newPassword;
       delete updateData.passwordHash;
       delete updateData.verification;
+      delete updateData.passwordRecovery;
+      delete updateData.authVersion;
       delete updateData.isEmailVerified;
       delete updateData.storeId;
       delete updateData.createdAt;
@@ -2086,7 +2164,7 @@ async function startServer() {
       }
 
       const { password, newPassword, currentPassword } = req.body;
-      const targetPass = (newPassword || password || '').trim();
+      const targetPass = typeof (newPassword || password)==='string' ? (newPassword || password) : '';
       if (!targetPass || targetPass.length < 10 || !/[A-Z]/.test(targetPass) || !/[a-z]/.test(targetPass) || !/\d/.test(targetPass)) {
         return res.status(400).json({ success: false, message: 'La nueva contraseña debe tener al menos 10 caracteres e incluir mayúscula, minúscula y número.' });
       }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { RoleBar } from './components/layout/RoleBar';
 import { Header } from './components/layout/Header';
@@ -8,18 +8,18 @@ import { SearchCatalogPage } from './components/customer/SearchCatalogPage';
 import { StoresDirectoryPage } from './components/customer/StoresDirectoryPage';
 import { StorePublicPage } from './components/customer/StorePublicPage';
 import { SellWithUsPage } from './components/customer/SellWithUsPage';
-import { CustomerPortal } from './components/customer/CustomerPortal';
-import { StoreDashboard } from './components/store/StoreDashboard';
-import { AdminDashboard } from './components/admin/AdminDashboard';
+const CustomerPortal=lazy(()=>import('./components/customer/CustomerPortal').then(module=>({default:module.CustomerPortal})));
+const StoreDashboard=lazy(()=>import('./components/store/StoreDashboard').then(module=>({default:module.StoreDashboard})));
+const AdminDashboard=lazy(()=>import('./components/admin/AdminDashboard').then(module=>({default:module.AdminDashboard})));
 import { LegalAndPoliciesPage } from './components/public/LegalAndPoliciesPage';
 import { AndroidAppDownloadPage } from './components/public/AndroidAppDownloadPage';
 import { CartDrawer } from './components/customer/CartDrawer';
-import { CheckoutModal } from './components/customer/CheckoutModal';
-import { ProductDetailModal } from './components/customer/ProductDetailModal';
+const CheckoutModal=lazy(()=>import('./components/customer/CheckoutModal').then(module=>({default:module.CheckoutModal})));
+const ProductDetailModal=lazy(()=>import('./components/customer/ProductDetailModal').then(module=>({default:module.ProductDetailModal})));
 import { PolicyModal } from './components/common/PolicyModal';
 import { DownloadSectionModal } from './components/common/DownloadSectionModal';
-import { AuthModal } from './components/auth/AuthModal';
-import { OrderChatModal } from './components/chat/OrderChatModal';
+const AuthModal=lazy(()=>import('./components/auth/AuthModal').then(module=>({default:module.AuthModal})));
+const OrderChatModal=lazy(()=>import('./components/chat/OrderChatModal').then(module=>({default:module.OrderChatModal})));
 import { MobileNavBar } from './components/layout/MobileNavBar';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { 
@@ -47,7 +47,7 @@ const MarketplaceApp: React.FC = () => {
     downloadModalTab,
     closeDownloadModal,
     openOrderChat,
-    isBootstrapLoading
+    isBootstrapLoading, isAuthModalOpen, selectedProductId, activeChatOrderId
   } = useApp();
 
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -149,14 +149,14 @@ const MarketplaceApp: React.FC = () => {
       />
 
       {/* Multi-Store Checkout Modal */}
-      <CheckoutModal
+      {isCheckoutOpen && <CheckoutModal
         isOpen={isCheckoutOpen}
         onClose={() => setIsCheckoutOpen(false)}
         onSuccess={handleCheckoutSuccess}
-      />
+      />}
 
       {/* Product Quick View & Detail Modal */}
-      <ProductDetailModal />
+      {selectedProductId && <ProductDetailModal />}
 
       {/* Dominican Legal Policies Modal */}
       <PolicyModal />
@@ -169,10 +169,10 @@ const MarketplaceApp: React.FC = () => {
       />
 
       {/* Auth & Registration Modal */}
-      <AuthModal />
+      {isAuthModalOpen && <AuthModal />}
 
       {/* Official In-Platform Order Chat Modal */}
-      <OrderChatModal />
+      {activeChatOrderId && <OrderChatModal />}
 
       {/* Purchase Success Celebration Modal with Delivery Confirmation Code */}
       {lastOrderSuccess && (
@@ -269,10 +269,10 @@ const MarketplaceApp: React.FC = () => {
 
 export default function App() {
   return (
-    <ErrorBoundary>
+    <ErrorBoundary><Suspense fallback={<div role="status" className="p-6 text-center">Cargando tu espacio…</div>}>
       <AppProvider>
         <MarketplaceApp />
       </AppProvider>
-    </ErrorBoundary>
+    </Suspense></ErrorBoundary>
   );
 }
