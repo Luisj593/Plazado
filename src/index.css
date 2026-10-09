@@ -214,3 +214,12 @@ html.dark { --product-image-background: #0c0a09; }
 :root body :is(div, figure):has(> button > img[data-product-image="true"]) {
   background-color: var(--product-image-background) !important;
 }
+
+/* Sliders use pure white/black with no ambient color or dark overlay. */
+:root body [data-product-slider="true"] {
+  --product-image-background: #ffffff;
+  background-color: var(--product-image-background) !important;
+}
+html.dark body [data-product-slider="true"] {
+  --product-image-background: #000000;
+}

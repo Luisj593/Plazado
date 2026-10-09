@@ -176,11 +176,11 @@ export const HomePage: React.FC = () => {
       {/* 2. HERO PRINCIPAL — REPLICA VISUAL EXACTA DE LA REFERENCIA     */}
       {/* ============================================================== */}
       <section className="pt-2 sm:pt-4">
-        <div className="relative rounded-none sm:rounded-[24px] overflow-hidden bg-white dark:bg-stone-950 border-y sm:border border-slate-200 dark:border-stone-800 shadow-sm min-h-[380px] sm:min-h-[430px] lg:h-[470px] xl:h-[500px] flex items-center">
+        <div data-product-slider={heroMode === 'slider'} className="relative rounded-none sm:rounded-[24px] overflow-hidden bg-white dark:bg-stone-950 border-y sm:border border-slate-200 dark:border-stone-800 shadow-sm min-h-[380px] sm:min-h-[430px] lg:h-[470px] xl:h-[500px] flex items-center">
           
           {/* Suaves elementos de luz y ambientación de marca */}
-          <div className="absolute -right-16 -top-16 w-80 h-80 bg-rose-100/70 dark:bg-rose-900/20 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -left-16 -bottom-16 w-80 h-80 bg-slate-100 dark:bg-stone-900/40 rounded-full blur-3xl pointer-events-none" />
+          {heroMode !== 'slider' && <div className="absolute -right-16 -top-16 w-80 h-80 bg-rose-100/70 dark:bg-rose-900/20 rounded-full blur-3xl pointer-events-none" />}
+          {heroMode !== 'slider' && <div className="absolute -left-16 -bottom-16 w-80 h-80 bg-slate-100 dark:bg-stone-900/40 rounded-full blur-3xl pointer-events-none" />}
 
           {/* Contenido en dos zonas perfectamente integradas */}
           <div className="relative z-10 w-full h-full flex flex-col justify-center px-5 sm:px-8 lg:px-12 py-7 sm:py-8">

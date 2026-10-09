@@ -271,17 +271,8 @@ export const HeroProductSlider: React.FC<HeroProductSliderProps> = ({
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       id="hero-full-slider-container"
+      data-product-slider="true"
     >
-      {/* Background ambient glow matching current slide image */}
-      <div 
-        className="absolute inset-0 bg-cover bg-center transition-all duration-1000 scale-125 opacity-25 dark:opacity-30 blur-3xl pointer-events-none"
-        style={{ backgroundImage: `url(${currentSlide.image})` }}
-      />
-      
-      {/* Deep contrast gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-stone-950 via-stone-950/80 to-stone-950/40 pointer-events-none" />
-      <div className="absolute inset-0 bg-gradient-to-r from-stone-950/90 via-stone-950/50 to-transparent pointer-events-none hidden md:block" />
-
       {/* Main Interactive Stage with Fitted Image & Content */}
       <div 
         onClick={currentSlide.onClick}
@@ -305,13 +296,13 @@ export const HeroProductSlider: React.FC<HeroProductSliderProps> = ({
           </div>
 
           {/* Title */}
-          <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black text-white leading-tight drop-shadow-md line-clamp-2">
+          <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black text-stone-950 dark:text-white leading-tight drop-shadow-md line-clamp-2">
             {currentSlide.title}
           </h2>
 
           {/* Subtitle / Description */}
           {currentSlide.subtitle && (
-            <p className="text-xs sm:text-sm text-stone-300 drop-shadow line-clamp-2 sm:line-clamp-3 leading-relaxed">
+            <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-300 drop-shadow line-clamp-2 sm:line-clamp-3 leading-relaxed">
               {currentSlide.subtitle}
             </p>
           )}
@@ -319,7 +310,7 @@ export const HeroProductSlider: React.FC<HeroProductSliderProps> = ({
           {/* Price & Action Button */}
           <div className="flex items-center gap-3 pt-2">
             {typeof currentSlide.price === 'number' && (
-              <div className="px-3.5 py-1.5 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 text-white font-black text-sm sm:text-base flex items-center gap-1.5 shadow-lg">
+              <div className="px-3.5 py-1.5 rounded-xl bg-white/10 backdrop-blur-md border border-stone-200 dark:border-white/20 text-stone-950 dark:text-white font-black text-sm sm:text-base flex items-center gap-1.5 shadow-lg">
                 <Tag className="w-4 h-4 text-amber-400" />
                 <span>RD$ {currentSlide.price.toLocaleString('es-DO')}</span>
               </div>
