@@ -1,3 +1,4 @@
+import { RecoveryOperations, CashCommissionOperations, PayPalOperations } from './ProductionOperations';
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../services/api';
@@ -2255,12 +2256,13 @@ ${message}`);
 
       {/* TAB VERIFICACIÓN DE USUARIOS */}
       {activeTab === 'verifications' && (
-        <UserVerificationsTab />
+        <div><RecoveryOperations/><UserVerificationsTab /></div>
       )}
 
       {/* TAB 6: LIQUIDACIONES Y DESEMBOLSOS */}
       {activeTab === 'settlements' && (
         <div className="space-y-6">
+          <CashCommissionOperations/><PayPalOperations/>
           {/* Header */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div>

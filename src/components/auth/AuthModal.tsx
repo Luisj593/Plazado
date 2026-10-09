@@ -1,3 +1,4 @@
+import { PasswordRecovery } from './PasswordRecovery';
 import React, { useState, useEffect, useRef } from 'react';
 import { downloadPlatformPolicies } from '../../utils/legalDownloads';
 import { RegistrationTermsModal } from './RegistrationTermsModal';
@@ -61,6 +62,8 @@ export const AuthModal: React.FC = () => {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [recovering,setRecovering]=useState(false);
+  useEffect(()=>setRecovering(false),[authModalMode,isAuthModalOpen]);
 
   // Email verification state
   const [verifyDigits, setVerifyDigits] = useState(['', '', '', '', '', '']);
@@ -615,7 +618,8 @@ export const AuthModal: React.FC = () => {
           )}
 
           {/* 2. UNIFIED LOGIN FORM: INICIO DE SESIÓN CON DETECCIÓN AUTOMÁTICA DE ROL */}
-          {authModalMode === 'login' && (
+          {authModalMode === 'login' && recovering && <PasswordRecovery onBack={()=>setRecovering(false)}/> }
+          {authModalMode === 'login' && !recovering && (
             <div className="space-y-4">
               <div className="text-center space-y-1">
                 <h2 className="text-lg sm:text-xl font-extrabold text-stone-900">
@@ -684,6 +688,7 @@ export const AuthModal: React.FC = () => {
                 </button>
               </form>
 
+              <button type="button" onClick={()=>setRecovering(true)} className="text-sm font-semibold text-red-600 underline">Olvidé mi contraseña</button>
               {/* Link to Registration Selection */}
               <div className="text-center pt-2">
                 <p className="text-stone-600 text-xs">

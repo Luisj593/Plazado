@@ -31,44 +31,7 @@
       }
     }
     </script>
-    <!-- Bloqueo de inspección de código y menú contextual -->
-    <script>
-      (function() {
-        document.addEventListener('contextmenu', function(e) {
-          e.preventDefault();
-          return false;
-        }, { capture: true });
 
-        document.addEventListener('keydown', function(e) {
-          if (e.key === 'F12' || e.keyCode === 123) {
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
-          }
-          var isCtrlOrCmd = e.ctrlKey || e.metaKey;
-          var isShift = e.shiftKey;
-          var key = (e.key || '').toUpperCase();
-          if (isCtrlOrCmd && isShift && (key === 'I' || key === 'J' || key === 'C' || key === 'K' || [73, 74, 67, 75].indexOf(e.keyCode) !== -1)) {
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
-          }
-          if (isCtrlOrCmd && (key === 'U' || e.keyCode === 85)) {
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
-          }
-          if (isCtrlOrCmd && (key === 'S' || e.keyCode === 83)) {
-            var tag = (document.activeElement && document.activeElement.tagName) || '';
-            if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
-              e.preventDefault();
-              e.stopPropagation();
-              return false;
-            }
-          }
-        }, { capture: true });
-      })();
-    </script>
   </head>
   <body class="bg-stone-50 text-stone-900 font-sans antialiased selection:bg-rose-500 selection:text-white">
     <div id="root"></div>

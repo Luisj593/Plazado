@@ -288,6 +288,16 @@ Correo oficial de seguridad enviado desde: contacto@plazado.com
   }
 }
 
+export async function sendPasswordRecoveryEmail(email:string,code:string,customConfig?:Partial<MailConfig>) {
+  const config={...DEFAULT_MAIL_CONFIG,...customConfig};
+  const message={from:`Plazado <${process.env.MAIL_SENDER_EMAIL || config.senderEmail}>`,to:email,subject:'Recuperación de acceso a Plazado.com',text:`Tu código para cambiar la contraseña es ${code}. Vence en 15 minutos y solo sirve una vez. Si no solicitaste este cambio, ignora este correo. Nunca compartas el código con otra persona.`};
+  if(mailProvider()==='MANUAL') return {success:false,delivered:false};
+  if(mailProvider()==='RESEND') return sendHttpsMail(message);
+  if(!(config.smtpPass || process.env.SMTP_PASS)) return {success:false,delivered:false};
+  try {const info=await createTransporter(config).sendMail(message);const accepted=(info.accepted || []).some((a:any)=>String(a).toLowerCase()===email.toLowerCase());return {success:accepted,delivered:accepted};}
+  catch {return {success:false,delivered:false};}
+}
+
 export async function sendAccountApprovalEmail(recipientEmail:string,recipientName:string,customConfig?:Partial<MailConfig>) {
   const config={...DEFAULT_MAIL_CONFIG,...customConfig};
   if(mailProvider()==='MANUAL') return {success:false,delivered:false};

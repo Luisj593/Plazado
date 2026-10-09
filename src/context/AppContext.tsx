@@ -414,6 +414,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (token) {
       api.getMe().then(res => {
         if (res.success && res.user) {
+          localStorage.setItem('plazado_auth_token','cookie-session');
           setCurrentUser(res.user);
           localStorage.setItem('plazado_user_profile_cache', JSON.stringify(res.user));
           localStorage.setItem(CLIENT_STORAGE_KEYS.SESSION_USER, res.user.id);
@@ -727,7 +728,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let isMounted = true;
 
     const performSync = async () => {
-      if (isSyncingRef.current || !isMounted) return;
+      if (isSyncingRef.current || !isMounted || document.visibilityState !== 'visible' || !navigator.onLine) return;
       isSyncingRef.current = true;
       try {
         const res = await api.sync(currentVersionRef.current);
@@ -741,9 +742,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
-    // Trigger instant check on mount, then poll every 2.5 seconds for instant multi-device synchronization
+    // Refresh visible tabs periodically; focus triggers an immediate check.
     performSync();
-    const intervalId = setInterval(performSync, 2500);
+    const intervalId = setInterval(performSync, 15000);
 
     // Also trigger instant sync on window/tab focus or when returning to browser
     const handleVisibilityOrFocus = () => {
@@ -871,7 +872,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       const user = res.user;
-      localStorage.setItem('plazado_auth_token', res.token);
+      localStorage.setItem('plazado_auth_token', 'cookie-session');
       localStorage.setItem('plazado_user_profile_cache', JSON.stringify(user));
       localStorage.setItem(CLIENT_STORAGE_KEYS.SESSION_USER, user.id);
       setCurrentUser(user);
@@ -928,7 +929,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Logout
-  const logout = () => {
+  const logout = async () => {
+    try {const result=await api.logout();if(!result.success)throw Error('logout');}
+    catch {showNotification('No se pudo cerrar la sesión. Reintenta.','error');return;}
     setCurrentUser(null);
     setPendingPurchaseAction(null);
     setAuthPurchaseNotice(null);
@@ -949,7 +952,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { success: false, message: res.message || 'Código incorrecto' };
       }
       if (res.token && res.user) {
-        localStorage.setItem('plazado_auth_token', res.token);
+        localStorage.setItem('plazado_auth_token', 'cookie-session');
         setCurrentUser(res.user);
         setUsers(prev => [...prev.filter(u => u.id !== res.user!.id), res.user!]);
         setIsAuthModalOpen(false);
@@ -999,7 +1002,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (res.user) {
         const newCustomer = res.user;
         if (res.token) {
-          localStorage.setItem('plazado_auth_token', res.token);
+          localStorage.setItem('plazado_auth_token', 'cookie-session');
         }
         setUsers(prev => [...prev.filter(u => u.id !== newCustomer.id), newCustomer]);
         setCurrentUser(newCustomer);
@@ -1048,7 +1051,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (res.store && res.user) {
         if (res.token) {
-          localStorage.setItem('plazado_auth_token', res.token);
+          localStorage.setItem('plazado_auth_token', 'cookie-session');
         }
         setStores(prev => [res.store!, ...prev.filter(s => s.id !== res.store!.id)]);
         setUsers(prev => [...prev.filter(u => u.id !== res.user!.id), res.user!]);

@@ -14,6 +14,7 @@ export async function hashPassword(password: string): Promise<string> {
   if (!password || typeof password !== 'string') {
     throw new Error('Password must be a non-empty string');
   }
+  if(new TextEncoder().encode(password).length>72) throw Error('La contraseña supera el máximo de 72 bytes.');
   return bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
 }
 
@@ -33,6 +34,8 @@ export async function verifyPassword(password: string, expectedHash: string): Pr
 
   // 1. Standard bcrypt hash check ($2a$, $2b$, $2y$)
   if (expectedHash.startsWith('$2')) {
+    // bcrypt truncates inputs after 72 bytes; reject suffixes rather than accepting a different password.
+    if(new TextEncoder().encode(password).length>72)return false;
     try {
       return await bcrypt.compare(password, expectedHash);
     } catch (e) {

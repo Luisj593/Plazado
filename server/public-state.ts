@@ -6,7 +6,7 @@ export const STORE_EDIT_FIELDS = ['name','slug','ownerName','email','phone','wha
 export const PRODUCT_EDIT_FIELDS = ['name','slug','description','shortDescription','sku','price','promoPrice','stock','minStockAlert','categoryId','subcategoryId','images','status','variants','attributes','specifications'];
 export function editableFields(data: any, fields: readonly string[]) { return pick(data, fields); }
 export function safeUser(user: any) {
-  const { passwordHash, password, verification, ...safe } = user;
+  const { passwordHash, password, verification, passwordRecovery, ...safe } = user;
   return safe;
 }
 export function safeOrder(order: any, caller: any) {
@@ -32,11 +32,11 @@ export function sanitizeMarketplaceState(raw: any, caller: any) {
     version: raw.version, lastUpdated: raw.lastUpdated,
     stores: stores.map((s: any) => admin || s.id === ownStore ? s : {...pick(s, publicStoreFields), ...ratingFor('storeId', s.id)}),
     products: (raw.products || []).filter((p: any) => admin || p.storeId === ownStore || (isProductPubliclyVisible(p) && visibleIds.has(p.storeId))).map((p: any) => admin || p.storeId === ownStore ? p : {...p, ...ratingFor('productId', p.id)}),
-    categories: raw.categories || [], specifications: raw.specifications || [],
+    categories: (raw.categories || []).filter((row:any)=>!row.deleted), specifications: (raw.specifications || []).filter((row:any)=>!row.deleted),
     banners: (raw.banners || []).filter((b: any) => admin || b.isActive),
     coupons: raw.coupons || [], reviews: admin ? raw.reviews || [] : reviews,
     systemSettings: publicSettings(raw.systemSettings || {}, admin),
-    advertisements: (raw.advertisements || []).filter((a: any) => admin || a.status === 'ACTIVE'),
+    advertisements: (raw.advertisements || []).filter((a: any) => !a.deleted && (admin || (a.isActive && a.status === 'ACTIVE'))),
     adPlacements: raw.adPlacements || [], paymentGateways: [],
     users: (raw.users || []).filter((u: any) => admin || u.id === caller?.id).map(safeUser),
     orders: (raw.orders || []).filter((o: any) => admin || ownOrder(o)).map((o: any) => safeOrder(o, caller)),

@@ -86,6 +86,7 @@ export interface User {
   addresses: CustomerAddress[];
   passwordHash?: string;
   authVersion?: number;
+  passwordRecovery?: { codeHash: string; expiresAt: number; attempts: number; requestedAt: number } | null;
   cedulaNumber?: string;
   kycData?: KycVerificationData;
   isKycVerified?: boolean;
@@ -346,7 +347,7 @@ export interface OrderStatusHistoryItem {
 }
 
 export interface Order {
-  paypalPayment?: { orderId: string; gatewayId: string; amountUsd: string; dopPerUsd: number; groupCode: string; captureId?: string; captureStarted?: boolean };
+  paypalPayment?: { orderId: string; gatewayId: string; amountUsd: string; dopPerUsd: number; groupCode: string; captureId?: string; captureStarted?: boolean; refundStarted?: boolean; refundBucket?: string; refundReason?: string; refundId?: string; refundProviderId?: string };
   activeDisputeId?: string | null;
   accountingVersion?: number; // New orders recognize cash sale on validated delivery
   id: string; // ej: "ORD-2026-8912"
@@ -381,7 +382,8 @@ export interface Order {
   chargeType?: 'AUTOMATIC' | 'MANUAL';
   statusHistory: OrderStatusHistoryItem[];
   settlementId?: string;
-  settlementStatus: 'PENDING' | 'SCHEDULED' | 'SETTLED';
+  settlementStatus: 'PENDING' | 'SCHEDULED' | 'SETTLED' | 'EXEMPT';
+  settlementPaidCommission?: number;
   fulfillmentType?: 'STORE_DIRECT' | 'PLAZADO_FULFILLMENT';
   fulfillmentOrderId?: string;
   fulfillmentStatus?: import('./fulfillment').FulfillmentOrderStatus;

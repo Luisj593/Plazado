@@ -2,6 +2,7 @@ import crypto from 'crypto';
 const round = (n: number) => Math.round(n * 100) / 100;
 const ensureBalance = (state: any, storeId: string) => {
   const balance = state.storeBalances[storeId] ||= {storeId,lastUpdated:new Date().toISOString()};
+  balance.storeId=storeId;
   for(const field of ['totalSales','cardSales','cashSales','plazaCommissionsPaid','pendingCashCommissions','pendingBalance','availableBalance','settledBalance','retainedBalance','adjustments','carriedOverDebt']) {
     balance[field] ??= 0;
     if(!Number.isFinite(balance[field]) || balance[field]<0) throw Error('Saldo inconsistente. Requiere conciliación');
@@ -19,6 +20,7 @@ export function transitionOrder(state: any, orderId: string, status: string, not
   if (!allowed.includes(status)) return {success:false,message:'Estado de pedido inválido'};
   if (status === order.status) return {success:true,message:'El pedido ya tiene este estado',order};
   if (['DELIVERED','CANCELLED'].includes(order.status)) return {success:false,message:'El pedido ya está cerrado'};
+  if(order.paypalPayment?.refundStarted || order.paymentStatus==='REFUNDED') return {success:false,message:'Este pedido tiene un reembolso en curso o confirmado. Gestiona la devolución física desde soporte.'};
   if (order.paymentMethod === 'PAYPAL' && order.paymentStatus !== 'PAID') {
     if (order.paypalPayment?.captureStarted || status !== 'CANCELLED') return {success:false,message:'El pago PayPal debe confirmarse antes de procesar este pedido'};
     if (order.paypalPayment?.orderId) return {success:false,message:'Cancela el pago desde el checkout de PayPal para liberar el inventario de forma segura'};
@@ -117,7 +119,7 @@ export function requestSettlementState(state: any, storeId: string, notes?: stri
   if (state.settlements.some((s:any)=>s.storeId===storeId && !['PAID','REJECTED','CANCELLED'].includes(s.status))) return {success:false,message:'La tienda ya tiene una liquidación pendiente'};
   const idempotencyKey = cycle ? `SETTL-CYCLE-${storeId}-${cycle}` : undefined;
   if (idempotencyKey && state.settlements.some((s:any)=>s.idempotencyKey===idempotencyKey)) return {success:false,message:'Esta tienda ya fue procesada en este ciclo'};
-  const orders = state.orders.filter((o:any)=>o.storeId===storeId && o.status==='DELIVERED' && o.paymentStatus==='PAID' && o.settlementStatus==='PENDING' && !o.settlementId && !state.disputes?.some((d:any)=>d.orderId===o.id && ['OPEN','UNDER_REVIEW'].includes(d.status)));
+  const orders = state.orders.filter((o:any)=>o.storeId===storeId && o.status==='DELIVERED' && o.paymentStatus==='PAID' && o.settlementStatus==='PENDING' && !o.settlementId && !o.paypalPayment?.refundStarted && !state.disputes?.some((d:any)=>d.orderId===o.id && ['OPEN','UNDER_REVIEW'].includes(d.status)));
   const releasedNet = round(orders.filter((o:any)=>o.paymentMethod!=='CASH_ON_DELIVERY').reduce((sum:number,o:any)=>sum+(o.storeNetEarnings || 0),0));
   if (balance.availableBalance < releasedNet) return {success:false,message:'Los fondos liberados y el balance no coinciden. Requiere conciliación'};
   const amount = releasedNet;
@@ -162,4 +164,28 @@ export function weeklySettlementsState(state:any, actor:string) {
     if(result.success && result.settlement) settlementsCreated.push(result.settlement);
   }
   return {success:true,message:`Se prepararon ${settlementsCreated.length} solicitudes. No se ejecutaron transferencias bancarias.`,settlementsCreated,totalLiquidated:0,totalCommissionsDeducted:0,totalCashCommissionsDeducted:0,storesProcessed:settlementsCreated.length};
+}
+
+// Receipt of money already transferred by the merchant; never initiates a bank transfer.
+export function recordCashCommissionState(state:any,storeId:string,amount:number,reference:string,actor:string) {
+  const ref=typeof reference==='string'?reference.trim():'';
+  if(!Number.isFinite(amount) || amount<=0 || Math.abs(round(amount)-amount)>0.000001 || ref.length<6 || ref.length>120 || /^(SIMUL|AUTO|TEST)/i.test(ref)) throw Error('Importe o referencia bancaria inválidos');
+  const existing=(state.financialAuditLogs || []).find((l:any)=>l.actor==='CASH_COMMISSION_RECEIPT' && l.externalRef===ref);
+  if(existing) {if(existing.storeId===storeId && existing.amount===amount)return {success:true,message:'Este cobro ya fue registrado.'};throw Error('Referencia ya utilizada');}
+  const balance=ensureBalance(state,storeId);
+  const orders=state.orders.filter((o:any)=>o.storeId===storeId && o.paymentMethod==='CASH_ON_DELIVERY' && o.status==='DELIVERED' && o.paymentStatus==='PAID' && o.settlementStatus==='PENDING' && !o.settlementId && !state.disputes?.some((d:any)=>d.orderId===o.id && ['OPEN','UNDER_REVIEW'].includes(d.status)));
+  const due=round(orders.reduce((s:number,o:any)=>s+Math.max(0,o.plazaCommissionAmount-(o.settlementPaidCommission || 0)),0));
+  if(amount>due || amount>balance.pendingCashCommissions) throw Error('El importe supera las comisiones disponibles para cobro');
+  let remaining=amount;
+  for(const order of orders) {
+    const applied=round(Math.min(remaining,Math.max(0,order.plazaCommissionAmount-(order.settlementPaidCommission || 0))));
+    order.settlementPaidCommission=round((order.settlementPaidCommission || 0)+applied);remaining=round(remaining-applied);
+    if(order.settlementPaidCommission===order.plazaCommissionAmount) order.settlementStatus='SETTLED';
+    synchronizeTransaction(state,order);
+  }
+  const before=balance.pendingCashCommissions;
+  balance.pendingCashCommissions=round(before-amount);balance.plazaCommissionsPaid=round(balance.plazaCommissionsPaid+amount);balance.lastUpdated=new Date().toISOString();
+  audit(state,{storeId,amount,commission:amount,paymentMethod:'TRANSFERENCIA_ACH',movementType:'ADJUSTMENT',actor:'CASH_COMMISSION_RECEIPT',previousBalance:before,newBalance:balance.pendingCashCommissions,externalRef:ref,status:'CONFIRMED',notes:`Cobro de comisión contra entrega confirmado por ${actor}`});
+  state.financialAuditLogs[0].id=`cash-receipt-${crypto.createHash('sha256').update(ref).digest('hex')}`;
+  return {success:true,message:'Comisión recibida registrada y conciliada.'};
 }
