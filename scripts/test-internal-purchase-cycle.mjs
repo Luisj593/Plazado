@@ -1,0 +1,63 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import crypto from 'node:crypto';
+import {createRequire} from 'node:module';
+import {build,transform} from 'esbuild';
+const require=createRequire(import.meta.url);
+async function load(path){const result=await build({entryPoints:[path],bundle:true,platform:'node',format:'cjs',write:false});const m={exports:{}};new Function('module','exports','require',result.outputFiles[0].text)(m,m.exports,require);return m.exports;}
+const finance=await load('server/financial-lifecycle.ts');
+const {validateOrders}=await load('server/order-validation.ts');
+const {commerceChanges}=await load('server/commerce-changes.ts');
+const {applyPayPalCapture,usdQuote}=await load('server/paypal-checkout.ts');
+const source=fs.readFileSync('server/database.ts','utf8');
+const start=source.indexOf('  public createOrders('),end=source.indexOf('  public deleteOrder(',start);
+const s=source.indexOf('  public runWeeklySettlementProcess'),e=source.indexOf('  public deleteSettlement',s);
+const compiled=await transform(`class Harness {memoryData:any;checkoutQueue=Promise.resolve();stagingCheckout=false;constructor(state:any){this.memoryData=structuredClone(state);}commit(){}addAuditLog(){}addFinancialAuditLog(){}setUserCredential(){} ${source.slice(start,end)} ${source.slice(s,e)}}`,{loader:'ts'});
+let rejectWrite=false,persisted,writes=0;
+const repo={persistCheckout:async(previous,next)=>{if(rejectWrite)throw Error('isolated persistence failure');persisted=structuredClone(next);writes++;}};
+const cloud={saveRawOrders:async()=>{}};
+const Harness=new Function('firestoreRepo','cloudSqlRepo','commerceChanges','applyPayPalCapture','transitionOrder','processSettlementState','requestSettlementState','weeklySettlementsState','crypto',compiled.code+';return Harness;')(repo,cloud,commerceChanges,applyPayPalCapture,finance.transitionOrder,finance.processSettlementState,finance.requestSettlementState,finance.weeklySettlementsState,crypto);
+const fixture=()=>({products:[{id:'product-a',name:'Isolated A',storeId:'store-a',stock:5,price:1200,status:'published',images:[]},{id:'product-b',name:'Isolated B',storeId:'store-b',stock:3,price:1800,status:'published',images:[]}],stores:['a','b'].map(id=>({id:`store-${id}`,name:`Isolated ${id}`,status:'APPROVED',shippingConfig:{type:'fixed',fixedRate:100},bankInfo:{bank:'Isolated bank',accountNumber:`isolated-${id}`}})),systemSettings:{plazaCommissionRate:0.005},orders:[],storeBalances:{},paymentTransactions:[],financialAuditLogs:[],auditLogs:[],settlements:[],disputes:[]});
+const buyer={id:'isolated-buyer',name:'Isolated buyer',email:'fixture@example.invalid'};
+const address={recipientName:'Isolated buyer',phone:'isolated',province:'Isolated',municipality:'Isolated',street:'Isolated'};
+const requests=['a','b'].map((id,i)=>({id:`isolated-cycle-attempt-${id}`,orderGroupCode:'isolated-cycle',storeId:`store-${id}`,items:[{productId:`product-${id}`,quantity:i===0?2:1,price:0.01}],total:i===0?2500:1900,paymentMethod:'PAYPAL',paymentStatus:'PAID',deliveryAddress:address}));
+let db=new Harness(fixture());
+assert.throws(()=>validateOrders(requests,db.memoryData,buyer));
+assert.throws(()=>validateOrders([{...requests[0],total:0.01}],db.memoryData,buyer,true));
+const validated=validateOrders(requests,db.memoryData,buyer,true);
+assert.equal(validated[0].paymentStatus,'PENDING');assert.equal(validated[0].items[0].price,1200);
+const created=await db.createOrders(validated),ids=created.map(o=>o.id);
+assert.deepEqual(db.memoryData.products.map(p=>p.stock),[3,2]);assert.equal(db.memoryData.orders.length,2);
+const beforeRetry=writes;await db.createOrders(validated);assert.equal(writes,beforeRetry);assert.deepEqual(db.memoryData.products.map(p=>p.stock),[3,2]);
+assert.equal(db.memoryData.storeBalances['store-a'].pendingBalance,0);
+assert.equal((await db.runWeeklySettlementProcess('isolated')).settlementsCreated.length,0);
+const meta={orderId:'ISOLATEDPAYPALCYCLE',gatewayId:'isolated-gateway',amountUsd:usdQuote(created,60),dopPerUsd:60,groupCode:'isolated-cycle'};
+assert.equal(meta.amountUsd,'73.33');
+await db.updatePayPalOrders(ids,rows=>rows.forEach(o=>{o.paypalPayment={...meta};}));
+const remote={id:meta.orderId,status:'COMPLETED',purchase_units:[{custom_id:meta.groupCode,amount:{currency_code:'USD',value:meta.amountUsd},payments:{captures:[{id:'ISOLATED-CAPTURE',status:'COMPLETED',amount:{currency_code:'USD',value:meta.amountUsd}}]}}]};
+rejectWrite=true;await assert.rejects(db.confirmPayPalCapture(ids,remote));assert.ok(db.memoryData.orders.every(o=>o.paymentStatus==='PENDING'));assert.equal(db.memoryData.storeBalances['store-a'].pendingBalance,0);rejectWrite=false;
+await db.confirmPayPalCapture(ids,remote);await db.confirmPayPalCapture(ids,remote);
+assert.equal(db.memoryData.storeBalances['store-a'].pendingBalance,2487.5);assert.equal(db.memoryData.storeBalances['store-b'].pendingBalance,1890.5);assert.equal(db.memoryData.financialAuditLogs.filter(x=>x.status==='CAPTURED').length,2);
+assert.equal((await db.runWeeklySettlementProcess('isolated')).settlementsCreated.length,0);
+// Reload from the isolated durable snapshot, then finish delivery and payouts.
+db=new Harness(persisted);
+for(const id of ids){for(const status of ['CONFIRMED','PREPARING','SHIPPED'])assert.equal((await db.updateOrderStatus(id,status)).success,true);
+ assert.equal((await db.updateOrderStatus(id,'DELIVERED',undefined,'incorrect')).success,false);
+ const code=db.memoryData.orders.find(o=>o.id===id).deliveryConfirmationCode;
+ assert.equal((await db.updateOrderStatus(id,'DELIVERED',undefined,code)).success,true);
+ assert.equal((await db.updateOrderStatus(id,'DELIVERED',undefined,code)).success,true);
+}
+assert.equal(db.memoryData.storeBalances['store-a'].availableBalance,2487.5);assert.equal(db.memoryData.storeBalances['store-b'].availableBalance,1890.5);
+const weekly=await db.runWeeklySettlementProcess('isolated');assert.equal(weekly.settlementsCreated.length,2);assert.equal(weekly.totalLiquidated,0);
+assert.equal((await db.runWeeklySettlementProcess('isolated')).settlementsCreated.length,0);
+assert.equal(db.memoryData.storeBalances['store-a'].availableBalance,0);assert.equal(db.memoryData.storeBalances['store-a'].retainedBalance,2487.5);
+for(const settlement of weekly.settlementsCreated){await assert.rejects(db.processSettlement(settlement.id,'PAID'));assert.equal(db.memoryData.settlements.find(s=>s.id===settlement.id).status,'PENDING');
+ const reference=`BANK-CONFIRMED-ISOLATED-${settlement.storeId}`;
+ await db.processSettlement(settlement.id,'PAID',reference);await db.processSettlement(settlement.id,'PAID',reference);
+}
+assert.equal(db.memoryData.storeBalances['store-a'].settledBalance,2487.5);assert.equal(db.memoryData.storeBalances['store-b'].settledBalance,1890.5);assert.equal(db.memoryData.storeBalances['store-a'].retainedBalance,0);assert.ok(db.memoryData.orders.every(o=>o.settlementStatus==='SETTLED'));
+assert.equal(db.memoryData.storeBalances['store-a'].plazaCommissionsPaid+db.memoryData.storeBalances['store-b'].plazaCommissionsPaid,22);
+// An unpaid cancellation restores only the original stock, even if repeated.
+const cancelled=new Harness(fixture());const cash=validateOrders([{...requests[0],id:'isolated-cancel-attempt',paymentMethod:'CASH_ON_DELIVERY'}],cancelled.memoryData,buyer);await cancelled.createOrders(cash);
+await cancelled.updateOrderStatus(cash[0].id,'CANCELLED');await cancelled.updateOrderStatus(cash[0].id,'CANCELLED');assert.equal(cancelled.memoryData.products[0].stock,5);
+console.log(JSON.stringify({result:'PASS',mode:'isolated-memory-only',stores:2,orders:2,totalDop:4400,paypalUsd:'73.33',dopPerUsd:60,commissionDop:22,netStoreADop:2487.5,netStoreBDop:1890.5,checks:['trusted catalog prices','stock reserved once','pending payment blocks payout','failed capture persistence rolls back','capture retry credits once','restart preserves state','incorrect delivery code rejected','delivery releases funds once','weekly process schedules without transferring','bank reference required','settlement repeats do not duplicate','unpaid cancellation restores stock'],realCharges:0,realTransfers:0,productionWrites:0},null,2));
