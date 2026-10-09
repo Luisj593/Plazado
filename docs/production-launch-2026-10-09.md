@@ -10,7 +10,7 @@
 - Sesión de navegador en cookie HttpOnly/SameSite, Secure en producción. Se migra el token antiguo al consultar la sesión. Las nuevas sesiones de administrador duran ocho horas; las de cliente/tienda, siete días. Comprobación durable del usuario y versión de autenticación en solicitudes autenticadas, protección de origen para escrituras y CSP compatible con PayPal. Cámara permitida solamente al propio sitio para el flujo KYC.
 - Carga diferida de paneles, autenticación, checkout y diálogos. Sincronización de pestañas visibles cada 15 segundos y al recuperar foco. Retirado bloqueo de clic derecho/inspección.
 - Pasarelas, categorías, especificaciones y configuración publicitaria se guardan en transacciones antes de mostrar éxito. Eliminación lógica conserva su historial. La pasarela con pedidos asociados se conserva. Se desactiva la importación bidireccional de Cloud SQL cuando Firebase Admin es la autoridad.
-- Lectura consistente de datos durables cada 30 segundos, serializada con las operaciones locales. Versiones de caché distintas por proceso. Esta comprobación no sustituye una prueba de carga ni de concurrencia con dos instancias reales; revisar el coste de lecturas al aumentar el catálogo.
+- Lectura consistente de datos durables cada cinco minutos (mínimo configurable mediante `FIRESTORE_REFRESH_INTERVAL_MS`), serializada con las operaciones locales. Versiones de caché distintas por proceso. Esta comprobación no sustituye una prueba de carga ni de concurrencia con dos instancias reales; revisar el coste de lecturas al aumentar el catálogo.
 
 ## Validación realizada
 
@@ -31,10 +31,19 @@ No declarar producción abierta mientras falte evidencia de estos puntos:
 9. **Ciclo operativo separado:** registro cliente/tienda → recepción de código → aprobación → publicación → compra → entrega con código → comisión → conciliación. Repetir con cancelación, reclamación, caída de red y reinicio. Probar móvil/escritorio, dos instancias, accesibilidad, cámara, descarga APK y políticas CSP con PayPal. No usar cuentas ficticias en producción.
 10. **Operación comercial:** validar cobertura, costes de envío, responsable de soporte, procedimiento de devoluciones y políticas que correspondan a la actividad real. La comisión sigue en 30% (0.30), incluido el envío, y conserva la tasa histórica de cada pedido. No se generan RNC, empresa ni ubicaciones de almacén ficticias.
 
-`/api/health/ready` sigue describiendo disponibilidad técnica del piloto, no una certificación de producción abierta. No hay acceso desde este entorno a los secretos de Railway/Firebase/PayPal ni al bucket de respaldo, por lo que los pasos externos no se ejecutaron.
+`/api/health/ready` sigue describiendo disponibilidad técnica del piloto, no una certificación de producción abierta. Railway está conectado por OAuth; expone nombres de variables, pero no sus secretos. No hay acceso administrativo a Firebase/Google Cloud, PayPal ni al bucket de respaldo.
 
 ## Referencias de integración
 
 - https://developer.paypal.com/api/payments/v2
 - https://developer.paypal.com/api/webhooks/v1
 - https://firebase.google.com/docs/firestore/manage-data/export-import
+
+## Continuación de infraestructura — 9 de octubre de 2026
+
+- Railway: conexión verificada al servicio Plazado en production. Configurados NODE_ENV=production, healthcheck /api/health/ready (120 segundos), reinicio ON_FAILURE, servicio sin suspensión y solapamiento de despliegue de 20 segundos con drenaje de 30 segundos.
+- El redespliegue e1c48973-9276-48a6-87de-89d626dc23db terminó SUCCESS, pero la comprobación funcional posterior FALLÓ: Firestore devolvió RESOURCE_EXHAUSTED por agotar las lecturas gratuitas del proyecto 614865830106. SUCCESS de Railway no certifica disponibilidad de datos.
+- El catálogo conservado responde, pero las sesiones que requieren identidad durable y operaciones con Firestore pueden fallar. No declarar la plataforma operativa por mostrar productos cacheados.
+- Corrección de consumo: lectura completa de 30 segundos a cinco minutos, con retroceso exponencial hasta una hora en fallos; protección interna de registros de cinco minutos a una hora, sin ejecuciones solapadas, omitida si no hay sincronización confirmada. Conserva copias existentes. No sustituye un respaldo externo ni garantiza que cualquier volumen de tráfico quepa en la cuota gratuita.
+- Para restablecer lecturas hoy, el propietario debe habilitar facturación/plan Blaze en el proyecto Google Cloud de producción y revisar presupuesto y alertas. Alternativa: esperar al reinicio de cuota, sin prometer disponibilidad entretanto. Después, verificar /api/health/ready y npm run smoke:production; si la aplicación no se recupera, redeplegar tras confirmar la cuota disponible.
+- El ajuste pasó TypeScript, los 21 scripts aislados y compilación. No se crearon cuentas, pedidos, cargos, correos ni transferencias reales para verificarlo.
