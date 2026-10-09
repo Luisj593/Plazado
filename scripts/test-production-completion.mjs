@@ -79,3 +79,12 @@ connected=true;let available=false;availabilityMiddleware({path:'/bootstrap'},{}
 connected=false;let logoutAllowed=false;availabilityMiddleware({path:'/auth/logout'},{},()=>logoutAllowed=true);assert.equal(logoutAllowed,true);
 if(previousNodeEnv===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=previousNodeEnv;
 console.log('Availability: disconnected production rejects catalog, login and writes with explicit 503, exposes no empty data, allows logout and recovers when connected.');
+
+const outageSource=serverSource.slice(serverSource.indexOf('  // Serve an explicit outage page'),serverSource.indexOf('  // VITE DEV MIDDLEWARE'));
+const outageCode=await transform(outageSource,{loader:'ts'});let outageMiddleware;process.env.NODE_ENV='production';
+new Function('app','db',outageCode.code)({use:fn=>outageMiddleware=fn},{isFirestoreConnected:()=>false});
+let outagePage,outageStatus;outageMiddleware({method:'GET',path:'/',headers:{accept:'text/html'}},{setHeader(){},status:s=>{outageStatus=s;return {type:()=>({send:body=>outagePage=body})};}},()=>assert.fail('document must show outage'));
+assert.equal(outageStatus,503);assert.match(outagePage,/Servicio temporalmente no disponible/);assert.match(outagePage,/no significa/);
+let assetPass=false;outageMiddleware({method:'GET',path:'/assets/app.js',headers:{accept:'*/*'}},{},()=>assetPass=true);assert.equal(assetPass,true);
+if(previousNodeEnv===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=previousNodeEnv;
+console.log('Outage document: explicit Spanish 503 page replaces misleading empty UI; asset requests are not intercepted.');

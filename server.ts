@@ -2797,6 +2797,14 @@ async function startServer() {
     res.json({ ...result, safetyBackup, version: db.getVersion() });
   });
 
+  // Serve an explicit outage page for document navigation, without claiming records were deleted.
+  app.use((req,res,next)=>{
+    if(process.env.NODE_ENV!=='production' || db.isFirestoreConnected() || req.method!=='GET' || !(req.headers.accept || '').includes('text/html') || req.path.startsWith('/api/'))return next();
+    res.setHeader('Cache-Control','no-store');
+    res.setHeader('Retry-After','300');
+    return res.status(503).type('html').send(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Plazado.com — Servicio temporalmente no disponible</title><style>body{margin:0;background:#f6f6f6;color:#202020;font:17px system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}main{box-sizing:border-box;width:min(92%,580px);padding:40px;background:white;border-radius:20px;border-top:6px solid #df2027;box-shadow:0 12px 40px #0001}h1{font-size:29px;line-height:1.2}p{line-height:1.6}a{display:inline-block;background:#df2027;color:white;padding:13px 20px;border-radius:9px;text-decoration:none;font-weight:650}.brand{color:#df2027;font-weight:750;font-size:22px}</style></head><body><main><div class="brand">Plazado.com</div><h1>Servicio temporalmente no disponible</h1><p>No podemos cargar la información de la plataforma en este momento. Esto no significa que tus cuentas o publicaciones hayan sido eliminadas.</p><p>El acceso y las operaciones estarán disponibles cuando se restablezca la conexión con la base de datos.</p><a href="/">Reintentar</a></main></body></html>`);
+  });
+
   // ==========================================
   // VITE DEV MIDDLEWARE / PROD STATIC SERVE
   // ==========================================
